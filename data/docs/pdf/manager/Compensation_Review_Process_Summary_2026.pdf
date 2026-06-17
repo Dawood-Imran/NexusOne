@@ -1,0 +1,76 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2227 >>
+stream
+BT /F1 9 Tf 1 0 0 1 54 742 Tm (NexusOne Technologies | Synthetic Internal Document) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 724 Tm (Compensation Review Process Summary 2026) Tj ET
+BT /F1 18 Tf 1 0 0 1 54 662 Tm (Compensation Review Process Summary 2026) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 620 Tm (Document Control) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 592 Tm (- Company: NexusOne Technologies) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 578 Tm (- Document ID: compensation-review-process-summary-2026) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 564 Tm (- Owner department: hr) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 550 Tm (- Permission profile: manager_only) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 536 Tm (- Confidentiality: manager_only) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 522 Tm (- Last updated: 2026-03-02) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 508 Tm (- Key topics: compensation, review, promotion, manager input) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 476 Tm (Access Scope) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 448 Tm (- Allowed roles: manager, hr, executive, ceo) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 434 Tm (- Allowed groups: managers, hr_team, executive_team) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 420 Tm (- Allowed users: none) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 388 Tm (Summary) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 360 Tm (Manager and HR summary for compensation review, promotion input, and calibration timing.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 328 Tm (Manager Inputs) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 300 Tm (- Managers submit compensation and promotion inputs after year-end performance reviews.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 286 Tm (- Inputs must reference scope, impact, consistency, and role expectations.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 254 Tm (Calibration) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 226 Tm (- HR reviews consistency across teams and escalates unusual recommendations.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 212 Tm (- Executives review leadership and budget-sensitive recommendations.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 180 Tm (Employee Communication) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 152 Tm (- Managers should not promise compensation outcomes before HR and Finance approval is) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 138 Tm (  complete.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 106 Tm (Data Generation Notice) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 42 Tm (Page 1 of 2) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 604 >>
+stream
+BT /F1 9 Tf 1 0 0 1 54 742 Tm (NexusOne Technologies | Synthetic Internal Document) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 724 Tm (Compensation Review Process Summary 2026) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 700 Tm (- This is synthetic NexusOne Technologies data for local RAG, SQL, FAISS, and permission-) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 686 Tm (  filter testing.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 672 Tm (- Do not replace this file with real company, employee, customer, vendor, financial, HR,) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 658 Tm (  security, or acquisition data.) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 42 Tm (Page 2 of 2) Tj ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000002595 00000 n 
+0000002721 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+3375
+%%EOF

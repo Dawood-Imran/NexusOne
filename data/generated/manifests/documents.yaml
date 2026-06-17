@@ -1,0 +1,649 @@
+manifest_version: 1
+description: Planned PDF and Markdown source documents to generate for NexusOne Copilot.
+
+defaults:
+  company: NexusOne Technologies
+  generated: true
+  status: active
+  canonical: true
+
+documents:
+  - doc_id: employee-handbook-2026
+    title: Employee Handbook 2026
+    source_type: pdf
+    source_path: data/docs/pdf/public/Employee_Handbook_2026.pdf
+    department: hr
+    permission_profile: public_internal
+    updated_at: 2026-02-01
+    key_topics: [probation, conduct, work hours, payroll schedule, holidays, internal tools]
+
+  - doc_id: leave-policy-2026
+    title: Leave Policy 2026
+    source_type: pdf
+    source_path: data/docs/pdf/public/Leave_Policy_2026.pdf
+    department: hr
+    permission_profile: public_internal
+    updated_at: 2026-02-10
+    key_topics: [annual leave, sick leave, parental leave, regional policy, approval]
+
+  - doc_id: remote-work-policy-2026
+    title: Remote Work Policy 2026
+    source_type: pdf
+    source_path: data/docs/pdf/public/Remote_Work_Policy_2026.pdf
+    department: admin
+    permission_profile: public_internal
+    updated_at: 2026-01-20
+    key_topics: [remote work, hybrid work, work from abroad, equipment]
+
+  - doc_id: expense-reimbursement-policy-2026
+    title: Expense Reimbursement Policy 2026
+    source_type: pdf
+    source_path: data/docs/pdf/public/Expense_Reimbursement_Policy_2026.pdf
+    department: finance
+    permission_profile: finance_employee_policy
+    updated_at: 2026-02-15
+    key_topics: [meal limit, internet reimbursement, travel approval, home office monitor]
+
+  - doc_id: it-device-policy-2026
+    title: IT Device Policy 2026
+    source_type: pdf
+    source_path: data/docs/pdf/public/IT_Device_Policy_2026.pdf
+    department: it
+    permission_profile: public_internal
+    updated_at: 2026-01-18
+    key_topics: [laptop, device replacement, repairs, battery, ownership]
+
+  - doc_id: general-security-guidelines-2026
+    title: General Security Guidelines 2026
+    source_type: pdf
+    source_path: data/docs/pdf/public/General_Security_Guidelines_2026.pdf
+    department: it
+    permission_profile: public_internal
+    updated_at: 2026-01-25
+    key_topics: [mfa, password, phishing, data handling]
+
+  - doc_id: office-visitor-policy-2026
+    title: Office Visitor Policy 2026
+    source_type: pdf
+    source_path: data/docs/pdf/public/Office_Visitor_Policy_2026.pdf
+    department: admin
+    permission_profile: public_internal
+    updated_at: 2026-01-12
+    key_topics: [visitor, office access, guest id, reception]
+
+  - doc_id: company-holidays-2026
+    title: Company Holidays 2026
+    source_type: pdf
+    source_path: data/docs/pdf/public/Company_Holidays_2026.pdf
+    department: hr
+    permission_profile: public_internal
+    updated_at: 2026-01-03
+    key_topics: [holidays, Pakistan, UAE, UK, USA, regional calendar]
+
+  - doc_id: manager-handbook-2026
+    title: Manager Handbook 2026
+    source_type: pdf
+    source_path: data/docs/pdf/manager/Manager_Handbook_2026.pdf
+    department: hr
+    permission_profile: manager_only
+    updated_at: 2026-02-20
+    key_topics: [manager responsibilities, leave approval, reviews, team rituals]
+
+  - doc_id: hiring-request-process-2026
+    title: Hiring Request Process 2026
+    source_type: pdf
+    source_path: data/docs/pdf/manager/Hiring_Request_Process_2026.pdf
+    department: hr
+    permission_profile: manager_only
+    updated_at: 2026-02-18
+    key_topics: [hiring request, headcount approval, backend engineer, approvals]
+
+  - doc_id: performance-improvement-plan-guide-2026
+    title: Performance Improvement Plan Guide 2026
+    source_type: pdf
+    source_path: data/docs/pdf/manager/Performance_Improvement_Plan_Guide_2026.pdf
+    department: hr
+    permission_profile: manager_only
+    updated_at: 2026-02-16
+    key_topics: [pip, documentation, manager, hr review]
+
+  - doc_id: team-onboarding-checklist-2026
+    title: Team Onboarding Checklist 2026
+    source_type: pdf
+    source_path: data/docs/pdf/manager/Team_Onboarding_Checklist_2026.pdf
+    department: hr
+    permission_profile: manager_only
+    updated_at: 2026-01-30
+    key_topics: [new joiner, onboarding, manager checklist]
+
+  - doc_id: compensation-review-process-summary-2026
+    title: Compensation Review Process Summary 2026
+    source_type: pdf
+    source_path: data/docs/pdf/manager/Compensation_Review_Process_Summary_2026.pdf
+    department: hr
+    permission_profile: manager_only
+    updated_at: 2026-03-02
+    key_topics: [compensation, review, promotion, manager input]
+
+  - doc_id: hr-escalation-playbook-2026
+    title: HR Escalation Playbook 2026
+    source_type: pdf
+    source_path: data/docs/pdf/hr/HR_Escalation_Playbook_2026.pdf
+    department: hr
+    permission_profile: hr_private
+    updated_at: 2026-02-12
+    key_topics: [hr escalation, payroll dispute, legal review, employee relations]
+
+  - doc_id: payroll-issue-handling-guide-2026
+    title: Payroll Issue Handling Guide 2026
+    source_type: pdf
+    source_path: data/docs/pdf/hr/Payroll_Issue_Handling_Guide_2026.pdf
+    department: hr
+    permission_profile: hr_payroll_shared
+    updated_at: 2026-02-08
+    key_topics: [payroll issue, adjustment, finance handoff, escalation]
+
+  - doc_id: employee-relations-case-guide-2026
+    title: Employee Relations Case Guide 2026
+    source_type: pdf
+    source_path: data/docs/pdf/hr/Employee_Relations_Case_Guide_2026.pdf
+    department: hr
+    permission_profile: hr_private
+    updated_at: 2026-01-29
+    key_topics: [employee relations, complaint, sensitive case, documentation]
+
+  - doc_id: benefits-vendor-details-2026
+    title: Benefits Vendor Details 2026
+    source_type: pdf
+    source_path: data/docs/pdf/hr/Benefits_Vendor_Details_2026.pdf
+    department: hr
+    permission_profile: hr_private
+    updated_at: 2026-01-19
+    key_topics: [benefits vendor, insurance, wellness, region]
+
+  - doc_id: hr-ticket-triage-sop-2026
+    title: HR Ticket Triage SOP 2026
+    source_type: pdf
+    source_path: data/docs/pdf/hr/HR_Ticket_Triage_SOP_2026.pdf
+    department: hr
+    permission_profile: hr_private
+    updated_at: 2026-02-05
+    key_topics: [hr ticket, triage, priority, sla]
+
+  - doc_id: it-security-runbook-2026
+    title: IT Security Runbook 2026
+    source_type: pdf
+    source_path: data/docs/pdf/it/IT_Security_Runbook_2026.pdf
+    department: it
+    permission_profile: it_private
+    updated_at: 2026-02-22
+    key_topics: [security incident, credential compromise, response, containment]
+
+  - doc_id: admin-access-recovery-guide-2026
+    title: Admin Access Recovery Guide 2026
+    source_type: pdf
+    source_path: data/docs/pdf/it/Admin_Access_Recovery_Guide_2026.pdf
+    department: it
+    permission_profile: it_private
+    updated_at: 2026-02-11
+    key_topics: [admin access, recovery, GitHub, AWS, privileged account]
+
+  - doc_id: device-inventory-procedure-2026
+    title: Device Inventory Procedure 2026
+    source_type: pdf
+    source_path: data/docs/pdf/it/Device_Inventory_Procedure_2026.pdf
+    department: it
+    permission_profile: it_private
+    updated_at: 2026-01-27
+    key_topics: [device inventory, laptop assignment, returns, retirement]
+
+  - doc_id: privileged-access-process-2026
+    title: Privileged Access Process 2026
+    source_type: pdf
+    source_path: data/docs/pdf/it/Privileged_Access_Process_2026.pdf
+    department: it
+    permission_profile: it_private
+    updated_at: 2026-02-03
+    key_topics: [privileged access, production access, approval, break-glass]
+
+  - doc_id: software-access-control-policy-2026
+    title: Software Access Control Policy 2026
+    source_type: pdf
+    source_path: data/docs/pdf/it/Software_Access_Control_Policy_2026.pdf
+    department: it
+    permission_profile: it_standard_access
+    updated_at: 2026-02-01
+    key_topics: [software access, GitHub, AWS, Jira, Slack, approval]
+
+  - doc_id: quarterly-finance-summary-q4-2025
+    title: Quarterly Finance Summary Q4 2025
+    source_type: pdf
+    source_path: data/docs/pdf/finance/Quarterly_Finance_Summary_Q4_2025.pdf
+    department: finance
+    permission_profile: executive_finance
+    updated_at: 2026-01-15
+    key_topics: [revenue, gross margin, burn rate, runway, q4]
+
+  - doc_id: department-budget-summary-2026
+    title: Department Budget Summary 2026
+    source_type: pdf
+    source_path: data/docs/pdf/finance/Department_Budget_Summary_2026.pdf
+    department: finance
+    permission_profile: finance_private
+    updated_at: 2026-02-14
+    key_topics: [department budget, utilization, engineering budget, variance]
+
+  - doc_id: vendor-payment-aging-report-q1-2026
+    title: Vendor Payment Aging Report Q1 2026
+    source_type: pdf
+    source_path: data/docs/pdf/finance/Vendor_Payment_Aging_Report_Q1_2026.pdf
+    department: finance
+    permission_profile: finance_private
+    updated_at: 2026-03-05
+    key_topics: [vendor payment, aging, overdue, status]
+
+  - doc_id: expense-audit-notes-q4-2025
+    title: Expense Audit Notes Q4 2025
+    source_type: pdf
+    source_path: data/docs/pdf/finance/Expense_Audit_Notes_Q4_2025.pdf
+    department: finance
+    permission_profile: finance_private
+    updated_at: 2026-01-28
+    key_topics: [expense audit, exception, category, reimbursement]
+
+  - doc_id: finance-ticket-handling-sop-2026
+    title: Finance Ticket Handling SOP 2026
+    source_type: pdf
+    source_path: data/docs/pdf/finance/Finance_Ticket_Handling_SOP_2026.pdf
+    department: finance
+    permission_profile: finance_private
+    updated_at: 2026-02-09
+    key_topics: [finance ticket, reimbursement, vendor payment, sla]
+
+  - doc_id: board-meeting-summary-q4-2025
+    title: Board Meeting Summary Q4 2025
+    source_type: pdf
+    source_path: data/docs/pdf/executive/Board_Meeting_Summary_Q4_2025.pdf
+    department: executive
+    permission_profile: executive_private
+    updated_at: 2026-01-09
+    key_topics: [board meeting, action items, q4, strategy]
+
+  - doc_id: q4-revenue-risk-register-2025
+    title: Q4 Revenue Risk Register 2025
+    source_type: pdf
+    source_path: data/docs/pdf/executive/Q4_Revenue_Risk_Register_2025.pdf
+    department: finance
+    permission_profile: executive_finance
+    updated_at: 2026-01-10
+    key_topics: [q4 revenue risk, churn, renewal, account risk, mitigation]
+
+  - doc_id: company-strategy-memo-2026
+    title: Company Strategy Memo 2026
+    source_type: pdf
+    source_path: data/docs/pdf/executive/Company_Strategy_Memo_2026.pdf
+    department: executive
+    permission_profile: executive_private
+    updated_at: 2026-02-06
+    key_topics: [strategy, expansion, automation, growth, investment]
+
+  - doc_id: acquisition-opportunity-notes-2026
+    title: Acquisition Opportunity Notes 2026
+    source_type: pdf
+    source_path: data/docs/pdf/executive/Acquisition_Opportunity_Notes_2026.pdf
+    department: executive
+    permission_profile: ceo_only
+    updated_at: 2026-02-28
+    key_topics: [acquisition, confidential, target evaluation, ceo]
+
+  - doc_id: executive-hiring-plan-2026
+    title: Executive Hiring Plan 2026
+    source_type: pdf
+    source_path: data/docs/pdf/executive/Executive_Hiring_Plan_2026.pdf
+    department: executive
+    permission_profile: executive_private
+    updated_at: 2026-02-19
+    key_topics: [executive hiring, critical roles, growth, leadership]
+
+  - doc_id: company-risk-register-2026
+    title: Company Risk Register 2026
+    source_type: pdf
+    source_path: data/docs/pdf/executive/Company_Risk_Register_2026.pdf
+    department: executive
+    permission_profile: executive_private
+    updated_at: 2026-03-01
+    key_topics: [risk register, legal risk, finance risk, security risk, customer risk]
+
+  - doc_id: kb-company-tools
+    title: Company Tools
+    source_type: markdown
+    source_path: data/docs/markdown_kb/public/company-tools.md
+    department: it
+    permission_profile: public_internal
+    updated_at: 2026-02-01
+    key_topics: [Slack, Jira, GitHub, AWS, HRIS, finance portal]
+
+  - doc_id: kb-onboarding-overview
+    title: Onboarding Overview
+    source_type: markdown
+    source_path: data/docs/markdown_kb/public/onboarding-overview.md
+    department: hr
+    permission_profile: public_internal
+    updated_at: 2026-01-16
+    key_topics: [onboarding, new joiner, first week, checklist]
+
+  - doc_id: kb-expense-claim-how-to
+    title: Expense Claim How-To
+    source_type: markdown
+    source_path: data/docs/markdown_kb/public/expense-claim-how-to.md
+    department: finance
+    permission_profile: finance_employee_policy
+    updated_at: 2026-02-17
+    key_topics: [expense claim, receipt, finance portal, reimbursement]
+
+  - doc_id: kb-internet-reimbursement
+    title: Internet Reimbursement
+    source_type: markdown
+    source_path: data/docs/markdown_kb/public/internet-reimbursement.md
+    department: finance
+    permission_profile: finance_employee_policy
+    updated_at: 2026-02-17
+    key_topics: [internet reimbursement, monthly limit, receipt]
+
+  - doc_id: kb-leave-request-how-to
+    title: Leave Request How-To
+    source_type: markdown
+    source_path: data/docs/markdown_kb/public/leave-request-how-to.md
+    department: hr
+    permission_profile: public_internal
+    updated_at: 2026-02-10
+    key_topics: [leave request, HRIS, manager approval]
+
+  - doc_id: kb-security-mfa-setup
+    title: Security MFA Setup
+    source_type: markdown
+    source_path: data/docs/markdown_kb/public/security-mfa-setup.md
+    department: it
+    permission_profile: public_internal
+    updated_at: 2026-01-25
+    key_topics: [mfa, authenticator, reset, security]
+
+  - doc_id: kb-vpn-reset
+    title: VPN Reset
+    source_type: markdown
+    source_path: data/docs/markdown_kb/it/vpn-reset.md
+    department: it
+    permission_profile: it_standard_access
+    updated_at: 2026-01-21
+    key_topics: [vpn reset, troubleshooting, remote access]
+
+  - doc_id: kb-github-access
+    title: GitHub Access Request
+    source_type: markdown
+    source_path: data/docs/markdown_kb/it/github-access.md
+    department: it
+    permission_profile: it_standard_access
+    updated_at: 2026-02-02
+    key_topics: [GitHub access, engineering, approval, access request]
+
+  - doc_id: kb-aws-access
+    title: AWS Access Request
+    source_type: markdown
+    source_path: data/docs/markdown_kb/it/aws-access.md
+    department: it
+    permission_profile: public_engineering
+    updated_at: 2026-02-02
+    key_topics: [AWS access, engineering, cloud, manager approval]
+
+  - doc_id: kb-laptop-battery-troubleshooting
+    title: Laptop Battery Troubleshooting
+    source_type: markdown
+    source_path: data/docs/markdown_kb/it/laptop-battery-troubleshooting.md
+    department: it
+    permission_profile: public_internal
+    updated_at: 2026-01-24
+    key_topics: [laptop battery, troubleshooting, device ticket]
+
+  - doc_id: kb-security-agent-install
+    title: Security Agent Install
+    source_type: markdown
+    source_path: data/docs/markdown_kb/it/security-agent-install.md
+    department: it
+    permission_profile: public_internal
+    updated_at: 2026-01-25
+    key_topics: [security agent, install, compliance]
+
+  - doc_id: kb-admin-privileged-access-checklist
+    title: Admin Privileged Access Checklist
+    source_type: markdown
+    source_path: data/docs/markdown_kb/it/admin-privileged-access-checklist.md
+    department: it
+    permission_profile: it_private
+    updated_at: 2026-02-03
+    key_topics: [privileged access, admin, checklist, break-glass]
+
+  - doc_id: kb-performance-review-cycle
+    title: Performance Review Cycle
+    source_type: markdown
+    source_path: data/docs/markdown_kb/hr/performance-review-cycle.md
+    department: hr
+    permission_profile: public_internal
+    updated_at: 2026-02-11
+    key_topics: [performance review, cycle, feedback]
+
+  - doc_id: kb-parental-leave-documents
+    title: Parental Leave Documents
+    source_type: markdown
+    source_path: data/docs/markdown_kb/hr/parental-leave-documents.md
+    department: hr
+    permission_profile: public_internal
+    updated_at: 2026-02-10
+    key_topics: [parental leave, documents, region]
+
+  - doc_id: kb-payroll-calendar
+    title: Payroll Calendar
+    source_type: markdown
+    source_path: data/docs/markdown_kb/hr/payroll-calendar.md
+    department: hr
+    permission_profile: public_internal
+    updated_at: 2026-01-13
+    key_topics: [payroll schedule, cutoff, salary date]
+
+  - doc_id: kb-hr-ticket-categories
+    title: HR Ticket Categories
+    source_type: markdown
+    source_path: data/docs/markdown_kb/hr/hr-ticket-categories.md
+    department: hr
+    permission_profile: public_internal
+    updated_at: 2026-02-05
+    key_topics: [hr ticket, category, sla]
+
+  - doc_id: kb-hr-escalation-matrix
+    title: HR Escalation Matrix
+    source_type: markdown
+    source_path: data/docs/markdown_kb/hr/hr-escalation-matrix.md
+    department: hr
+    permission_profile: hr_private
+    updated_at: 2026-02-12
+    key_topics: [hr escalation, sensitive case, owner]
+
+  - doc_id: kb-hiring-request
+    title: Hiring Request
+    source_type: markdown
+    source_path: data/docs/markdown_kb/manager/hiring-request.md
+    department: hr
+    permission_profile: manager_only
+    updated_at: 2026-02-18
+    key_topics: [hiring request, backend engineer, approval, headcount]
+
+  - doc_id: kb-team-ticket-summary-guide
+    title: Team Ticket Summary Guide
+    source_type: markdown
+    source_path: data/docs/markdown_kb/manager/team-ticket-summary-guide.md
+    department: admin
+    permission_profile: manager_only
+    updated_at: 2026-02-07
+    key_topics: [team tickets, manager summary, queue visibility]
+
+  - doc_id: kb-new-joiner-manager-checklist
+    title: New Joiner Manager Checklist
+    source_type: markdown
+    source_path: data/docs/markdown_kb/manager/new-joiner-manager-checklist.md
+    department: hr
+    permission_profile: manager_only
+    updated_at: 2026-01-30
+    key_topics: [new joiner, manager, onboarding]
+
+  - doc_id: kb-performance-feedback-notes
+    title: Performance Feedback Notes
+    source_type: markdown
+    source_path: data/docs/markdown_kb/manager/performance-feedback-notes.md
+    department: hr
+    permission_profile: manager_only
+    updated_at: 2026-02-16
+    key_topics: [performance feedback, manager notes, review]
+
+  - doc_id: kb-deployment-process
+    title: Deployment Process
+    source_type: markdown
+    source_path: data/docs/markdown_kb/engineering/deployment-process.md
+    department: engineering
+    permission_profile: public_engineering
+    updated_at: 2026-02-04
+    key_topics: [deployment, release, production, engineering]
+
+  - doc_id: kb-on-call-process
+    title: On-Call Process
+    source_type: markdown
+    source_path: data/docs/markdown_kb/engineering/on-call-process.md
+    department: engineering
+    permission_profile: public_engineering
+    updated_at: 2026-02-04
+    key_topics: [on-call, incident, escalation]
+
+  - doc_id: kb-incident-review-template
+    title: Incident Review Template
+    source_type: markdown
+    source_path: data/docs/markdown_kb/engineering/incident-review-template.md
+    department: engineering
+    permission_profile: public_engineering
+    updated_at: 2026-02-04
+    key_topics: [incident review, template, root cause]
+
+  - doc_id: kb-service-ownership
+    title: Service Ownership
+    source_type: markdown
+    source_path: data/docs/markdown_kb/engineering/service-ownership.md
+    department: engineering
+    permission_profile: public_engineering
+    updated_at: 2026-01-29
+    key_topics: [service ownership, team, escalation]
+
+  - doc_id: kb-visitor-policy
+    title: Visitor Policy
+    source_type: markdown
+    source_path: data/docs/markdown_kb/admin/visitor-policy.md
+    department: admin
+    permission_profile: public_internal
+    updated_at: 2026-01-12
+    key_topics: [visitor, office access, admin ticket]
+
+  - doc_id: kb-access-card-replacement
+    title: Access Card Replacement
+    source_type: markdown
+    source_path: data/docs/markdown_kb/admin/access-card-replacement.md
+    department: admin
+    permission_profile: public_internal
+    updated_at: 2026-01-17
+    key_topics: [access card, replacement, office]
+
+  - doc_id: kb-desk-equipment-request
+    title: Desk Equipment Request
+    source_type: markdown
+    source_path: data/docs/markdown_kb/admin/desk-equipment-request.md
+    department: admin
+    permission_profile: public_internal
+    updated_at: 2026-01-19
+    key_topics: [chair, monitor, desk equipment, admin ticket]
+
+  - doc_id: kb-facilities-ticket-sla
+    title: Facilities Ticket SLA
+    source_type: markdown
+    source_path: data/docs/markdown_kb/admin/facilities-ticket-sla.md
+    department: admin
+    permission_profile: admin_private
+    updated_at: 2026-02-01
+    key_topics: [facilities, admin ticket, sla]
+
+  - doc_id: kb-expense-policy-faq
+    title: Expense Policy FAQ
+    source_type: markdown
+    source_path: data/docs/markdown_kb/finance/expense-policy-faq.md
+    department: finance
+    permission_profile: finance_employee_policy
+    updated_at: 2026-02-15
+    key_topics: [expense, reimbursement, meals, monitor]
+
+  - doc_id: kb-vendor-payment-process
+    title: Vendor Payment Process
+    source_type: markdown
+    source_path: data/docs/markdown_kb/finance/vendor-payment-process.md
+    department: finance
+    permission_profile: finance_private
+    updated_at: 2026-02-22
+    key_topics: [vendor payment, approval, invoice, finance]
+
+  - doc_id: kb-budget-request-process
+    title: Budget Request Process
+    source_type: markdown
+    source_path: data/docs/markdown_kb/finance/budget-request-process.md
+    department: finance
+    permission_profile: finance_private
+    updated_at: 2026-02-14
+    key_topics: [budget request, department budget, approval]
+
+  - doc_id: kb-month-end-close-checklist
+    title: Month-End Close Checklist
+    source_type: markdown
+    source_path: data/docs/markdown_kb/finance/month-end-close-checklist.md
+    department: finance
+    permission_profile: finance_private
+    updated_at: 2026-02-28
+    key_topics: [month-end close, finance checklist]
+
+  - doc_id: kb-board-action-items-q4-2025
+    title: Board Action Items Q4 2025
+    source_type: markdown
+    source_path: data/docs/markdown_kb/executive/board-action-items-q4-2025.md
+    department: executive
+    permission_profile: executive_private
+    updated_at: 2026-01-09
+    key_topics: [board action items, q4, executive]
+
+  - doc_id: kb-customer-escalation-themes-q4-2025
+    title: Customer Escalation Themes Q4 2025
+    source_type: markdown
+    source_path: data/docs/markdown_kb/executive/customer-escalation-themes-q4-2025.md
+    department: customer_success
+    permission_profile: executive_private
+    updated_at: 2026-01-11
+    key_topics: [customer escalation, q4, themes, revenue risk]
+
+  - doc_id: kb-strategic-priorities-2026
+    title: Strategic Priorities 2026
+    source_type: markdown
+    source_path: data/docs/markdown_kb/executive/strategic-priorities-2026.md
+    department: executive
+    permission_profile: executive_private
+    updated_at: 2026-02-06
+    key_topics: [strategy, priorities, 2026, growth]
+
+  - doc_id: kb-ceo-private-ma-notes
+    title: CEO Private M&A Notes
+    source_type: markdown
+    source_path: data/docs/markdown_kb/executive/ceo-private-ma-notes.md
+    department: executive
+    permission_profile: ceo_only
+    updated_at: 2026-02-28
+    key_topics: [ceo, acquisition, confidential]
+

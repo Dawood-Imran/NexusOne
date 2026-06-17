@@ -1,0 +1,9 @@
+user_id,name,email,role,department,title,manager_id,location,status
+u001,Ayesha Khan,ayesha.khan@nexusone.example,employee,engineering,Backend Engineer,u002,Pakistan,active
+u002,Bilal Ahmed,bilal.ahmed@nexusone.example,manager,engineering,Engineering Manager,u006,Pakistan,active
+u003,Sara Malik,sara.malik@nexusone.example,hr,hr,HR Operations Lead,u006,Pakistan,active
+u004,Hamza Farooq,hamza.farooq@nexusone.example,finance,finance,Finance Analyst,u006,UAE,active
+u005,Omar Siddiqui,omar.siddiqui@nexusone.example,it_admin,it,IT Administrator,u006,Pakistan,active
+u006,Fatima Noor,fatima.noor@nexusone.example,ceo,executive,Chief Executive Officer,,UAE,active
+u007,Emma Wilson,emma.wilson@nexusone.example,executive,executive,Chief Customer Officer,u006,UK,active
+u008,Zain Qureshi,zain.qureshi@nexusone.example,admin_ops,admin,Admin Operations Coordinator,u006,Pakistan,active

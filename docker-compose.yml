@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: nexusone_postgres
+    environment:
+      POSTGRES_DB: nexusone
+      POSTGRES_USER: nexusone
+      POSTGRES_PASSWORD: nexusone_dev_password
+    ports:
+      - "5492:5432"
+    volumes:
+      - nexusone_postgres_data:/var/lib/postgresql/data
+      - ./data/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./data/docs/csv:/seed/csv:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexusone -d nexusone"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  nexusone_postgres_data:

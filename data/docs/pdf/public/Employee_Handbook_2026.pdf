@@ -1,0 +1,83 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2471 >>
+stream
+BT /F1 9 Tf 1 0 0 1 54 742 Tm (NexusOne Technologies | Synthetic Internal Document) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 724 Tm (Employee Handbook 2026) Tj ET
+BT /F1 18 Tf 1 0 0 1 54 662 Tm (Employee Handbook 2026) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 620 Tm (Document Control) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 592 Tm (- Company: NexusOne Technologies) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 578 Tm (- Document ID: employee-handbook-2026) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 564 Tm (- Owner department: hr) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 550 Tm (- Permission profile: public_internal) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 536 Tm (- Confidentiality: public_internal) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 522 Tm (- Last updated: 2026-02-01) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 508 Tm (- Key topics: probation, conduct, work hours, payroll schedule, holidays, internal tools) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 476 Tm (Access Scope) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 448 Tm (- Allowed roles: employee, manager, hr, finance, it_admin, admin_ops, executive, ceo) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 434 Tm (- Allowed groups: all_employees) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 420 Tm (- Allowed users: none) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 388 Tm (Summary) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 360 Tm (Employee-facing handbook covering probation, conduct, work hours, payroll expectations,) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 346 Tm (holidays, and approved internal tools.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 314 Tm (Probation And Conduct) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 286 Tm (- Standard probation is ninety calendar days unless the employment contract says) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 272 Tm (  otherwise.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 258 Tm (- Employees are expected to follow the code of conduct, protect company information, and) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 244 Tm (  use approved company tools for company work.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 230 Tm (- Policy questions should be sent to HR through the HR ticket queue.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 198 Tm (Work Hours And Payroll) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 170 Tm (- Core collaboration hours are 11:00 to 16:00 in the employee's primary office timezone.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 156 Tm (- Payroll is processed monthly using the regional cutoff published by HR.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 142 Tm (- Employees must keep HRIS profile, bank, tax, and emergency contact details current.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 110 Tm (Internal Tools) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 42 Tm (Page 1 of 2) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 1013 >>
+stream
+BT /F1 9 Tf 1 0 0 1 54 742 Tm (NexusOne Technologies | Synthetic Internal Document) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 724 Tm (Employee Handbook 2026) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 700 Tm (- Slack, Jira, HRIS, the Finance Portal, and the Admin Portal are available to all active) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 686 Tm (  employees.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 672 Tm (- GitHub and AWS require additional approval because they can expose source code or) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 658 Tm (  production systems.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 626 Tm (Data Generation Notice) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 598 Tm (- This is synthetic NexusOne Technologies data for local RAG, SQL, FAISS, and permission-) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 584 Tm (  filter testing.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 570 Tm (- Do not replace this file with real company, employee, customer, vendor, financial, HR,) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 556 Tm (  security, or acquisition data.) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 42 Tm (Page 2 of 2) Tj ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000002839 00000 n 
+0000002965 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+4029
+%%EOF

@@ -1,0 +1,68 @@
+manifest_version: 1
+description: NexusOne role groups and regional groups used for document and tool permissions.
+
+groups:
+  - group_name: all_employees
+    description: Baseline internal access for all active employees.
+
+  - group_name: engineering
+    description: Engineering team access for technical documentation and engineering project information.
+
+  - group_name: hr_team
+    description: HR team access for employee lifecycle, benefits, payroll, and HR ticket queues.
+
+  - group_name: finance_team
+    description: Finance team access for budgets, finance reports, reimbursement handling, and finance ticket queues.
+
+  - group_name: it_team
+    description: IT team access for support runbooks, access management, device procedures, and IT ticket queues.
+
+  - group_name: admin_ops_team
+    description: Admin operations access for facilities, office support, visitors, equipment, and admin tickets.
+
+  - group_name: managers
+    description: Manager access for hiring requests, performance processes, team onboarding, and manager guidance.
+
+  - group_name: executive_team
+    description: Executive access for board summaries, risk register, strategy docs, and high-level business reports.
+
+  - group_name: pakistan_office
+    description: Pakistan office and Pakistan-region policy access.
+
+  - group_name: uae_office
+    description: UAE office and UAE-region policy access.
+
+  - group_name: uk_office
+    description: UK office and UK-region policy access.
+
+  - group_name: us_office
+    description: USA office and USA-region policy access.
+
+  - group_name: finance_viewers
+    description: Explicit read group for selected finance-sensitive summaries.
+
+roles:
+  - role: employee
+    description: Regular employee. Can access public/internal docs and own tickets.
+
+  - role: manager
+    description: Employee plus manager-only docs and team-level workflows.
+
+  - role: hr
+    description: HR user with HR documentation and HR ticket access.
+
+  - role: finance
+    description: Finance user with finance documentation, finance data, and finance ticket access.
+
+  - role: it_admin
+    description: IT admin with IT runbooks, access procedures, and IT ticket queue access.
+
+  - role: admin_ops
+    description: Admin operations user with office, facilities, and admin ticket access.
+
+  - role: executive
+    description: Executive user with strategy, board, risk, and high-level report access.
+
+  - role: ceo
+    description: CEO with full executive access and CEO-only docs.
+

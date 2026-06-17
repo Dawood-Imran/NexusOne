@@ -1,0 +1,8 @@
+department_id,name,head_user_id
+dept-eng,engineering,u002
+dept-hr,hr,u003
+dept-fin,finance,u004
+dept-it,it,u005
+dept-admin,admin,u008
+dept-exec,executive,u006
+dept-cs,customer_success,u007

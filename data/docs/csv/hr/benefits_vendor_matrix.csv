@@ -1,0 +1,6 @@
+vendor_name,benefit_type,region,contact,renewal_date,notes
+CarePlus Fictional,health_insurance,Pakistan,benefits-pk@nexusone.example,2026-09-30,HR only vendor details for Pakistan benefits
+GulfWell Fictional,health_insurance,UAE,benefits-uae@nexusone.example,2026-10-15,HR only vendor details for UAE benefits
+NorthBridge Wellness,wellness,UK,benefits-uk@nexusone.example,2026-08-01,Wellness reimbursement partner for UK employees
+AustinCare Demo,health_insurance,USA,benefits-us@nexusone.example,2026-11-01,US benefits support for remote employees
+LifeCycle Support,employee_assistance,Global,eap@nexusone.example,2026-12-15,Global employee assistance provider

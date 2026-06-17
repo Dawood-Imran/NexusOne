@@ -1,0 +1,395 @@
+manifest_version: 1
+description: Planned CSV sources for structured seed data, spreadsheet-style RAG, and PostgreSQL loading.
+
+defaults:
+  generated: true
+  status: active
+  delimiter: ","
+  encoding: utf-8
+
+csv_sources:
+  - source_id: company-holidays-2026-csv
+    title: Company Holidays 2026
+    source_path: data/docs/csv/public/company_holidays_2026.csv
+    target_table: company_holidays
+    department: hr
+    permission_profile: public_internal
+    index_as_chunks: true
+    updated_at: 2026-01-03
+    columns:
+      - holiday_id
+      - region
+      - holiday_name
+      - date
+      - type
+      - notes
+    sample_queries:
+      - What holidays apply in Pakistan?
+      - What are the UAE office holidays?
+
+  - source_id: tool-directory-csv
+    title: Tool Directory
+    source_path: data/docs/csv/public/tool_directory.csv
+    target_table: tool_directory
+    department: it
+    permission_profile: public_internal
+    index_as_chunks: true
+    updated_at: 2026-02-01
+    columns:
+      - tool_id
+      - name
+      - owner_department
+      - access_method
+      - support_team
+      - docs_path
+    sample_queries:
+      - Who owns GitHub access?
+      - Where do I request access to Jira?
+
+  - source_id: office-locations-csv
+    title: Office Locations
+    source_path: data/docs/csv/public/office_locations.csv
+    target_table: office_locations
+    department: admin
+    permission_profile: public_internal
+    index_as_chunks: true
+    updated_at: 2026-01-12
+    columns:
+      - office_id
+      - country
+      - city
+      - address
+      - timezone
+      - admin_contact
+    sample_queries:
+      - What is the UAE office timezone?
+      - Who is the admin contact for Pakistan?
+
+  - source_id: users-seed-csv
+    title: Users Seed
+    source_path: data/docs/csv/public/users_seed.csv
+    target_table: users
+    department: admin
+    permission_profile: public_internal
+    index_as_chunks: false
+    updated_at: 2026-01-01
+    columns:
+      - user_id
+      - name
+      - email
+      - role
+      - department
+      - title
+      - manager_id
+      - location
+      - status
+    sample_queries:
+      - Who is Ayesha's manager?
+
+  - source_id: user-groups-seed-csv
+    title: User Groups Seed
+    source_path: data/docs/csv/public/user_groups_seed.csv
+    target_table: user_groups
+    department: admin
+    permission_profile: public_internal
+    index_as_chunks: false
+    updated_at: 2026-01-01
+    columns:
+      - user_id
+      - group_name
+    sample_queries:
+      - What groups is Fatima in?
+
+  - source_id: groups-seed-csv
+    title: Groups Seed
+    source_path: data/docs/csv/public/groups_seed.csv
+    target_table: groups
+    department: admin
+    permission_profile: public_internal
+    index_as_chunks: false
+    updated_at: 2026-01-01
+    columns:
+      - group_name
+      - description
+    sample_queries:
+      - What is the executive_team group?
+
+  - source_id: departments-seed-csv
+    title: Departments Seed
+    source_path: data/docs/csv/public/departments_seed.csv
+    target_table: departments
+    department: admin
+    permission_profile: public_internal
+    index_as_chunks: false
+    updated_at: 2026-01-01
+    columns:
+      - department_id
+      - name
+      - head_user_id
+    sample_queries:
+      - Who heads Finance?
+
+  - source_id: it-tickets-seed-csv
+    title: IT Tickets Seed
+    source_path: data/docs/csv/it/it_tickets_seed.csv
+    target_table: tickets
+    department: it
+    permission_profile: it_private
+    index_as_chunks: false
+    updated_at: 2026-02-15
+    columns:
+      - ticket_id
+      - requester_id
+      - department
+      - category
+      - priority
+      - status
+      - assigned_to
+      - created_at
+      - updated_at
+      - description
+    sample_queries:
+      - What is the status of my IT ticket?
+      - Show all open IT tickets.
+
+  - source_id: hr-tickets-seed-csv
+    title: HR Tickets Seed
+    source_path: data/docs/csv/hr/hr_tickets_seed.csv
+    target_table: tickets
+    department: hr
+    permission_profile: hr_private
+    index_as_chunks: false
+    updated_at: 2026-02-15
+    columns:
+      - ticket_id
+      - requester_id
+      - department
+      - category
+      - priority
+      - status
+      - assigned_to
+      - created_at
+      - updated_at
+      - description
+    sample_queries:
+      - What is the status of my HR ticket?
+      - Show the HR ticket queue.
+
+  - source_id: admin-tickets-seed-csv
+    title: Admin Tickets Seed
+    source_path: data/docs/csv/admin/admin_tickets_seed.csv
+    target_table: tickets
+    department: admin
+    permission_profile: admin_private
+    index_as_chunks: false
+    updated_at: 2026-02-15
+    columns:
+      - ticket_id
+      - requester_id
+      - department
+      - category
+      - priority
+      - status
+      - assigned_to
+      - created_at
+      - updated_at
+      - description
+    sample_queries:
+      - What is the status of my admin ticket?
+      - Show office access card tickets.
+
+  - source_id: finance-tickets-seed-csv
+    title: Finance Tickets Seed
+    source_path: data/docs/csv/finance/finance_tickets_seed.csv
+    target_table: tickets
+    department: finance
+    permission_profile: finance_private
+    index_as_chunks: false
+    updated_at: 2026-02-15
+    columns:
+      - ticket_id
+      - requester_id
+      - department
+      - category
+      - priority
+      - status
+      - assigned_to
+      - created_at
+      - updated_at
+      - description
+    sample_queries:
+      - What is the status of my reimbursement ticket?
+      - Show finance tickets waiting for receipts.
+
+  - source_id: finance-q4-summary-csv
+    title: Finance Q4 Summary
+    source_path: data/docs/csv/finance/finance_q4_summary.csv
+    target_table: finance_summaries
+    department: finance
+    permission_profile: executive_finance
+    index_as_chunks: true
+    updated_at: 2026-01-15
+    columns:
+      - period
+      - metric
+      - value
+      - unit
+      - department
+      - confidentiality
+      - notes
+    sample_queries:
+      - What were Q4 revenue trends?
+      - What was runway at the end of Q4?
+
+  - source_id: department-budget-2026-csv
+    title: Department Budget 2026
+    source_path: data/docs/csv/finance/department_budget_2026.csv
+    target_table: department_budgets
+    department: finance
+    permission_profile: finance_private
+    index_as_chunks: true
+    updated_at: 2026-02-14
+    columns:
+      - period
+      - department
+      - allocated_budget
+      - actual_spend
+      - forecast_spend
+      - variance
+      - risk_level
+      - confidentiality
+    sample_queries:
+      - Show department budget utilization.
+      - What is Engineering budget variance?
+
+  - source_id: revenue-risk-register-q4-2025-csv
+    title: Revenue Risk Register Q4 2025
+    source_path: data/docs/csv/finance/revenue_risk_register_q4_2025.csv
+    target_table: revenue_risks
+    department: finance
+    permission_profile: executive_finance
+    index_as_chunks: true
+    updated_at: 2026-01-10
+    columns:
+      - risk_id
+      - period
+      - account_segment
+      - risk_type
+      - revenue_at_risk
+      - probability
+      - owner
+      - mitigation
+      - confidentiality
+    sample_queries:
+      - What are the Q4 revenue risks?
+      - Which revenue risks have high probability?
+
+  - source_id: vendor-payment-aging-q1-2026-csv
+    title: Vendor Payment Aging Q1 2026
+    source_path: data/docs/csv/finance/vendor_payment_aging_q1_2026.csv
+    target_table: vendor_payment_aging
+    department: finance
+    permission_profile: finance_private
+    index_as_chunks: true
+    updated_at: 2026-03-05
+    columns:
+      - vendor_id
+      - vendor_name
+      - amount_due
+      - days_overdue
+      - owner
+      - status
+    sample_queries:
+      - Which vendors are overdue?
+
+  - source_id: benefits-vendor-matrix-csv
+    title: Benefits Vendor Matrix
+    source_path: data/docs/csv/hr/benefits_vendor_matrix.csv
+    target_table: benefits_vendors
+    department: hr
+    permission_profile: hr_private
+    index_as_chunks: true
+    updated_at: 2026-01-19
+    columns:
+      - vendor_name
+      - benefit_type
+      - region
+      - contact
+      - renewal_date
+      - notes
+    sample_queries:
+      - Which benefits vendor covers UAE employees?
+
+  - source_id: headcount-plan-2026-csv
+    title: Headcount Plan 2026
+    source_path: data/docs/csv/hr/headcount_plan_2026.csv
+    target_table: headcount_plan
+    department: hr
+    permission_profile: manager_only
+    index_as_chunks: true
+    updated_at: 2026-02-18
+    columns:
+      - department
+      - planned_hires
+      - approved_hires
+      - open_roles
+      - quarter
+      - approval_status
+    sample_queries:
+      - Compare hiring plan with budget risks.
+      - How many engineering hires are approved?
+
+  - source_id: employee-lifecycle-sla-csv
+    title: Employee Lifecycle SLA
+    source_path: data/docs/csv/hr/employee_lifecycle_sla.csv
+    target_table: employee_lifecycle_slas
+    department: hr
+    permission_profile: hr_private
+    index_as_chunks: true
+    updated_at: 2026-02-05
+    columns:
+      - process_name
+      - owner_team
+      - sla_days
+      - escalation_contact
+    sample_queries:
+      - What is the SLA for onboarding setup?
+
+  - source_id: project-status-public-csv
+    title: Project Status Public
+    source_path: data/docs/csv/public/project_status_public.csv
+    target_table: project_status_public
+    department: engineering
+    permission_profile: public_internal
+    index_as_chunks: true
+    updated_at: 2026-02-20
+    columns:
+      - project_id
+      - name
+      - department
+      - status
+      - public_summary
+      - last_updated
+    sample_queries:
+      - What is the status of the CRM automation project?
+
+  - source_id: project-status-executive-csv
+    title: Project Status Executive
+    source_path: data/docs/csv/executive/project_status_executive.csv
+    target_table: project_status_executive
+    department: executive
+    permission_profile: executive_private
+    index_as_chunks: true
+    updated_at: 2026-02-20
+    columns:
+      - project_id
+      - name
+      - status
+      - budget_risk
+      - delivery_risk
+      - customer_impact
+      - owner
+    sample_queries:
+      - Which projects have budget risk?
+      - What are executive delivery risks?
+

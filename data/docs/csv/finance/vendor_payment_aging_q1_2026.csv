@@ -1,0 +1,6 @@
+vendor_id,vendor_name,amount_due,days_overdue,owner,status
+VEN-001,CloudBridge Labs,42000,21,u004,awaiting_department_owner_approval
+VEN-002,Northstar Facilities,18500,34,u008,awaiting_vendor_tax_correction
+VEN-003,Atlas Learning Studio,7600,9,u003,scheduled_for_payment
+VEN-004,SecureDesk Systems,12600,17,u005,invoice_validation
+VEN-005,BluePeak Travel,5400,0,u004,paid

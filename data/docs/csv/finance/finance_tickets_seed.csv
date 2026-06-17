@@ -1,0 +1,6 @@
+ticket_id,requester_id,department,category,priority,status,assigned_to,created_at,updated_at,description
+FIN-4010,u001,finance,reimbursement,normal,waiting_on_user,u004,2026-02-05T10:00:00,2026-02-06T09:10:00,Internet reimbursement claim missing provider receipt
+FIN-4011,u002,finance,budget_request,normal,in_progress,u004,2026-02-06T11:30:00,2026-02-07T14:15:00,Request additional cloud budget for staging load tests
+FIN-4012,u003,finance,payroll_handoff,high,open,u004,2026-02-09T08:40:00,2026-02-09T08:40:00,HR asks Finance to review payroll adjustment after HR approval
+FIN-4013,u008,finance,vendor_payment,normal,resolved,u004,2026-02-10T15:00:00,2026-02-11T16:20:00,Facilities vendor invoice status request for office maintenance
+FIN-4014,u007,finance,forecast_question,high,in_progress,u004,2026-02-13T13:45:00,2026-02-14T11:00:00,Executive asks for updated renewal forecast sensitivity view

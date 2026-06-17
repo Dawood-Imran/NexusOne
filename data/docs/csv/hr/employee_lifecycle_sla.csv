@@ -1,0 +1,8 @@
+process_name,owner_team,sla_days,escalation_contact
+new_joiner_profile_setup,hr_team,2,u003
+device_and_sso_setup,it_team,3,u005
+desk_or_remote_equipment,admin_ops_team,4,u008
+payroll_profile_change,hr_team,3,u003
+benefits_enrollment,hr_team,5,u003
+offboarding_access_removal,it_team,1,u005
+final_payroll_review,hr_team,4,u003

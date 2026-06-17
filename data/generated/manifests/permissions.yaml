@@ -1,0 +1,222 @@
+manifest_version: 1
+description: Reusable permission profiles for planned documents, CSV sources, DB records, and tool access.
+
+confidentiality_levels:
+  - level: public_internal
+    description: Available to all active logged-in employees.
+  - level: department_internal
+    description: Restricted to a department or team.
+  - level: manager_only
+    description: Restricted to managers and explicitly allowed supporting teams.
+  - level: hr_sensitive
+    description: Restricted HR process or employee-sensitive information.
+  - level: finance_sensitive
+    description: Restricted finance, budget, revenue, vendor, or audit information.
+  - level: it_sensitive
+    description: Restricted IT, security, admin access, or incident response information.
+  - level: executive
+    description: Restricted to executives and CEO.
+  - level: ceo_only
+    description: Restricted to CEO only.
+
+permission_profiles:
+  public_internal:
+    confidentiality: public_internal
+    allowed_roles:
+      - employee
+      - manager
+      - hr
+      - finance
+      - it_admin
+      - admin_ops
+      - executive
+      - ceo
+    allowed_groups:
+      - all_employees
+    allowed_users: []
+
+  public_engineering:
+    confidentiality: department_internal
+    allowed_roles:
+      - employee
+      - manager
+      - it_admin
+      - executive
+      - ceo
+    allowed_groups:
+      - engineering
+      - managers
+      - it_team
+      - executive_team
+    allowed_users: []
+
+  manager_only:
+    confidentiality: manager_only
+    allowed_roles:
+      - manager
+      - hr
+      - executive
+      - ceo
+    allowed_groups:
+      - managers
+      - hr_team
+      - executive_team
+    allowed_users: []
+
+  hr_private:
+    confidentiality: hr_sensitive
+    allowed_roles:
+      - hr
+      - ceo
+    allowed_groups:
+      - hr_team
+    allowed_users: []
+
+  hr_payroll_shared:
+    confidentiality: hr_sensitive
+    allowed_roles:
+      - hr
+      - finance
+      - ceo
+    allowed_groups:
+      - hr_team
+      - finance_team
+    allowed_users: []
+
+  finance_private:
+    confidentiality: finance_sensitive
+    allowed_roles:
+      - finance
+      - executive
+      - ceo
+    allowed_groups:
+      - finance_team
+      - executive_team
+      - finance_viewers
+    allowed_users: []
+
+  finance_employee_policy:
+    confidentiality: public_internal
+    allowed_roles:
+      - employee
+      - manager
+      - hr
+      - finance
+      - it_admin
+      - admin_ops
+      - executive
+      - ceo
+    allowed_groups:
+      - all_employees
+      - finance_team
+    allowed_users: []
+
+  it_private:
+    confidentiality: it_sensitive
+    allowed_roles:
+      - it_admin
+      - ceo
+    allowed_groups:
+      - it_team
+    allowed_users: []
+
+  it_standard_access:
+    confidentiality: public_internal
+    allowed_roles:
+      - employee
+      - manager
+      - hr
+      - finance
+      - it_admin
+      - admin_ops
+      - executive
+      - ceo
+    allowed_groups:
+      - all_employees
+      - it_team
+    allowed_users: []
+
+  admin_private:
+    confidentiality: department_internal
+    allowed_roles:
+      - admin_ops
+      - manager
+      - ceo
+    allowed_groups:
+      - admin_ops_team
+      - managers
+    allowed_users: []
+
+  executive_private:
+    confidentiality: executive
+    allowed_roles:
+      - executive
+      - ceo
+    allowed_groups:
+      - executive_team
+    allowed_users: []
+
+  executive_finance:
+    confidentiality: executive
+    allowed_roles:
+      - finance
+      - executive
+      - ceo
+    allowed_groups:
+      - finance_team
+      - executive_team
+      - finance_viewers
+    allowed_users: []
+
+  ceo_only:
+    confidentiality: ceo_only
+    allowed_roles:
+      - ceo
+    allowed_groups: []
+    allowed_users:
+      - u006
+
+tool_permissions:
+  create_ticket:
+    allowed_roles:
+      - employee
+      - manager
+      - hr
+      - finance
+      - it_admin
+      - admin_ops
+      - executive
+      - ceo
+    note: Users can create tickets for supported departments. Department queue visibility is checked separately.
+
+  get_ticket_status:
+    allowed_roles:
+      - employee
+      - manager
+      - hr
+      - finance
+      - it_admin
+      - admin_ops
+      - executive
+      - ceo
+    note: Employees can see only their own tickets unless department queue permissions allow more.
+
+  query_finance_summary:
+    allowed_roles:
+      - finance
+      - executive
+      - ceo
+    note: Row-level finance permissions still apply.
+
+  query_employee_directory:
+    allowed_roles:
+      - employee
+      - manager
+      - hr
+      - finance
+      - it_admin
+      - admin_ops
+      - executive
+      - ceo
+    note: Sensitive employee fields require HR or explicit grants.
+

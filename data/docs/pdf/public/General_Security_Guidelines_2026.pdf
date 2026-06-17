@@ -1,0 +1,78 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2329 >>
+stream
+BT /F1 9 Tf 1 0 0 1 54 742 Tm (NexusOne Technologies | Synthetic Internal Document) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 724 Tm (General Security Guidelines 2026) Tj ET
+BT /F1 18 Tf 1 0 0 1 54 662 Tm (General Security Guidelines 2026) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 620 Tm (Document Control) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 592 Tm (- Company: NexusOne Technologies) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 578 Tm (- Document ID: general-security-guidelines-2026) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 564 Tm (- Owner department: it) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 550 Tm (- Permission profile: public_internal) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 536 Tm (- Confidentiality: public_internal) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 522 Tm (- Last updated: 2026-01-25) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 508 Tm (- Key topics: mfa, password, phishing, data handling) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 476 Tm (Access Scope) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 448 Tm (- Allowed roles: employee, manager, hr, finance, it_admin, admin_ops, executive, ceo) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 434 Tm (- Allowed groups: all_employees) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 420 Tm (- Allowed users: none) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 388 Tm (Summary) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 360 Tm (Company-wide security basics for MFA, passwords, phishing reporting, and internal data handling.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 328 Tm (MFA And Passwords) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 300 Tm (- MFA is required for SSO, HRIS, Finance Portal, GitHub, AWS, and VPN.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 286 Tm (- Employees must use the approved password manager for company credentials.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 254 Tm (Phishing And Suspicious Activity) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 226 Tm (- Report suspicious links, unexpected MFA prompts, and unusual login alerts to IT) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 212 Tm (  security.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 198 Tm (- Do not approve an MFA prompt that you did not initiate.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 166 Tm (Data Handling) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 138 Tm (- Company documents should remain in approved tools.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 124 Tm (- Restricted HR, finance, IT, executive, and CEO-only information must not be copied to) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 110 Tm (  public chats or personal storage.) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 42 Tm (Page 1 of 2) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 658 >>
+stream
+BT /F1 9 Tf 1 0 0 1 54 742 Tm (NexusOne Technologies | Synthetic Internal Document) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 724 Tm (General Security Guidelines 2026) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 700 Tm (Data Generation Notice) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 672 Tm (- This is synthetic NexusOne Technologies data for local RAG, SQL, FAISS, and permission-) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 658 Tm (  filter testing.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 644 Tm (- Do not replace this file with real company, employee, customer, vendor, financial, HR,) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 630 Tm (  security, or acquisition data.) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 42 Tm (Page 2 of 2) Tj ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000002697 00000 n 
+0000002823 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+3531
+%%EOF

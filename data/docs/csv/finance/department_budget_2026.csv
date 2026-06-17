@@ -1,0 +1,9 @@
+period,department,allocated_budget,actual_spend,forecast_spend,variance,risk_level,confidentiality
+2026-Q1,engineering,700000,520000,735000,35000,medium,finance_sensitive
+2026-Q1,hr,180000,92000,166000,-14000,low,finance_sensitive
+2026-Q1,finance,140000,85000,142000,2000,low,finance_sensitive
+2026-Q1,it,260000,188000,285000,25000,medium,finance_sensitive
+2026-Q1,admin,160000,97000,174000,14000,medium,finance_sensitive
+2026-Q1,executive,320000,210000,360000,40000,high,executive
+2026-Q2,engineering,740000,0,805000,65000,high,finance_sensitive
+2026-Q2,customer_success,310000,0,335000,25000,medium,executive

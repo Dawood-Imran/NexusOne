@@ -1,0 +1,80 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2451 >>
+stream
+BT /F1 9 Tf 1 0 0 1 54 742 Tm (NexusOne Technologies | Synthetic Internal Document) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 724 Tm (Expense Reimbursement Policy 2026) Tj ET
+BT /F1 18 Tf 1 0 0 1 54 662 Tm (Expense Reimbursement Policy 2026) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 620 Tm (Document Control) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 592 Tm (- Company: NexusOne Technologies) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 578 Tm (- Document ID: expense-reimbursement-policy-2026) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 564 Tm (- Owner department: finance) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 550 Tm (- Permission profile: finance_employee_policy) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 536 Tm (- Confidentiality: public_internal) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 522 Tm (- Last updated: 2026-02-15) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 508 Tm (- Key topics: meal limit, internet reimbursement, travel approval, home office monitor) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 476 Tm (Access Scope) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 448 Tm (- Allowed roles: employee, manager, hr, finance, it_admin, admin_ops, executive, ceo) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 434 Tm (- Allowed groups: all_employees, finance_team) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 420 Tm (- Allowed users: none) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 388 Tm (Summary) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 360 Tm (Employee-facing expense rules for meals, internet reimbursement, travel approval, and home) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 346 Tm (office equipment.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 314 Tm (Claim Requirements) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 286 Tm (- Every claim must include receipt, date, merchant, amount, category, and business) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 272 Tm (  purpose.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 258 Tm (- Claims should be submitted in the Finance Portal before the monthly cutoff.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 226 Tm (Common Limits) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 198 Tm (- Internet reimbursement is monthly and capped by employee region.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 184 Tm (- Business meals require attendee count and business purpose.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 170 Tm (- Home office monitors require manager approval before purchase and are capped at the) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 156 Tm (  local equivalent of USD 220.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 124 Tm (Denials) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 96 Tm (- Finance may deny duplicate claims, missing receipts, personal subscriptions, unapproved) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 42 Tm (Page 1 of 2) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 761 >>
+stream
+BT /F1 9 Tf 1 0 0 1 54 742 Tm (NexusOne Technologies | Synthetic Internal Document) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 724 Tm (Expense Reimbursement Policy 2026) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 700 Tm (  software, or late claims after repeated correction requests.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 668 Tm (Data Generation Notice) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 640 Tm (- This is synthetic NexusOne Technologies data for local RAG, SQL, FAISS, and permission-) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 626 Tm (  filter testing.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 612 Tm (- Do not replace this file with real company, employee, customer, vendor, financial, HR,) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 598 Tm (  security, or acquisition data.) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 42 Tm (Page 2 of 2) Tj ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000002819 00000 n 
+0000002945 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+3756
+%%EOF

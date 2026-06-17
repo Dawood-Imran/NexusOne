@@ -1,0 +1,120 @@
+manifest_version: 1
+description: Fake NexusOne user profiles used for role switching, permissions, and demo queries.
+
+users:
+  - user_id: u001
+    name: Ayesha Khan
+    email: ayesha.khan@nexusone.example
+    role: employee
+    department: engineering
+    title: Software Engineer
+    manager_id: u002
+    location: Pakistan
+    status: active
+    groups:
+      - all_employees
+      - engineering
+      - pakistan_office
+
+  - user_id: u002
+    name: Bilal Ahmed
+    email: bilal.ahmed@nexusone.example
+    role: manager
+    department: engineering
+    title: Engineering Manager
+    manager_id: u006
+    location: Pakistan
+    status: active
+    groups:
+      - all_employees
+      - engineering
+      - managers
+      - pakistan_office
+
+  - user_id: u003
+    name: Sara Malik
+    email: sara.malik@nexusone.example
+    role: hr
+    department: hr
+    title: HR Specialist
+    manager_id: u006
+    location: Pakistan
+    status: active
+    groups:
+      - all_employees
+      - hr_team
+      - pakistan_office
+
+  - user_id: u004
+    name: Hamza Farooq
+    email: hamza.farooq@nexusone.example
+    role: finance
+    department: finance
+    title: Finance Analyst
+    manager_id: u006
+    location: UAE
+    status: active
+    groups:
+      - all_employees
+      - finance_team
+      - finance_viewers
+      - uae_office
+
+  - user_id: u005
+    name: Omar Siddiqui
+    email: omar.siddiqui@nexusone.example
+    role: it_admin
+    department: it
+    title: IT Admin
+    manager_id: u006
+    location: Pakistan
+    status: active
+    groups:
+      - all_employees
+      - it_team
+      - pakistan_office
+
+  - user_id: u006
+    name: Fatima Noor
+    email: fatima.noor@nexusone.example
+    role: ceo
+    department: executive
+    title: CEO
+    manager_id:
+    location: UAE
+    status: active
+    groups:
+      - all_employees
+      - managers
+      - executive_team
+      - finance_viewers
+      - uae_office
+
+  - user_id: u007
+    name: Emma Wilson
+    email: emma.wilson@nexusone.example
+    role: executive
+    department: executive
+    title: Chief Customer Officer
+    manager_id: u006
+    location: UK
+    status: active
+    groups:
+      - all_employees
+      - executive_team
+      - uk_office
+
+  - user_id: u008
+    name: Zain Qureshi
+    email: zain.qureshi@nexusone.example
+    role: admin_ops
+    department: admin
+    title: Admin Operations Lead
+    manager_id: u006
+    location: Pakistan
+    status: active
+    groups:
+      - all_employees
+      - admin_ops_team
+      - pakistan_office
+

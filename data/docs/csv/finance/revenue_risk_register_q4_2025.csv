@@ -1,0 +1,6 @@
+risk_id,period,account_segment,risk_type,revenue_at_risk,probability,owner,mitigation,confidentiality
+RR-001,Q4-2025,Customer A enterprise segment,renewal_delay,620000,0.65,u007,Weekly executive renewal checkpoint and reporting automation plan,executive
+RR-002,Q4-2025,NexusRetail operations group,expansion_slip,410000,0.45,u007,Product roadmap review and support escalation owner assigned,executive
+RR-003,Q4-2025,AtlasPay regional team,service_credit_request,180000,0.35,u004,Finance review of credit exposure with customer success,executive
+RR-004,Q4-2025,SMB automation cohort,churn_risk,95000,0.30,u007,Customer education campaign and workflow template package,executive
+RR-005,Q4-2025,Partner integration cohort,implementation_delay,260000,0.55,u002,Engineering integration owner and staging test plan,executive

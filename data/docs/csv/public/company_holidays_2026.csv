@@ -1,0 +1,13 @@
+holiday_id,region,holiday_name,date,type,notes
+HOL-PK-001,Pakistan,Regional Spring Holiday,2026-03-23,public,Applies to Pakistan office
+HOL-PK-002,Pakistan,Company Wellness Day,2026-06-12,company,Applies to all Pakistan employees
+HOL-PK-003,Pakistan,Regional Independence Holiday,2026-08-14,public,Office closed in Pakistan
+HOL-UAE-001,UAE,Regional New Year Holiday,2026-01-01,public,Applies to UAE office
+HOL-UAE-002,UAE,Company Wellness Day,2026-06-12,company,Applies to all UAE employees
+HOL-UAE-003,UAE,Regional National Holiday,2026-12-02,public,Office closed in UAE
+HOL-UK-001,UK,Regional Spring Bank Holiday,2026-05-25,public,Applies to UK office
+HOL-UK-002,UK,Company Wellness Day,2026-06-12,company,Applies to all UK employees
+HOL-UK-003,UK,Regional Winter Holiday,2026-12-25,public,Office closed in UK
+HOL-US-001,USA,Regional Midyear Holiday,2026-07-03,public,Applies to USA employees
+HOL-US-002,USA,Company Wellness Day,2026-06-12,company,Applies to all USA employees
+HOL-US-003,USA,Regional Winter Holiday,2026-12-25,public,Office closed in USA

@@ -1,0 +1,77 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2113 >>
+stream
+BT /F1 9 Tf 1 0 0 1 54 742 Tm (NexusOne Technologies | Synthetic Internal Document) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 724 Tm (Privileged Access Process 2026) Tj ET
+BT /F1 18 Tf 1 0 0 1 54 662 Tm (Privileged Access Process 2026) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 620 Tm (Document Control) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 592 Tm (- Company: NexusOne Technologies) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 578 Tm (- Document ID: privileged-access-process-2026) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 564 Tm (- Owner department: it) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 550 Tm (- Permission profile: it_private) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 536 Tm (- Confidentiality: it_sensitive) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 522 Tm (- Last updated: 2026-02-03) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 508 Tm (- Key topics: privileged access, production access, approval, break-glass) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 476 Tm (Access Scope) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 448 Tm (- Allowed roles: it_admin, ceo) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 434 Tm (- Allowed groups: it_team) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 420 Tm (- Allowed users: none) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 388 Tm (Summary) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 360 Tm (IT restricted process for production, admin, and break-glass access approval.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 328 Tm (Standard Approval) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 300 Tm (- Privileged access requires business reason, system owner, manager approval, scope, and) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 286 Tm (  expiration.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 272 Tm (- Production access must be least privilege and time-limited.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 240 Tm (Break-Glass) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 212 Tm (- Break-glass access is allowed only for active incidents with incident commander) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 198 Tm (  approval.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 184 Tm (- All actions must be reviewed within one working day.) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 152 Tm (Removal) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 124 Tm (- Access must be removed at expiration and evidence must be attached to the ticket.) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 42 Tm (Page 1 of 2) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 656 >>
+stream
+BT /F1 9 Tf 1 0 0 1 54 742 Tm (NexusOne Technologies | Synthetic Internal Document) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 724 Tm (Privileged Access Process 2026) Tj ET
+BT /F1 13 Tf 1 0 0 1 54 700 Tm (Data Generation Notice) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 672 Tm (- This is synthetic NexusOne Technologies data for local RAG, SQL, FAISS, and permission-) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 658 Tm (  filter testing.) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 644 Tm (- Do not replace this file with real company, employee, customer, vendor, financial, HR,) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 630 Tm (  security, or acquisition data.) Tj ET
+BT /F1 9 Tf 1 0 0 1 54 42 Tm (Page 2 of 2) Tj ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000002481 00000 n 
+0000002607 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+3313
+%%EOF

@@ -1,0 +1,5 @@
+office_id,country,city,address,timezone,admin_contact
+OFF-PK-001,Pakistan,Lahore,NexusOne House - Gulberg - Lahore,Asia/Karachi,u008
+OFF-UAE-001,UAE,Dubai,NexusOne Suite - Business Bay - Dubai,Asia/Dubai,u008
+OFF-UK-001,UK,London,NexusOne Desk Hub - Shoreditch - London,Europe/London,u008
+OFF-US-001,USA,Austin,NexusOne Remote Hub - Downtown - Austin,America/Chicago,u008

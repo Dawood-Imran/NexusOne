@@ -1,0 +1,8 @@
+department,planned_hires,approved_hires,open_roles,quarter,approval_status
+engineering,6,4,backend_engineer|platform_engineer,Q2,partially_approved
+hr,2,1,hr_operations_specialist,Q2,approved
+finance,2,1,finance_systems_analyst,Q3,pending_finance_review
+it,3,2,security_engineer|support_admin,Q2,approved
+admin,2,1,office_coordinator,Q2,approved
+customer_success,4,2,enterprise_csm|support_lead,Q3,pending_executive_review
+executive,1,0,chief_revenue_officer,Q3,executive_only_review

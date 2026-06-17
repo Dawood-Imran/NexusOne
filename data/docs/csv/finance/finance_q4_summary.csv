@@ -1,0 +1,7 @@
+period,metric,value,unit,department,confidentiality,notes
+Q4-2025,revenue,4850000,USD,company,executive,Revenue improved against Q3 but renewal timing remained concentrated
+Q4-2025,gross_margin,68,percent,company,executive,Margin held due to lower support vendor spend
+Q4-2025,monthly_burn_rate,780000,USD,company,finance_sensitive,Burn increased because engineering cloud tests expanded
+Q4-2025,runway_months,15,months,company,executive,Runway assumes Q1 renewals close within forecast range
+Q4-2025,expense_variance,94000,USD,engineering,finance_sensitive,Engineering variance linked to staging capacity and customer reporting automation
+Q4-2025,collections_delay,210000,USD,finance,executive,Collections delay tied to two fictional enterprise renewal discussions

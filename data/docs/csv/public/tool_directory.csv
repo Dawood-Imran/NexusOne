@@ -1,0 +1,9 @@
+tool_id,name,owner_department,access_method,support_team,docs_path
+TOOL-001,Slack,IT,SSO auto-provision,it_team,data/docs/markdown_kb/public/company-tools.md
+TOOL-002,Jira,IT,SSO auto-provision,it_team,data/docs/markdown_kb/public/company-tools.md
+TOOL-003,GitHub,IT,IT access ticket,it_team,data/docs/markdown_kb/it/github-access.md
+TOOL-004,AWS,IT,IT cloud access ticket,it_team,data/docs/markdown_kb/it/aws-access.md
+TOOL-005,HRIS,HR,HR onboarding provisioning,hr_team,data/docs/markdown_kb/hr/payroll-calendar.md
+TOOL-006,Finance Portal,Finance,SSO auto-provision,finance_team,data/docs/markdown_kb/public/expense-claim-how-to.md
+TOOL-007,Admin Portal,Admin,SSO auto-provision,admin_ops_team,data/docs/markdown_kb/admin/visitor-policy.md
+TOOL-008,VPN,IT,Device compliance and SSO,it_team,data/docs/markdown_kb/it/vpn-reset.md

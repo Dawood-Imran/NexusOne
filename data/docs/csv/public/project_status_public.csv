@@ -1,0 +1,6 @@
+project_id,name,department,status,public_summary,last_updated
+PROJ-101,CRM Automation,engineering,on_track,Automating customer renewal summaries for internal teams,2026-02-20
+PROJ-102,Expense Portal Refresh,finance,at_risk,Improving claim submission and receipt validation,2026-02-20
+PROJ-103,Onboarding Workflow,hr,on_track,Reducing manual onboarding handoffs across HR IT and Admin,2026-02-20
+PROJ-104,VPN Reliability,IT,on_track,Reducing failed VPN resets and device compliance blocks,2026-02-20
+PROJ-105,Office Access Modernization,admin,watch,Replacing aging access card inventory in regional offices,2026-02-20

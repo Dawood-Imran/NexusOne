@@ -1,0 +1,14 @@
+group_name,description
+all_employees,All active NexusOne employees
+engineering,Engineering department staff
+hr_team,Human Resources team
+finance_team,Finance team
+it_team,Information Technology administrators
+admin_ops_team,Admin Operations team
+managers,People managers and approved team leads
+executive_team,Executive leadership team
+pakistan_office,Employees assigned to Pakistan location
+uae_office,Employees assigned to UAE location
+uk_office,Employees assigned to UK location
+us_office,Employees assigned to USA location
+finance_viewers,Approved finance summary viewers

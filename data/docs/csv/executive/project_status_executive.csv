@@ -1,0 +1,7 @@
+project_id,name,status,budget_risk,delivery_risk,customer_impact,owner
+PROJ-101,CRM Automation,on_track,medium,medium,Improves renewal reporting for Customer A,u002
+PROJ-102,Expense Portal Refresh,at_risk,medium,low,Reduces reimbursement delays for all employees,u004
+PROJ-103,Onboarding Workflow,on_track,low,medium,Reduces first-week access blockers,u003
+PROJ-104,VPN Reliability,on_track,low,low,Reduces remote-work disruption,u005
+PROJ-105,Office Access Modernization,watch,medium,medium,Impacts visitor flow and regional office access,u008
+PROJ-106,Executive Renewal Command Center,at_risk,high,high,Supports fictional enterprise renewal mitigation,u007
