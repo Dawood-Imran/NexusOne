@@ -41,6 +41,7 @@ NexusOne has strict permission requirements. A fully open-ended agent loop would
 - Docker Compose for local PostgreSQL has been added.
 - Initial PostgreSQL schema has been added under `data/postgres/init/001_schema.sql`.
 - PostgreSQL seed scripts have been added and loaded into the local Docker database.
+- A visual LangGraph architecture graph has been created under `docs/architecture/graph.svg`.
 
 Current scaffold summary:
 
@@ -83,9 +84,9 @@ scripts/
 
 ## Current Task
 
-Add the ingestion pipeline for source documents.
+Add the constrained SQL connector/tool for structured data.
 
-The Markdown KB, CSV, PDF, Docker Compose, PostgreSQL schema, and PostgreSQL seed steps are complete. The next setup step is to build the ingestion pipeline for PDFs, Markdown, and selected CSV row text.
+The Markdown KB, CSV, PDF, Docker Compose, PostgreSQL schema, and PostgreSQL seed steps are complete. The next setup step is to build a constrained SQL connector/tool for exact structured data, then ingest PDFs and Markdown for RAG.
 
 The manifests remain the source of truth for:
 
@@ -234,7 +235,10 @@ The implementation must enforce:
 - FAISS will be used as the first vector index.
 - PostgreSQL is the runtime source of truth for permissions.
 - Manifest files duplicate permission metadata for generation and validation.
-- Tickets should stay in PostgreSQL for the first version, not FAISS.
+- CSVs and tickets should stay in PostgreSQL for the first version, not FAISS.
+- Structured CSV/PostgreSQL questions should use a constrained SQL connector/tool.
+- The SQL connector should be implemented as a custom constrained LangGraph SQL subgraph with deterministic validation, not as an unrestricted prebuilt SQL agent.
+- PDF and Markdown sources should use ingestion, chunking, FAISS, and BM25.
 - At least one CEO-only document should exist to test strict refusal behavior.
 
 ## Open Decisions
@@ -251,20 +255,24 @@ Recommended defaults from the setup plan:
 1. Use a local embedding model first if available.
 2. Generate PDFs from Markdown/HTML templates.
 3. Use `rank-bm25` for the first local keyword search implementation.
-4. Include one CEO-only document for strict permission testing.
+4. Keep CSVs and tickets in PostgreSQL only for the first version.
+5. Build a custom constrained LangGraph SQL subgraph for exact structured data.
+6. Include one CEO-only document for strict permission testing.
 
 ## Next Steps
 
 Immediate next step:
 
-1. Add ingestion pipeline for PDFs, Markdown, and selected CSV rows.
-2. Store chunk metadata in PostgreSQL `document_chunks`.
-3. Produce an ingestion report under `data/generated/ingestion_reports/`.
+1. Add the SQL subgraph database safety layer from `app/agents/sql_subgraph/IMPLEMENTATION_PLAN.md`.
+2. Add permission-aware SQL views/functions as needed for safe tool access.
+3. Add the SQL source registry, permission scope selector, and SQL validator.
+4. Then add OpenAI-powered SQL intent and query drafting nodes.
+5. Then add ingestion pipeline for PDFs and Markdown only.
 
-After ingestion:
+After SQL connector and ingestion:
 
 1. Add FAISS index builder.
-2. Add validation script for permissions and retrieval.
+2. Add validation script for permissions, SQL, and retrieval.
 
 ## Move-To-Implementation Criteria
 

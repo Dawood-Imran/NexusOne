@@ -1,0 +1,220 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1180" viewBox="0 0 1400 1180" role="img" aria-labelledby="title desc">
+  <title id="title">NexusOne Copilot LangGraph Architecture</title>
+  <desc id="desc">A LangGraph-style flow showing parent orchestration with RAG, SQL connector, and ticket tool subgraphs.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#344054" />
+    </marker>
+    <style>
+      .bg { fill: #f7f8fb; }
+      .title { font: 700 28px Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 400 14px Arial, sans-serif; fill: #475467; }
+      .box { fill: #ffffff; stroke: #98a2b3; stroke-width: 1.4; rx: 10; }
+      .main { fill: #eef4ff; stroke: #528bff; }
+      .decision { fill: #fff7ed; stroke: #f79009; }
+      .subgraph { fill: #ffffff; stroke: #667085; stroke-width: 1.5; stroke-dasharray: 7 5; rx: 14; }
+      .rag { fill: #ecfdf3; stroke: #12b76a; }
+      .sql { fill: #f4f3ff; stroke: #7a5af8; }
+      .ticket { fill: #fef3f2; stroke: #f04438; }
+      .end { fill: #f2f4f7; stroke: #667085; }
+      .label { font: 700 13px Arial, sans-serif; fill: #111827; }
+      .small { font: 400 12px Arial, sans-serif; fill: #344054; }
+      .group-title { font: 700 16px Arial, sans-serif; fill: #101828; }
+      .edge { stroke: #344054; stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+      .edge-light { stroke: #667085; stroke-width: 1.3; fill: none; marker-end: url(#arrow); }
+      .edge-dash { stroke: #667085; stroke-width: 1.3; fill: none; marker-end: url(#arrow); stroke-dasharray: 5 4; }
+      .edge-label { font: 400 11px Arial, sans-serif; fill: #344054; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="1180" />
+  <text class="title" x="40" y="44">NexusOne Copilot LangGraph Shape</text>
+  <text class="subtitle" x="40" y="68">Parent graph routes to focused subgraphs: RAG for PDF/Markdown, SQL for exact Postgres data, ticket tools for controlled actions.</text>
+
+  <!-- Parent graph nodes -->
+  <rect class="box main" x="40" y="110" width="260" height="58" />
+  <text class="label" x="170" y="132" text-anchor="middle">START</text>
+  <text class="small" x="170" y="151" text-anchor="middle">user asks question</text>
+
+  <rect class="box main" x="40" y="200" width="260" height="70" />
+  <text class="label" x="170" y="225" text-anchor="middle">Load User Context</text>
+  <text class="small" x="170" y="246" text-anchor="middle">user_id, role, groups, location</text>
+
+  <rect class="box decision" x="40" y="310" width="260" height="78" />
+  <text class="label" x="170" y="334" text-anchor="middle">Pre-Check Guardrails</text>
+  <text class="small" x="170" y="355" text-anchor="middle">identity, jailbreak, unsafe request</text>
+  <text class="small" x="170" y="374" text-anchor="middle">block before retrieval if needed</text>
+
+  <rect class="box main" x="40" y="435" width="260" height="82" />
+  <text class="label" x="170" y="461" text-anchor="middle">Intent Router</text>
+  <text class="small" x="170" y="482" text-anchor="middle">docs, sql, ticket, mixed, clarify</text>
+  <text class="small" x="170" y="501" text-anchor="middle">structured LLM output</text>
+
+  <rect class="box end" x="40" y="570" width="260" height="62" />
+  <text class="label" x="170" y="594" text-anchor="middle">Clarify / Interrupt</text>
+  <text class="small" x="170" y="615" text-anchor="middle">ask user, resume into router</text>
+
+  <rect class="box main" x="40" y="760" width="260" height="76" />
+  <text class="label" x="170" y="786" text-anchor="middle">Merge Evidence</text>
+  <text class="small" x="170" y="807" text-anchor="middle">RAG chunks + SQL rows</text>
+  <text class="small" x="170" y="826" text-anchor="middle">+ ticket results</text>
+
+  <rect class="box main" x="40" y="875" width="260" height="76" />
+  <text class="label" x="170" y="901" text-anchor="middle">Compose Answer</text>
+  <text class="small" x="170" y="922" text-anchor="middle">grounded response</text>
+  <text class="small" x="170" y="941" text-anchor="middle">citations and safe sources</text>
+
+  <rect class="box decision" x="40" y="990" width="260" height="76" />
+  <text class="label" x="170" y="1016" text-anchor="middle">Final Validator</text>
+  <text class="small" x="170" y="1037" text-anchor="middle">permissions, citations, leakage</text>
+  <text class="small" x="170" y="1056" text-anchor="middle">repair once if needed</text>
+
+  <rect class="box end" x="40" y="1100" width="260" height="50" />
+  <text class="label" x="170" y="1121" text-anchor="middle">Audit Log + END</text>
+  <text class="small" x="170" y="1140" text-anchor="middle">return answer</text>
+
+  <rect class="box end" x="330" y="310" width="210" height="58" />
+  <text class="label" x="435" y="334" text-anchor="middle">Safe Refusal</text>
+  <text class="small" x="435" y="353" text-anchor="middle">no restricted titles</text>
+
+  <!-- RAG subgraph -->
+  <rect class="subgraph" x="350" y="410" width="300" height="330" />
+  <text class="group-title" x="500" y="438" text-anchor="middle">RAG Retrieval Subgraph</text>
+  <text class="small" x="500" y="458" text-anchor="middle">PDF + Markdown only</text>
+
+  <rect class="box rag" x="380" y="480" width="240" height="45" />
+  <text class="label" x="500" y="506" text-anchor="middle">Build Permission Filter</text>
+
+  <rect class="box rag" x="380" y="545" width="240" height="50" />
+  <text class="label" x="500" y="568" text-anchor="middle">Hybrid Search</text>
+  <text class="small" x="500" y="586" text-anchor="middle">FAISS + BM25</text>
+
+  <rect class="box rag" x="380" y="615" width="240" height="50" />
+  <text class="label" x="500" y="638" text-anchor="middle">Postgres Permission Filter</text>
+  <text class="small" x="500" y="656" text-anchor="middle">can_user_access_document</text>
+
+  <rect class="box decision" x="380" y="685" width="240" height="45" />
+  <text class="label" x="500" y="712" text-anchor="middle">Enough Context?</text>
+
+  <rect class="box rag" x="380" y="750" width="240" height="50" />
+  <text class="label" x="500" y="773" text-anchor="middle">Rerank + Pack Context</text>
+  <text class="small" x="500" y="791" text-anchor="middle">page/section citations</text>
+
+  <!-- SQL subgraph -->
+  <rect class="subgraph" x="700" y="410" width="310" height="365" />
+  <text class="group-title" x="855" y="438" text-anchor="middle">SQL Connector Subgraph</text>
+  <text class="small" x="855" y="458" text-anchor="middle">CSV/Postgres exact data</text>
+
+  <rect class="box sql" x="735" y="480" width="240" height="50" />
+  <text class="label" x="855" y="503" text-anchor="middle">Allowed Tables / Views</text>
+  <text class="small" x="855" y="521" text-anchor="middle">based on user + intent</text>
+
+  <rect class="box sql" x="735" y="550" width="240" height="45" />
+  <text class="label" x="855" y="577" text-anchor="middle">Draft SELECT Query</text>
+
+  <rect class="box decision" x="735" y="615" width="240" height="50" />
+  <text class="label" x="855" y="638" text-anchor="middle">SQL Safety Validator</text>
+  <text class="small" x="855" y="656" text-anchor="middle">no DML, DDL, multi-stmt</text>
+
+  <rect class="box sql" x="735" y="685" width="240" height="45" />
+  <text class="label" x="855" y="712" text-anchor="middle">Execute Read-Only Query</text>
+
+  <rect class="box sql" x="735" y="750" width="240" height="50" />
+  <text class="label" x="855" y="773" text-anchor="middle">Return Rows / Aggregates</text>
+  <text class="small" x="855" y="791" text-anchor="middle">safe source labels</text>
+
+  <rect class="box end" x="1015" y="615" width="210" height="50" />
+  <text class="label" x="1120" y="638" text-anchor="middle">Reject Unsafe SQL</text>
+  <text class="small" x="1120" y="656" text-anchor="middle">return safe tool result</text>
+
+  <!-- Ticket subgraph -->
+  <rect class="subgraph" x="1060" y="410" width="300" height="290" />
+  <text class="group-title" x="1210" y="438" text-anchor="middle">Ticket Tool Subgraph</text>
+  <text class="small" x="1210" y="458" text-anchor="middle">controlled actions only</text>
+
+  <rect class="box ticket" x="1090" y="480" width="240" height="45" />
+  <text class="label" x="1210" y="506" text-anchor="middle">Classify Ticket Action</text>
+
+  <rect class="box decision" x="1090" y="545" width="240" height="45" />
+  <text class="label" x="1210" y="572" text-anchor="middle">Missing Fields?</text>
+
+  <rect class="box ticket" x="1090" y="610" width="240" height="45" />
+  <text class="label" x="1210" y="637" text-anchor="middle">Permission Check</text>
+
+  <rect class="box ticket" x="1090" y="675" width="240" height="50" />
+  <text class="label" x="1210" y="698" text-anchor="middle">Create / Check Ticket</text>
+  <text class="small" x="1210" y="716" text-anchor="middle">Postgres transaction</text>
+
+  <rect class="box end" x="1090" y="745" width="240" height="45" />
+  <text class="label" x="1210" y="772" text-anchor="middle">Ticket Result</text>
+
+  <!-- Main edges -->
+  <path class="edge" d="M170 168 L170 200" />
+  <path class="edge" d="M170 270 L170 310" />
+  <path class="edge" d="M170 388 L170 435" />
+  <path class="edge" d="M170 517 L170 570" />
+  <text class="edge-label" x="184" y="548">unclear</text>
+  <path class="edge" d="M170 632 L170 760" />
+  <text class="edge-label" x="184" y="700">resume</text>
+  <path class="edge" d="M170 836 L170 875" />
+  <path class="edge" d="M170 951 L170 990" />
+  <path class="edge" d="M170 1066 L170 1100" />
+  <path class="edge-light" d="M300 349 L330 339" />
+  <text class="edge-label" x="308" y="330">blocked</text>
+  <path class="edge-light" d="M435 368 C435 1095, 300 1115, 300 1125" />
+
+  <!-- Router edges to subgraphs -->
+  <path class="edge" d="M300 462 C340 462, 350 502, 380 502" />
+  <text class="edge-label" x="318" y="451">docs</text>
+  <path class="edge" d="M300 482 C520 482, 590 504, 735 504" />
+  <text class="edge-label" x="520" y="474">structured data</text>
+  <path class="edge" d="M300 503 C650 510, 890 502, 1090 502" />
+  <text class="edge-label" x="765" y="494">ticket</text>
+  <path class="edge-dash" d="M300 475 C360 430, 365 430, 380 480" />
+  <path class="edge-dash" d="M300 475 C610 420, 690 430, 735 480" />
+  <text class="edge-label" x="425" y="414">mixed routes to both</text>
+
+  <!-- RAG internal edges -->
+  <path class="edge-light" d="M500 525 L500 545" />
+  <path class="edge-light" d="M500 595 L500 615" />
+  <path class="edge-light" d="M500 665 L500 685" />
+  <path class="edge-light" d="M500 730 L500 750" />
+  <path class="edge-dash" d="M380 707 C330 700, 330 570, 380 570" />
+  <text class="edge-label" x="312" y="640">rewrite loop</text>
+
+  <!-- SQL internal edges -->
+  <path class="edge-light" d="M855 530 L855 550" />
+  <path class="edge-light" d="M855 595 L855 615" />
+  <path class="edge-light" d="M855 665 L855 685" />
+  <path class="edge-light" d="M855 730 L855 750" />
+  <path class="edge-dash" d="M735 640 C690 630, 690 570, 735 572" />
+  <text class="edge-label" x="670" y="604">repair loop</text>
+  <path class="edge-light" d="M975 640 L1015 640" />
+  <text class="edge-label" x="985" y="628">unsafe</text>
+
+  <!-- Ticket internal edges -->
+  <path class="edge-light" d="M1210 525 L1210 545" />
+  <path class="edge-light" d="M1210 590 L1210 610" />
+  <path class="edge-light" d="M1210 655 L1210 675" />
+  <path class="edge-light" d="M1210 725 L1210 745" />
+  <path class="edge-dash" d="M1090 568 C1035 560, 1035 502, 1090 502" />
+  <text class="edge-label" x="1018" y="536">ask + resume</text>
+
+  <!-- Subgraph outputs to merge -->
+  <path class="edge" d="M500 800 C500 840, 300 800, 300 800" />
+  <path class="edge" d="M855 800 C855 850, 300 820, 300 810" />
+  <path class="edge" d="M1120 665 C1120 855, 300 825, 300 815" />
+  <path class="edge" d="M1210 790 C1210 875, 300 830, 300 820" />
+
+  <!-- Validator repair loop -->
+  <path class="edge-dash" d="M40 1028 C12 1028, 12 913, 40 913" />
+  <text class="edge-label" x="14" y="965">fail once</text>
+
+  <!-- Legend -->
+  <rect class="box" x="1040" y="970" width="320" height="140" />
+  <text class="group-title" x="1200" y="997" text-anchor="middle">Implementation Shape</text>
+  <text class="small" x="1060" y="1024">Parent graph: routing, merge, answer, validation, audit.</text>
+  <text class="small" x="1060" y="1048">RAG subgraph: PDF/Markdown retrieval and retry loop.</text>
+  <text class="small" x="1060" y="1072">SQL subgraph/tool: exact Postgres rows, SELECT only.</text>
+  <text class="small" x="1060" y="1096">Ticket subgraph/tool: controlled create/status actions.</text>
+</svg>

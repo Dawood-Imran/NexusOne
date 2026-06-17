@@ -1,0 +1,76 @@
+flowchart TD
+  START([START: user asks question])
+  LOAD[Load user context<br/>user_id, role, groups, location]
+  PRECHECK{Pre-check guardrails<br/>identity, jailbreak, unsafe request}
+  REFUSE[Safe refusal<br/>do not reveal restricted titles]
+  ROUTER{Intent router<br/>docs, sql, ticket, mixed, clarify}
+  CLARIFY[Interrupt / ask clarification<br/>resume into router]
+  MERGE[Merge evidence<br/>RAG chunks + SQL rows + tool results]
+  ANSWER[Compose grounded answer<br/>format citations and sources]
+  VALIDATE{Final validator<br/>permissions, citations, leakage}
+  REPAIR[Repair answer once<br/>remove unsafe or unsupported claims]
+  AUDIT[Audit log<br/>intent, tools, allowed docs, denied counts]
+  END([END: return answer])
+
+  START --> LOAD --> PRECHECK
+  PRECHECK -- blocked --> REFUSE --> AUDIT --> END
+  PRECHECK -- allowed --> ROUTER
+  ROUTER -- unclear --> CLARIFY --> END
+
+  subgraph RAG["RAG Retrieval Subgraph: PDFs + Markdown"]
+    RAG_PERM[Build permission filter<br/>from Postgres user context]
+    RAG_SEARCH[Hybrid search<br/>FAISS vector + BM25 keyword]
+    RAG_POSTFILTER[Postgres permission filter<br/>can_user_access_document]
+    RAG_REWRITE{Enough allowed context?}
+    RAG_QUERY_REWRITE[Rewrite query<br/>bounded retry]
+    RAG_RERANK[Rerank allowed chunks]
+    RAG_PACK[Pack context<br/>page/section citations]
+    RAG_OUT[RAG result]
+
+    RAG_PERM --> RAG_SEARCH --> RAG_POSTFILTER --> RAG_REWRITE
+    RAG_REWRITE -- no --> RAG_QUERY_REWRITE --> RAG_SEARCH
+    RAG_REWRITE -- yes --> RAG_RERANK --> RAG_PACK --> RAG_OUT
+  end
+
+  subgraph SQL["SQL Connector Subgraph: CSV/Postgres exact data"]
+    SQL_SCOPE[Select allowed tables/views<br/>based on user + intent]
+    SQL_DRAFT[Draft SELECT query<br/>no DML or DDL]
+    SQL_VALIDATE{SQL safety validator}
+    SQL_REPAIR[Repair query<br/>bounded retry]
+    SQL_EXEC[Execute read-only query<br/>LIMIT enforced]
+    SQL_ROWS[Return exact rows/aggregates<br/>safe source labels]
+    SQL_REFUSE[Reject unsafe SQL]
+
+    SQL_SCOPE --> SQL_DRAFT --> SQL_VALIDATE
+    SQL_VALIDATE -- invalid --> SQL_REPAIR --> SQL_DRAFT
+    SQL_VALIDATE -- unsafe --> SQL_REFUSE
+    SQL_VALIDATE -- valid --> SQL_EXEC --> SQL_ROWS
+  end
+
+  subgraph TICKET["Ticket Tool Subgraph: controlled actions"]
+    TICKET_INTENT[Classify ticket action<br/>create or check status]
+    TICKET_MISSING{Missing required fields?}
+    TICKET_ASK[Interrupt / ask user<br/>for missing details]
+    TICKET_AUTH[Permission check<br/>own ticket or department queue]
+    TICKET_RUN[Create/check ticket<br/>Postgres transaction]
+    TICKET_OUT[Ticket result]
+
+    TICKET_INTENT --> TICKET_MISSING
+    TICKET_MISSING -- yes --> TICKET_ASK --> TICKET_INTENT
+    TICKET_MISSING -- no --> TICKET_AUTH --> TICKET_RUN --> TICKET_OUT
+  end
+
+  ROUTER -- docs question --> RAG_PERM
+  ROUTER -- structured data --> SQL_SCOPE
+  ROUTER -- ticket action --> TICKET_INTENT
+  ROUTER -- mixed question --> RAG_PERM
+  ROUTER -- mixed question --> SQL_SCOPE
+
+  RAG_OUT --> MERGE
+  SQL_ROWS --> MERGE
+  SQL_REFUSE --> MERGE
+  TICKET_OUT --> MERGE
+
+  MERGE --> ANSWER --> VALIDATE
+  VALIDATE -- fail once --> REPAIR --> VALIDATE
+  VALIDATE -- pass --> AUDIT --> END
