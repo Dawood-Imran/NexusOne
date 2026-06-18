@@ -42,6 +42,13 @@ NexusOne has strict permission requirements. A fully open-ended agent loop would
 - Initial PostgreSQL schema has been added under `data/postgres/init/001_schema.sql`.
 - PostgreSQL seed scripts have been added and loaded into the local Docker database.
 - A visual LangGraph architecture graph has been created under `docs/architecture/graph.svg`.
+- An independent SQL subgraph package has been added under `app/agents/sql_subgraph`.
+- Permission-safe SQL helpers have been added under `data/postgres/init/005_permission_safe_views.sql`.
+- Standard-library unit tests now cover SQL source selection, SQL validation, and standalone SQL subgraph invocation.
+- LangChain OpenAI planning support has been added through `app/agents/sql_subgraph/planner.py`.
+- `scripts/run_sql_subgraph.py` can run the SQL subgraph independently against local Postgres.
+- `scripts/sql_subgraph_chatbot.py` can run an interactive terminal chatbot with node-by-node trace output.
+- `requirements.txt` and `.env.example` now document the LangChain/OpenAI/Postgres runtime setup.
 
 Current scaffold summary:
 
@@ -84,9 +91,9 @@ scripts/
 
 ## Current Task
 
-Add the constrained SQL connector/tool for structured data.
+Continue the constrained SQL connector/tool for structured data.
 
-The Markdown KB, CSV, PDF, Docker Compose, PostgreSQL schema, and PostgreSQL seed steps are complete. The next setup step is to build a constrained SQL connector/tool for exact structured data, then ingest PDFs and Markdown for RAG.
+The Markdown KB, CSV, PDF, Docker Compose, PostgreSQL schema, PostgreSQL seed steps, deterministic SQL subgraph foundation, OpenAI planner hook, CLI runner, and OpenAI-backed live SQL checks are complete. The next SQL step is to implement the SQL repair loop described in `app/agents/sql_subgraph/SQL_REPAIR_LOOP_IMPLEMENTATION_PLAN.md`, then broaden permission regression checks across employee, finance, manager, executive, and CEO users.
 
 The manifests remain the source of truth for:
 
@@ -238,6 +245,8 @@ The implementation must enforce:
 - CSVs and tickets should stay in PostgreSQL for the first version, not FAISS.
 - Structured CSV/PostgreSQL questions should use a constrained SQL connector/tool.
 - The SQL connector should be implemented as a custom constrained LangGraph SQL subgraph with deterministic validation, not as an unrestricted prebuilt SQL agent.
+- SQL subgraph final answers must pass through a presentation/sanitization layer. Raw user-reference fields such as requester IDs, assignee IDs, actor IDs, manager IDs, owner IDs, SQL, SQL parameters, source paths, and confidentiality labels are internal debug data and should not appear in normal user-facing answers.
+- Terminal node traces are hidden by default. When enabled with `--show-nodes` or `/trace on`, traces are sanitized and should show node status, intent, source names, parameter keys, validation status, row counts, and elapsed time, not raw SQL or parameter values.
 - PDF and Markdown sources should use ingestion, chunking, FAISS, and BM25.
 - At least one CEO-only document should exist to test strict refusal behavior.
 
@@ -263,11 +272,10 @@ Recommended defaults from the setup plan:
 
 Immediate next step:
 
-1. Add the SQL subgraph database safety layer from `app/agents/sql_subgraph/IMPLEMENTATION_PLAN.md`.
-2. Add permission-aware SQL views/functions as needed for safe tool access.
-3. Add the SQL source registry, permission scope selector, and SQL validator.
-4. Then add OpenAI-powered SQL intent and query drafting nodes.
-5. Then add ingestion pipeline for PDFs and Markdown only.
+1. Export `OPENAI_API_KEY` or create `.env` from `.env.example`.
+2. Run the terminal chatbot with `./venv/bin/python scripts/sql_subgraph_chatbot.py --user-id u001`.
+3. Run additional permission checks for employee, finance, executive, and CEO users.
+4. Then add ingestion pipeline for PDFs and Markdown only.
 
 After SQL connector and ingestion:
 

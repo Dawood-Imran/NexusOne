@@ -1,0 +1,2 @@
+"""NexusOne Copilot application package."""
+
