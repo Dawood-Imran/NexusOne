@@ -1,6 +1,6 @@
 """Independent SQL subgraph for exact structured-data retrieval."""
 
-from app.agents.sql_subgraph.graph import SQLSubgraph, run_sql_subgraph
+from app.agents.sql_subgraph.graph import SQLSubgraph, clean_question_text, run_sql_subgraph
 from app.agents.sql_subgraph.state import SQLNodeTrace, SQLSubgraphInput, SQLSubgraphOutput, SQLSubgraphRun, UserContext
 
 __all__ = [
@@ -10,5 +10,6 @@ __all__ = [
     "SQLSubgraphRun",
     "SQLNodeTrace",
     "UserContext",
+    "clean_question_text",
     "run_sql_subgraph",
 ]

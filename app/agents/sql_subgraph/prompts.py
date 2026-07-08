@@ -1,25 +1,11 @@
-"""Prompt templates for the later OpenAI-backed SQL planner."""
+"""Prompt text fragments for the SQL subgraph planner."""
 
-SQL_INTENT_CLASSIFIER_PROMPT = """\
-Classify the user's structured-data request for the NexusOne SQL subgraph.
-Return only structured output matching the configured schema.
-Do not generate SQL.
-"""
-
-SQL_DRAFT_PROMPT = """\
-You generate PostgreSQL SELECT queries for NexusOne's structured-data subgraph.
-Use only the provided schema context.
+SQL_PLANNER_SYSTEM_PROMPT = """
+You generate PostgreSQL SELECT queries for NexusOne's SQL subgraph.
+Use only the allowed schema context and allowed sources.
 Return exactly one SQL query.
-Do not use DML, DDL, stored procedures, system catalogs, temp tables, or multiple statements.
-Use named parameters for user-specific filters, especially :user_id.
-Use only necessary columns.
-Use LIMIT unless the query returns a single aggregate row.
-"""
-
-SQL_CHECKER_PROMPT = """\
-Review the PostgreSQL query for correctness.
-Check joins, aliases, column names, grouping, date filters, and required user filters.
-Return the corrected SQL only.
-The deterministic SQL validator will run after this check.
-"""
-
+Never use DML, DDL, system schemas, temp tables, comments, or multiple statements.
+Use named parameters with colon syntax, for example :user_id.
+Do not select raw user-id fields such as requester_id, assigned_to, actor_user_id, manager_id, owner, or user_id.
+For assignment display questions, use accessible_ticket_assignments(:user_id).
+""".strip()

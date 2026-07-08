@@ -55,6 +55,38 @@ class SQLValidatorTest(unittest.TestCase):
         self.assertTrue(result.is_safe)
         self.assertEqual(("accessible_tickets",), result.used_sources)
 
+    def test_rejects_hidden_ticket_output_columns(self) -> None:
+        sources = select_allowed_sources(self.employee, "ticket_status")
+
+        result = validate_sql(
+            "SELECT ticket_id, requester_id, assigned_to, status "
+            "FROM accessible_tickets(:user_id) LIMIT 25",
+            sources,
+        )
+
+        self.assertFalse(result.is_safe)
+        self.assertIn("hidden column", result.reason or "")
+
+    def test_rejects_select_star(self) -> None:
+        sources = select_allowed_sources(self.employee, "ticket_status")
+
+        result = validate_sql("SELECT * FROM accessible_tickets(:user_id) LIMIT 25", sources)
+
+        self.assertFalse(result.is_safe)
+        self.assertIn("SELECT *", result.reason or "")
+
+    def test_accepts_safe_ticket_assignment_display_columns(self) -> None:
+        sources = select_allowed_sources(self.employee, "ticket_status")
+
+        result = validate_sql(
+            "SELECT ticket_id, status, assignee_name, assignee_title, assignee_department "
+            "FROM accessible_ticket_assignments(:user_id) WHERE ticket_id = :ticket_id LIMIT 1",
+            sources,
+        )
+
+        self.assertTrue(result.is_safe)
+        self.assertEqual(("accessible_ticket_assignments",), result.used_sources)
+
     def test_rejects_accessible_ticket_function_without_user_id(self) -> None:
         sources = select_allowed_sources(self.employee, "ticket_status")
 
@@ -94,4 +126,3 @@ class SQLValidatorTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

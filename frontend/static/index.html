@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NexusOne Copilot</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Workspace context">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">N1</div>
+          <div>
+            <h1>NexusOne Copilot</h1>
+            <p>Internal assistant</p>
+          </div>
+        </div>
+
+        <label class="field-label" for="profileSelect">Active profile</label>
+        <select id="profileSelect" class="select"></select>
+
+        <section class="profile-panel" aria-live="polite">
+          <p class="eyebrow">Role context</p>
+          <h2 id="profileName">Loading profiles</h2>
+          <dl>
+            <div>
+              <dt>Role</dt>
+              <dd id="profileRole">-</dd>
+            </div>
+            <div>
+              <dt>Department</dt>
+              <dd id="profileDepartment">-</dd>
+            </div>
+            <div>
+              <dt>Location</dt>
+              <dd id="profileLocation">-</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="scope-panel">
+          <p class="eyebrow">Current phase</p>
+          <ul>
+            <li>Policy and KB questions</li>
+            <li>SQL connector validation</li>
+            <li>Role-based denials</li>
+          </ul>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="workspace-header">
+          <div>
+            <p class="eyebrow">Company knowledge</p>
+            <h2>Ask about policies, processes, or tickets</h2>
+          </div>
+          <label class="trace-toggle">
+            <input id="traceToggle" type="checkbox" />
+            <span>Show node trace</span>
+          </label>
+        </header>
+
+        <section id="messages" class="messages" aria-live="polite">
+          <article class="message assistant">
+            <div class="message-meta">Assistant</div>
+            <div class="message-body">
+              Select a profile and ask a NexusOne question. Restricted requests are checked before retrieval or SQL routing.
+            </div>
+          </article>
+        </section>
+
+        <section class="suggestions" aria-label="Suggested questions">
+          <button type="button" data-prompt="How do I request AWS access?">AWS access</button>
+          <button type="button" data-prompt="How do I request annual leave?">Leave process</button>
+          <button type="button" data-prompt="What are the Q4 revenue risks?">Revenue risks</button>
+          <button type="button" data-prompt="Show my ticket status.">My tickets</button>
+        </section>
+
+        <form id="chatForm" class="composer">
+          <label class="sr-only" for="messageInput">Message</label>
+          <textarea id="messageInput" rows="2" placeholder="Ask a company question"></textarea>
+          <button id="sendButton" type="submit">Send</button>
+        </form>
+      </main>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

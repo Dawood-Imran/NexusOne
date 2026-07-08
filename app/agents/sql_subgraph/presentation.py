@@ -35,6 +35,10 @@ DOMAIN_ALLOWED_COLUMNS = {
         "event_type",
         "event_text",
         "created_at",
+        "assignee_name",
+        "assignee_title",
+        "assignee_department",
+        "support_team",
     },
     "public_lookup": {
         "region",
@@ -93,6 +97,26 @@ def output_domain(output: SQLSubgraphOutput) -> str | None:
     return str(domain) if domain else None
 
 
+def _is_assignment_question(question: str | None) -> bool:
+    if not question:
+        return False
+    lowered = question.lower()
+    return any(
+        term in lowered
+        for term in (
+            "assigned",
+            "assignee",
+            "handling",
+            "handler",
+            "responsible",
+            "who is working",
+            "who's working",
+            "working on",
+            "taking care",
+        )
+    )
+
+
 def sanitize_row(row: Mapping[str, Any], domain: str | None) -> dict[str, Any]:
     allowed_columns = DOMAIN_ALLOWED_COLUMNS.get(domain or "", set())
     sanitized: dict[str, Any] = {}
@@ -129,35 +153,112 @@ def safe_summary_payload(question: str, output: SQLSubgraphOutput) -> dict[str, 
     }
 
 
-def format_safe_terminal_answer(output: SQLSubgraphOutput) -> str:
+def _format_assignment_row(row: Mapping[str, Any]) -> str:
+    ticket = row.get("ticket_id")
+    assignee = row.get("assignee_name") or row.get("support_team")
+    if not assignee:
+        status = row.get("status")
+        if ticket and status:
+            return f"I cannot show internal assignee/requester identifiers. Ticket {ticket} is {status}."
+        return "I cannot show internal assignee/requester identifiers."
+
+    title = row.get("assignee_title")
+    department = row.get("assignee_department")
+    identity = str(assignee)
+    if title and department:
+        identity = f"{identity} ({title}, {department})"
+    elif title:
+        identity = f"{identity} ({title})"
+
+    parts = [f"Ticket {ticket} is assigned to {identity}"]
+    if row.get("updated_at") is not None:
+        parts.append(f"Last updated {row['updated_at']}")
+    if row.get("priority") is not None:
+        parts.append(f"Priority {row['priority']}")
+    if row.get("status") is not None:
+        parts.append(f"Status {row['status']}")
+    return ". ".join(parts) + "."
+
+
+def _format_ticket_row(row: Mapping[str, Any]) -> str:
+    ticket = row.get("ticket_id")
+    status = row.get("status")
+    if ticket and status:
+        parts = [f"Ticket {ticket} is {status}"]
+    elif ticket:
+        parts = [f"Ticket {ticket} matched the request"]
+    else:
+        parts = ["A matching ticket was found"]
+    if row.get("updated_at") is not None:
+        parts.append(f"Last updated {row['updated_at']}")
+    if row.get("priority") is not None:
+        parts.append(f"Priority {row['priority']}")
+    return ". ".join(parts) + "."
+
+
+def _format_public_lookup_rows(rows: list[dict[str, Any]], summary: str) -> str:
+    if not rows:
+        return summary
+    lines = [summary]
+    for row in rows:
+        if row.get("holiday_name"):
+            details = [str(row["holiday_name"])]
+            if row.get("date") is not None:
+                details.append(str(row["date"]))
+            if row.get("region") is not None:
+                details.append(str(row["region"]))
+            if row.get("notes") is not None:
+                details.append(str(row["notes"]))
+            lines.append("- " + " - ".join(details))
+            continue
+        label = row.get("name") or row.get("city") or row.get("country") or row.get("project_id")
+        if label:
+            details = [str(label)]
+            for key in ("department", "title", "status", "public_summary", "last_updated"):
+                if row.get(key) is not None:
+                    details.append(str(row[key]))
+            lines.append("- " + " - ".join(details))
+            continue
+        lines.append("- " + ", ".join(f"{key}: {value}" for key, value in row.items()))
+    return "\n".join(lines)
+
+
+def format_safe_terminal_answer(output: SQLSubgraphOutput, question: str | None = None) -> str:
     if output.sql_denied_reason:
         return f"Denied: {output.sql_denied_reason}"
     if output.sql_error:
         return f"Error: {output.sql_error}"
-    if not output.sql_rows:
-        return output.sql_answer_summary
 
     rows = sanitized_rows(output)
     domain = output_domain(output)
     if domain == "ticket_status":
+        if not rows:
+            if question and any(char.isdigit() for char in question):
+                return "I could not find an accessible matching ticket."
+            return output.sql_answer_summary
+        if _is_assignment_question(question):
+            return _format_assignment_row(rows[0])
         if len(rows) == 1:
-            row = rows[0]
-            parts = [f"Ticket {row.get('ticket_id')} is {row.get('status')}"]
-            if row.get("updated_at") is not None:
-                parts.append(f"Last updated {row['updated_at']}")
-            if row.get("priority") is not None:
-                parts.append(f"Priority {row['priority']}")
-            return ". ".join(parts) + "."
+            return _format_ticket_row(rows[0])
         lines = [f"I found {len(rows)} accessible ticket(s):"]
         for row in rows:
-            lines.append(
-                "- "
-                f"{row.get('ticket_id')}: {row.get('status')} "
-                f"({row.get('department')}, {row.get('category')}, priority {row.get('priority')}, "
-                f"updated {row.get('updated_at')})"
-            )
+            details = []
+            for key in ("department", "category"):
+                if row.get(key) is not None:
+                    details.append(str(row[key]))
+            if row.get("priority") is not None:
+                details.append(f"priority {row['priority']}")
+            if row.get("updated_at") is not None:
+                details.append(f"updated {row['updated_at']}")
+            suffix = f" ({', '.join(details)})" if details else ""
+            lines.append(f"- {row.get('ticket_id')}: {row.get('status')}{suffix}")
         return "\n".join(lines)
 
+    if domain == "public_lookup":
+        return _format_public_lookup_rows(rows, output.sql_answer_summary)
+
+    if not rows:
+        return output.sql_answer_summary
     lines = [output.sql_answer_summary]
     for row in rows:
         lines.append(f"- {row}")

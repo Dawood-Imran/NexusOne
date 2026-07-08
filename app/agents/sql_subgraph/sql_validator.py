@@ -1,9 +1,4 @@
-"""Deterministic SQL safety validator for the SQL subgraph.
-
-This validator is intentionally conservative. It is not a full SQL parser, but it
-enforces the core safety properties before any model-generated SQL can execute.
-When sqlglot is added later, this module can keep the same public interface.
-"""
+"""Deterministic SQL safety validator for the SQL subgraph."""
 
 from __future__ import annotations
 
@@ -31,6 +26,20 @@ BLOCKED_KEYWORDS = {
 }
 
 SYSTEM_SCHEMAS = {"pg_catalog", "information_schema", "pg_toast"}
+
+HIDDEN_OUTPUT_COLUMNS = {
+    "requester_id",
+    "assigned_to",
+    "actor_user_id",
+    "manager_id",
+    "admin_contact",
+    "escalation_contact",
+    "owner",
+    "user_id",
+    "confidentiality",
+    "source_path",
+    "docs_path",
+}
 
 
 @dataclass(frozen=True)
@@ -126,6 +135,37 @@ def requires_user_id_check(source: SourceDefinition, sql: str) -> bool:
     return re.search(r"\buser_id\s*=\s*:user_id\b", lowered) is not None
 
 
+def _select_projection(sql: str) -> str:
+    match = re.search(r"^\s*select\s+(.*?)\s+from\s+", sql, flags=re.IGNORECASE | re.DOTALL)
+    if not match:
+        return ""
+    return match.group(1)
+
+
+def _projected_identifiers(sql: str) -> set[str]:
+    projection = _select_projection(sql)
+    if not projection:
+        return set()
+    identifiers: set[str] = set()
+    for part in projection.split(","):
+        token = part.strip()
+        if not token:
+            continue
+        if token == "*":
+            identifiers.add("*")
+            continue
+        if token.endswith(".*"):
+            identifiers.add("*")
+            continue
+        alias_match = re.search(r"\bas\s+([a-zA-Z_][\w]*)$", token, flags=re.IGNORECASE)
+        if alias_match:
+            identifiers.add(alias_match.group(1).lower())
+        first = token.split()[0].split(".")[-1].strip('"').lower()
+        if re.match(r"^[a-zA-Z_][\w]*$", first):
+            identifiers.add(first)
+    return identifiers
+
+
 def validate_sql(
     sql: str,
     allowed_sources: tuple[SourceDefinition, ...],
@@ -134,27 +174,60 @@ def validate_sql(
     config = config or ValidatorConfig()
 
     if not sql or not sql.strip():
-        return SQLValidationResult(False, reason="SQL is empty.")
+        return SQLValidationResult(False, reason="SQL is empty.", feedback_for_repair="Draft a single SELECT query.")
     if contains_comments(sql):
-        return SQLValidationResult(False, reason="SQL comments are not allowed.")
+        return SQLValidationResult(False, reason="SQL comments are not allowed.", feedback_for_repair="Remove SQL comments.")
     if has_multiple_statements(sql):
-        return SQLValidationResult(False, reason="Multiple SQL statements are not allowed.")
+        return SQLValidationResult(
+            False,
+            reason="Multiple SQL statements are not allowed.",
+            feedback_for_repair="Return exactly one SELECT statement.",
+        )
 
     normalized = normalize_sql(sql)
     if not starts_readonly(normalized):
-        return SQLValidationResult(False, reason="Only SELECT or read-only WITH queries are allowed.")
+        return SQLValidationResult(
+            False,
+            reason="Only SELECT or read-only WITH queries are allowed.",
+            feedback_for_repair="Use SELECT only.",
+        )
 
     keyword = blocked_keyword(normalized)
     if keyword is not None:
-        return SQLValidationResult(False, reason=f"Blocked SQL keyword: {keyword}.")
+        return SQLValidationResult(
+            False,
+            reason=f"Blocked SQL keyword: {keyword}.",
+            feedback_for_repair=f"Remove blocked keyword '{keyword}' and use SELECT only.",
+        )
+
+    projected = _projected_identifiers(normalized)
+    if "*" in projected:
+        return SQLValidationResult(False, reason="SELECT * is not allowed.", feedback_for_repair="Select explicit safe columns only.")
+
+    hidden_columns = tuple(sorted(projected.intersection(HIDDEN_OUTPUT_COLUMNS)))
+    if hidden_columns:
+        return SQLValidationResult(
+            False,
+            reason=f"Query selects hidden column(s): {', '.join(hidden_columns)}.",
+            feedback_for_repair="Remove hidden user/internal columns and select only safe display fields.",
+        )
 
     used_sources = extract_source_names(normalized)
     if not used_sources:
-        return SQLValidationResult(False, reason="Query does not reference an allowed source.")
+        return SQLValidationResult(
+            False,
+            reason="Query does not reference an allowed source.",
+            feedback_for_repair="Use one allowlisted source from the schema context.",
+        )
 
     for source in used_sources:
         if "." in source and source.split(".", 1)[0] in SYSTEM_SCHEMAS:
-            return SQLValidationResult(False, reason=f"System schema access is not allowed: {source}.")
+            return SQLValidationResult(
+                False,
+                reason=f"System schema access is not allowed: {source}.",
+                used_sources=used_sources,
+                feedback_for_repair="Do not query system schemas.",
+            )
 
     allowed_by_name = {source.name.lower(): source for source in allowed_sources}
     unknown_sources = tuple(source for source in used_sources if source not in allowed_by_name)
@@ -163,6 +236,7 @@ def validate_sql(
             False,
             reason=f"Query references non-allowlisted source(s): {', '.join(unknown_sources)}.",
             used_sources=used_sources,
+            feedback_for_repair="Use only allowlisted sources from the provided schema context.",
         )
 
     for source_name in used_sources:
@@ -172,6 +246,7 @@ def validate_sql(
                 False,
                 reason=f"Source '{source.name}' requires a :user_id filter or function argument.",
                 used_sources=used_sources,
+                feedback_for_repair=f"Add the required :user_id filter or call {source.name}(:user_id).",
             )
 
     max_rows = min((source.max_rows for source in allowed_sources), default=config.default_max_rows)
@@ -187,4 +262,3 @@ def validate_sql(
         normalized_sql=normalized,
         rewritten_sql=rewritten,
     )
-

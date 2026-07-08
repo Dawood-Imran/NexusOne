@@ -18,7 +18,7 @@ class ScopeSelectionTest(unittest.TestCase):
 
         self.assertIn("company_holidays", public_sources)
         self.assertIn("active_employee_directory_public", public_sources)
-        self.assertEqual({"accessible_tickets", "accessible_ticket_events"}, ticket_sources)
+        self.assertEqual({"accessible_tickets", "accessible_ticket_events", "accessible_ticket_assignments"}, ticket_sources)
 
     def test_employee_cannot_get_finance_budget_sources(self) -> None:
         user = UserContext(
@@ -61,4 +61,3 @@ class ScopeSelectionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

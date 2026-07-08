@@ -1,21 +1,21 @@
-"""Standalone SQL subgraph runner.
-
-This module does not require the parent graph. It exposes an invoke-style API
-that can later be wrapped as a LangGraph node.
-"""
+"""Standalone SQL subgraph runner with a bounded repair loop."""
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict
 from typing import Any, Mapping
 
 from app.agents.sql_subgraph.nodes import (
     build_schema_context,
+    check_answer_grounding,
     classify_sql_intent,
     draft_sql,
     ensure_output,
     execute_or_package,
+    finalize_repair_failure,
     load_user_context,
+    repair_sql,
     select_sources,
     validate_candidate_sql,
 )
@@ -23,9 +23,9 @@ from app.agents.sql_subgraph.state import (
     SQLExecutor,
     SQLNodeTrace,
     SQLPlanner,
-    SQLSubgraphRun,
     SQLSubgraphInput,
     SQLSubgraphOutput,
+    SQLSubgraphRun,
     SQLSubgraphState,
     UserContext,
 )
@@ -38,7 +38,13 @@ GRAPH_NODES = (
     "build_schema_context",
     "draft_sql",
     "validate_sql_safety",
+    "record_validation_feedback",
+    "repair_sql",
     "execute_or_package",
+    "record_execution_feedback",
+    "check_answer_grounding",
+    "record_answer_feedback",
+    "finalize_repair_failure",
 )
 
 GRAPH_EDGES = (
@@ -49,8 +55,27 @@ GRAPH_EDGES = (
     ("build_schema_context", "draft_sql"),
     ("draft_sql", "validate_sql_safety"),
     ("validate_sql_safety", "execute_or_package"),
-    ("execute_or_package", "END"),
+    ("validate_sql_safety", "record_validation_feedback"),
+    ("record_validation_feedback", "repair_sql"),
+    ("execute_or_package", "check_answer_grounding"),
+    ("execute_or_package", "record_execution_feedback"),
+    ("record_execution_feedback", "repair_sql"),
+    ("check_answer_grounding", "record_answer_feedback"),
+    ("record_answer_feedback", "repair_sql"),
+    ("repair_sql", "validate_sql_safety"),
+    ("validate_sql_safety", "finalize_repair_failure"),
+    ("check_answer_grounding", "END"),
+    ("finalize_repair_failure", "END"),
 )
+
+TERMINAL_STATUSES = {"refused", "no_allowed_source", "needs_clarification", "error"}
+
+
+def clean_question_text(question: str) -> str:
+    cleaned = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", question)
+    cleaned = re.sub(r"\^\[\[[0-9;]*[A-Za-z]", "", cleaned)
+    cleaned = cleaned.replace("^[[D", "").replace("^[[C", "").replace("^[[A", "").replace("^[[B", "")
+    return " ".join(cleaned.strip().split())
 
 
 class SQLSubgraph:
@@ -69,31 +94,64 @@ class SQLSubgraph:
             conversation_id=request.conversation_id,
             turn_id=request.turn_id,
             user_id=request.user_id,
-            question=request.sql_question or request.question,
+            question=clean_question_text(request.sql_question or request.question),
             requested_intent=request.requested_intent,
             user_context=request.user_context,
             execute=request.execute,
         )
 
         traces: list[SQLNodeTrace] = []
+
         for node_name, node in (
             ("load_user_context", lambda current: load_user_context(current, self.executor)),
             ("classify_sql_intent", lambda current: classify_sql_intent(current, self.planner)),
             ("select_allowed_sources", select_sources),
             ("build_schema_context", build_schema_context),
             ("draft_sql", lambda current: draft_sql(current, self.planner)),
-            ("validate_sql_safety", validate_candidate_sql),
-            ("execute_or_package", lambda current: execute_or_package(current, self.executor)),
         ):
             state = node(state)
             traces.append(SQLNodeTrace(node_name=node_name, details=_trace_details(state)))
-            if state.output is not None and state.sql_status in {
-                "refused",
-                "no_allowed_source",
-                "needs_clarification",
-                "error",
-            }:
+            if _has_terminal_output(state):
+                return SQLSubgraphRun(output=ensure_output(state), traces=tuple(traces))
+
+        while True:
+            state = validate_candidate_sql(state)
+            traces.append(SQLNodeTrace(node_name="validate_sql_safety", details=_trace_details(state)))
+
+            if state.validation is None or not state.validation.is_safe:
+                if _can_repair(state):
+                    traces.append(SQLNodeTrace(node_name="record_validation_feedback", details=_trace_details(state)))
+                    state = repair_sql(state, self.planner)
+                    traces.append(SQLNodeTrace(node_name="repair_sql", details=_trace_details(state)))
+                    continue
+                state = finalize_repair_failure(state)
+                traces.append(SQLNodeTrace(node_name="finalize_repair_failure", details=_trace_details(state)))
                 break
+
+            state = execute_or_package(state, self.executor)
+            traces.append(SQLNodeTrace(node_name="execute_or_package", details=_trace_details(state)))
+
+            if state.output is not None and state.output.sql_status == "error":
+                if _can_repair(state):
+                    traces.append(SQLNodeTrace(node_name="record_execution_feedback", details=_trace_details(state)))
+                    state = repair_sql(state, self.planner)
+                    traces.append(SQLNodeTrace(node_name="repair_sql", details=_trace_details(state)))
+                    continue
+                state = finalize_repair_failure(state)
+                traces.append(SQLNodeTrace(node_name="finalize_repair_failure", details=_trace_details(state)))
+                break
+
+            state = check_answer_grounding(state)
+            traces.append(SQLNodeTrace(node_name="check_answer_grounding", details=_trace_details(state)))
+            if state.answer_feedback:
+                if _can_repair(state):
+                    traces.append(SQLNodeTrace(node_name="record_answer_feedback", details=_trace_details(state)))
+                    state = repair_sql(state, self.planner)
+                    traces.append(SQLNodeTrace(node_name="repair_sql", details=_trace_details(state)))
+                    continue
+                state = finalize_repair_failure(state)
+                traces.append(SQLNodeTrace(node_name="finalize_repair_failure", details=_trace_details(state)))
+            break
 
         return SQLSubgraphRun(output=ensure_output(state), traces=tuple(traces))
 
@@ -140,6 +198,14 @@ def as_dict(output: SQLSubgraphOutput) -> dict[str, Any]:
     return asdict(output)
 
 
+def _has_terminal_output(state: SQLSubgraphState) -> bool:
+    return state.output is not None and state.output.sql_status in TERMINAL_STATUSES
+
+
+def _can_repair(state: SQLSubgraphState) -> bool:
+    return state.repair_attempts < state.max_repair_attempts
+
+
 def _trace_details(state: SQLSubgraphState) -> dict[str, Any]:
     validation = state.validation
     execution = state.execution_result
@@ -149,18 +215,18 @@ def _trace_details(state: SQLSubgraphState) -> dict[str, Any]:
     details: dict[str, Any] = {
         "status": output.sql_status if output is not None else "running",
         "intent": state.sql_intent,
-        "candidate_sql": state.candidate_sql,
-        "parameters": dict(state.sql_parameters),
         "allowed_sources": [source.name for source in state.allowed_sources],
         "schema_context_chars": len(state.schema_context),
+        "parameter_keys": sorted(state.sql_parameters.keys()),
+        "repair_attempts": state.repair_attempts,
+        "repair_reasons": list(state.repair_history),
+        "final_answer_grounded": state.final_answer_grounded,
     }
     if user_context is not None:
         details["user"] = {
-            "user_id": user_context.user_id,
             "role": user_context.role,
             "department": user_context.department,
             "location": user_context.location,
-            "groups": list(user_context.groups),
             "status": user_context.status,
         }
     if validation is not None:
@@ -168,11 +234,9 @@ def _trace_details(state: SQLSubgraphState) -> dict[str, Any]:
             "is_safe": validation.is_safe,
             "reason": validation.reason,
             "used_sources": list(validation.used_sources),
-            "sql_to_execute": validation.sql_to_execute,
         }
     if execution is not None:
         details["execution"] = {
-            "columns": list(execution.columns),
             "row_count": execution.row_count,
             "elapsed_ms": execution.elapsed_ms,
         }
@@ -184,6 +248,7 @@ def _trace_details(state: SQLSubgraphState) -> dict[str, Any]:
             "denied_reason": output.sql_denied_reason,
             "error": output.sql_error,
         }
-    if state.error_message:
-        details["internal_note"] = state.error_message
+    note = state.planner_error or state.error_message
+    if note:
+        details["internal_note"] = note
     return details

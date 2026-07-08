@@ -1,8 +1,4 @@
-"""Internal tools for the SQL subgraph.
-
-These are plain Python functions for now. When LangChain is added, they can be
-wrapped with @tool without changing the graph's safety model.
-"""
+"""Internal tools for the SQL subgraph."""
 
 from __future__ import annotations
 
@@ -30,6 +26,7 @@ def sql_get_schema_context(sources: tuple[SourceDefinition, ...]) -> str:
                     "Columns:",
                     columns,
                     f"Max rows: {source.max_rows}",
+                    f"Requires user_id: {source.requires_user_id}",
                 ]
             )
         )
@@ -43,4 +40,3 @@ def sql_execute_readonly(
     max_rows: int,
 ) -> SQLExecutionResult:
     return executor.fetch_all(query, parameters, max_rows)
-

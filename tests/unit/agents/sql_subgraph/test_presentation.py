@@ -38,6 +38,116 @@ class PresentationTest(unittest.TestCase):
         self.assertNotIn("sources", payload)
         self.assertIn("Ticket IT-1046 is open", answer)
 
+    def test_ticket_answer_skips_missing_optional_fields(self) -> None:
+        output = SQLSubgraphOutput(
+            sql_status="answered",
+            sql_answer_summary="Structured query returned 2 row(s).",
+            sql_rows=(
+                {"ticket_id": "IT-1046", "status": "open", "updated_at": "2026-02-15"},
+                {"ticket_id": "IT-1042", "status": "open", "updated_at": "2026-02-10"},
+            ),
+            sql_columns=("ticket_id", "status", "updated_at"),
+            sql_sources=({"name": "accessible_tickets", "kind": "function", "domain": "ticket_status"},),
+            sql_used_tables=("accessible_tickets",),
+        )
+
+        answer = format_safe_terminal_answer(output)
+
+        self.assertIn("IT-1046: open", answer)
+        self.assertNotIn("None", answer)
+
+    def test_ticket_assignment_question_hides_raw_assignee_id(self) -> None:
+        output = SQLSubgraphOutput(
+            sql_status="answered",
+            sql_answer_summary="Structured query returned 1 row(s).",
+            sql_rows=(
+                {"ticket_id": "IT-1046", "status": "open", "assigned_to": "u005"},
+            ),
+            sql_columns=("ticket_id", "status", "assigned_to"),
+            sql_sources=({"name": "accessible_tickets", "kind": "function", "domain": "ticket_status"},),
+            sql_used_tables=("accessible_tickets",),
+        )
+
+        answer = format_safe_terminal_answer(output, question="Who is assigned to IT-1046?")
+
+        self.assertIn("cannot show internal", answer)
+        self.assertNotIn("u005", answer)
+
+    def test_ticket_assignment_question_can_show_safe_assignee_name(self) -> None:
+        output = SQLSubgraphOutput(
+            sql_status="answered",
+            sql_answer_summary="Structured query returned 1 row(s).",
+            sql_rows=(
+                {
+                    "ticket_id": "IT-1046",
+                    "status": "open",
+                    "assignee_name": "Maya Chen",
+                    "assignee_title": "IT Support Engineer",
+                    "assignee_department": "it",
+                    "updated_at": "2026-02-15 10:40:00+00:00",
+                },
+            ),
+            sql_columns=("ticket_id", "status", "assignee_name", "assignee_title", "assignee_department", "updated_at"),
+            sql_sources=({"name": "accessible_ticket_assignments", "kind": "function", "domain": "ticket_status"},),
+            sql_used_tables=("accessible_ticket_assignments",),
+        )
+
+        answer = format_safe_terminal_answer(output, question="Who is assigned to IT-1046?")
+
+        self.assertIn("Ticket IT-1046 is assigned to Maya Chen", answer)
+        self.assertNotIn("cannot show internal", answer)
+
+    def test_ticket_handling_question_can_show_safe_assignee_name(self) -> None:
+        output = SQLSubgraphOutput(
+            sql_status="answered",
+            sql_answer_summary="Structured query returned 1 row(s).",
+            sql_rows=(
+                {
+                    "ticket_id": "IT-1046",
+                    "assignee_name": "Maya Chen",
+                    "assignee_title": "IT Support Engineer",
+                    "assignee_department": "it",
+                },
+            ),
+            sql_columns=("ticket_id", "assignee_name", "assignee_title", "assignee_department"),
+            sql_sources=({"name": "accessible_ticket_assignments", "kind": "function", "domain": "ticket_status"},),
+            sql_used_tables=("accessible_ticket_assignments",),
+        )
+
+        answer = format_safe_terminal_answer(output, question="Who is handling ticker IT-1046?")
+
+        self.assertIn("Ticket IT-1046 is assigned to Maya Chen", answer)
+        self.assertNotIn("None", answer)
+
+    def test_ticket_status_missing_status_does_not_print_none(self) -> None:
+        output = SQLSubgraphOutput(
+            sql_status="answered",
+            sql_answer_summary="Structured query returned 1 row(s).",
+            sql_rows=({"ticket_id": "IT-1046"},),
+            sql_columns=("ticket_id",),
+            sql_sources=({"name": "accessible_tickets", "kind": "function", "domain": "ticket_status"},),
+            sql_used_tables=("accessible_tickets",),
+        )
+
+        answer = format_safe_terminal_answer(output, question="Show ticket IT-1046")
+
+        self.assertIn("Ticket IT-1046 matched the request", answer)
+        self.assertNotIn("None", answer)
+
+    def test_empty_specific_ticket_result_is_accessible_not_found_message(self) -> None:
+        output = SQLSubgraphOutput(
+            sql_status="answered",
+            sql_answer_summary="Structured query returned 0 row(s).",
+            sql_rows=(),
+            sql_columns=("ticket_id", "status", "assignee_name"),
+            sql_sources=({"name": "accessible_ticket_assignments", "kind": "function", "domain": "ticket_status"},),
+            sql_used_tables=("accessible_ticket_assignments",),
+        )
+
+        answer = format_safe_terminal_answer(output, question="Who is assigned to HR-2034?")
+
+        self.assertEqual("I could not find an accessible matching ticket.", answer)
+
 
 if __name__ == "__main__":
     unittest.main()

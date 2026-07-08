@@ -1,0 +1,35 @@
+flowchart TD
+  START([START]) --> LOAD[load_user_context]
+  LOAD --> PRECHECK[precheck_guardrails]
+  PRECHECK --> ROUTE[route_question]
+
+  ROUTE -- denied/error --> FINAL[finalize_response]
+  ROUTE -- sql --> SQL[run_sql_subgraph]
+  ROUTE -- rag --> RAG[retrieve_rag_context]
+  ROUTE -- combined --> SQL
+
+  SQL -- sql only --> VALIDATE[validate_answer]
+  SQL -- combined --> RAG
+  RAG --> VALIDATE
+  VALIDATE --> COMPOSE[compose_final_answer<br/>OpenAI via LangChain]
+  COMPOSE --> FINAL
+  FINAL --> END([END])
+
+  subgraph SQLSubgraph["Independent SQL subgraph"]
+    SQL_LOAD[load_user_context]
+    SQL_INTENT[classify_sql_intent]
+    SQL_SOURCES[select_allowed_sources]
+    SQL_SCHEMA[build_schema_context]
+    SQL_DRAFT[draft_sql]
+    SQL_VALIDATE[validate_sql_safety]
+    SQL_EXEC[execute_or_package]
+    SQL_GROUND[check_answer_grounding]
+    SQL_REPAIR[repair_sql loop]
+    SQL_LOAD --> SQL_INTENT --> SQL_SOURCES --> SQL_SCHEMA --> SQL_DRAFT --> SQL_VALIDATE --> SQL_EXEC --> SQL_GROUND
+    SQL_VALIDATE -. unsafe .-> SQL_REPAIR -. retry .-> SQL_VALIDATE
+    SQL_EXEC -. execution/grounding issue .-> SQL_REPAIR
+  end
+
+  RAG -. uses .-> FAISS[FAISS hybrid search]
+  RAG -. fallback .-> LEXICAL[metadata lexical search]
+  PRECHECK -. server-side policy .-> GUARDRAILS[default-deny guardrails]

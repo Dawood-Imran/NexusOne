@@ -96,6 +96,34 @@ class LangChainOpenAISQLPlanner:
         allowed_sources: tuple[SourceDefinition, ...],
         user_id: str,
     ) -> tuple[str, Mapping[str, Any]]:
+        return self._draft_or_repair_sql(question, intent, schema_context, allowed_sources, user_id)
+
+    def repair_sql(
+        self,
+        question: str,
+        intent: SQLIntent,
+        schema_context: str,
+        allowed_sources: tuple[SourceDefinition, ...],
+        previous_sql: str,
+        previous_parameters: Mapping[str, Any],
+        feedback: str,
+        user_id: str,
+    ) -> tuple[str, Mapping[str, Any]]:
+        repair_context = (
+            f"Previous SQL failed validation/grounding.\n"
+            f"Safe feedback: {feedback}\n"
+            "Repair the query. Do not repeat hidden columns or non-allowlisted sources."
+        )
+        return self._draft_or_repair_sql(question, intent, f"{schema_context}\n\n{repair_context}", allowed_sources, user_id)
+
+    def _draft_or_repair_sql(
+        self,
+        question: str,
+        intent: SQLIntent,
+        schema_context: str,
+        allowed_sources: tuple[SourceDefinition, ...],
+        user_id: str,
+    ) -> tuple[str, Mapping[str, Any]]:
         source_names = ", ".join(source.name for source in allowed_sources)
         structured_model = self.model.with_structured_output(SQLDraftPlan, method="function_calling")
         response = structured_model.invoke(
@@ -108,10 +136,11 @@ class LangChainOpenAISQLPlanner:
                     "Never use DML, DDL, stored procedures, system schemas, temp tables, comments, or multiple statements.\n"
                     "Use named parameters with colon syntax, for example :user_id.\n"
                     "Always include user_id in parameters when :user_id appears in the SQL.\n"
-                    "Do not select unnecessary columns.\n"
-                    "Use LIMIT unless the query returns a single aggregate row.\n"
-                    "For ticket data, use accessible_tickets(:user_id) or accessible_ticket_events(:user_id).\n"
+                    "Do not select raw user-id fields such as requester_id, assigned_to, actor_user_id, manager_id, owner, or user_id.\n"
+                    "For assignment display questions, use accessible_ticket_assignments(:user_id) and safe display fields.\n"
+                    "For ticket status, use accessible_tickets(:user_id) or accessible_ticket_assignments(:user_id).\n"
                     "For document metadata, use user_accessible_documents with WHERE user_id = :user_id.\n"
+                    "Use LIMIT unless the query returns a single aggregate row.\n"
                     f"Intent: {intent}\n"
                     f"Allowed sources: {source_names}\n\n"
                     f"Schema context:\n{schema_context}",

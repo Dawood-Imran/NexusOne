@@ -71,4 +71,44 @@ AS $$
     WHERE can_user_access_ticket(p_user_id, te.ticket_id);
 $$;
 
+CREATE OR REPLACE FUNCTION accessible_ticket_assignments(p_user_id text)
+RETURNS TABLE (
+    ticket_id text,
+    department text,
+    category text,
+    priority text,
+    status text,
+    updated_at timestamptz,
+    assignee_name text,
+    assignee_title text,
+    assignee_department text,
+    support_team text
+)
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT
+        t.ticket_id,
+        t.department,
+        t.category,
+        t.priority,
+        t.status,
+        t.updated_at,
+        ed.name AS assignee_name,
+        ed.title AS assignee_title,
+        ed.department AS assignee_department,
+        CASE t.department
+            WHEN 'it' THEN 'IT Support'
+            WHEN 'hr' THEN 'HR Operations'
+            WHEN 'admin' THEN 'Admin Operations'
+            WHEN 'finance' THEN 'Finance Operations'
+            ELSE 'Support'
+        END AS support_team
+    FROM tickets t
+    LEFT JOIN employee_directory ed
+        ON ed.user_id = t.assigned_to
+       AND ed.visibility = 'public_internal'
+    WHERE can_user_access_ticket(p_user_id, t.ticket_id);
+$$;
+
 COMMIT;

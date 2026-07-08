@@ -4,12 +4,18 @@
 
 Build NexusOne Copilot, a permission-aware internal AI assistant for a fictional company, NexusOne Technologies.
 
-The project is currently in the setup phase. We are preparing the app structure, data manifests, fake company source data, PostgreSQL seed data, and FAISS-ready document metadata before implementing the backend, LangGraph workflow, ingestion pipeline, retrieval, and frontend.
+The project has moved from data setup into the app implementation loop. Phase 0 restored the backend SQL subgraph foundation and created the missing source-of-truth docs. Phase 1 added a framework-independent backend service layer, stdlib dev HTTP server, static frontend shell, and guardrail/retrieval service tests. Phase 2 is now complete with permission-carrying chunk metadata plus a FAISS hybrid retrieval path. Phase 3 is in progress with a main LangGraph orchestrator that routes between guardrails, RAG, SQL, combined questions, validation, required final answer composition with inline citations, and final response packaging.
+
+The detailed phase tracker is now `docs/agent-loop-status.md`.
 
 ## Source Documents
 
 - `nexusone_internal_ai_prd.md` - Product requirements document.
 - `nexusone_setup_data_plan.md` - Setup, data source, permissions, PostgreSQL, FAISS, and success criteria plan.
+- `docs/requirements.md` - Current implementation requirements distilled from the PRD.
+- `docs/guardrails.md` - Role and data-access guardrail contract.
+- `docs/implementation-phases.md` - Phase plan for the app build.
+- `docs/agent-loop-status.md` - Current loop status, test evidence, open issues, and phase progress.
 - `PROJECT_CONTEXT.md` - This global project status/context file.
 
 ## Architecture Direction
@@ -20,7 +26,7 @@ Pattern mix:
 
 - Main workflow: custom routed workflow.
 - Intent handling: routing workflow.
-- Retrieval: parallel FAISS vector search plus keyword/BM25 search.
+- Retrieval: FAISS hybrid search plus metadata lexical fallback.
 - Complex executive/manager comparisons: orchestrator-worker subflow.
 - Final answer checks: bounded evaluator/validator gate.
 - Tickets and structured data: controlled tool calls.
@@ -91,9 +97,52 @@ scripts/
 
 ## Current Task
 
-Continue the constrained SQL connector/tool for structured data.
+Continue Phase 2 and then move into the main LangGraph orchestrator.
 
-The Markdown KB, CSV, PDF, Docker Compose, PostgreSQL schema, PostgreSQL seed steps, deterministic SQL subgraph foundation, OpenAI planner hook, CLI runner, and OpenAI-backed live SQL checks are complete. The next SQL step is to implement the SQL repair loop described in `app/agents/sql_subgraph/SQL_REPAIR_LOOP_IMPLEMENTATION_PLAN.md`, then broaden permission regression checks across employee, finance, manager, executive, and CEO users.
+Phase 1 current state:
+
+- `app/auth/profiles.py` provides fake profile switching data.
+- `app/guardrails/policy.py` enforces pre-retrieval role denials and prompt-injection handling.
+- `app/retrieval/local_kb.py` provides permission-aware Markdown KB retrieval with citations.
+- `app/retrieval/chunk_index.py` reads generated chunk metadata and provides permission-aware metadata-backed retrieval across Markdown and PDF-source chunks.
+- `app/agents/orchestrator/` contains the main LangGraph workflow for user loading, guardrail precheck, deterministic routing, SQL subgraph calls, RAG retrieval, answer validation, and final response packaging.
+- RAG answers now include inline source markers such as `[1]`, and citation payloads include the permitted source chunk text for frontend source cards.
+- Graph invocations now attach LangSmith-compatible run config with safe metadata, tags, and run names while excluding message text, final answers, SQL text, and source chunks from metadata.
+- `app/services/chat_service.py` delegates chat requests to the main orchestrator while keeping the frontend/API response contract stable.
+- `app/api/dev_server.py` exposes `/api/profiles` and `/api/chat` through a stdlib HTTP server.
+- `frontend/static/` contains the current static frontend shell. Combined SQL+RAG answers now render both document citations and SQL source metadata instead of hiding SQL sources when citations exist.
+- `tests/unit/services/` covers guardrail policy, local KB permissions, and chat service behavior.
+
+Latest verification:
+
+- `./venv/bin/python -m unittest discover -s tests -p 'test_*.py'` passed with 61 tests.
+- `./venv/bin/python -m compileall app scripts` passed.
+- `./venv/bin/python -m unittest tests.unit.agents.orchestrator.test_graph tests.unit.frontend.test_static_chat_ui tests.unit.services.test_chat_service` passed with 14 focused Phase 3 tests.
+- `./venv/bin/python scripts/build_rag_index.py` wrote 106 chunks from 71 documents and generated `data/faiss/nexusone_chunks.index` with `faiss_status=written`.
+- `./venv/bin/python scripts/run_orchestrator.py --user-id u001 --execute-sql "What holidays apply in Pakistan?"` returned 3 live Postgres holiday rows when run outside the sandbox.
+- Local `/api/chat` smoke test returned `From AWS Access Request [1]:` and citation `[1]` included the AWS chunk text containing the ticket request step.
+- CLI combined SQL+RAG smoke returned `citations` and SQL `sources`; hosted LangSmith upload failed because this shell has tracing enabled but network access is restricted, while graph execution still completed successfully.
+- Initial Playwright MCP page load succeeded on `http://127.0.0.1:8010`; final restart was blocked by sandbox approval timeout and is recorded in `docs/agent-loop-status.md`.
+
+Next implementation step:
+
+Continue Phase 3 with broader combined SQL+RAG/E2E coverage, then move into Phase 4 ticket actions/feedback.
+
+SQL repair-loop graph artifacts:
+
+- Plan: `app/agents/sql_subgraph/SQL_REPAIR_LOOP_IMPLEMENTATION_PLAN.md`
+- LangGraph visualization builder: `app/agents/sql_subgraph/langgraph_visualization.py`
+- Render script: `scripts/render_sql_subgraph_graph.py`
+- PNG: `docs/graphs/sql_repair_subgraph.png`
+- Mermaid source: `docs/graphs/sql_repair_subgraph.mmd`
+
+Ticket assignment policy:
+
+- Raw `assigned_to`, `requester_id`, and other user id fields remain hidden and validator-blocked.
+- User-facing assignee names are allowed only through `accessible_ticket_assignments(:user_id)`, which first applies `can_user_access_ticket`.
+- Assignment questions such as "who is assigned to IT-1046" or "who is handling IT-1046" use the safe assignment function and return display name/title/department when the ticket is accessible.
+- Terminal escape artifacts from arrow keys are stripped before routing/query generation.
+- If the ticket is not accessible, the answer is "I could not find an accessible matching ticket."
 
 The manifests remain the source of truth for:
 

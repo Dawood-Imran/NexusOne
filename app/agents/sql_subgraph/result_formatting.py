@@ -5,11 +5,7 @@ from __future__ import annotations
 import hashlib
 from typing import Mapping
 
-from app.agents.sql_subgraph.state import (
-    SQLExecutionResult,
-    SQLSubgraphOutput,
-    SourceDefinition,
-)
+from app.agents.sql_subgraph.state import SQLExecutionResult, SQLSubgraphOutput, SourceDefinition
 
 
 def query_id_for(sql: str) -> str:
@@ -82,4 +78,3 @@ def format_error(message: str) -> SQLSubgraphOutput:
         sql_answer_summary="The SQL subgraph could not complete the structured-data request.",
         sql_error=message,
     )
-

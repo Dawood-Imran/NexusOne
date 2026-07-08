@@ -1,4 +1,4 @@
-"""Permission and scope selection for the SQL subgraph."""
+"""Permission and source selection for the SQL subgraph."""
 
 from __future__ import annotations
 
@@ -19,8 +19,7 @@ def source_allowed_for_user(source: SourceDefinition, user_context: UserContext)
 
 
 def select_allowed_sources(user_context: UserContext, intent: str) -> tuple[SourceDefinition, ...]:
-    candidates = sources_for_intent(intent)
-    return tuple(source for source in candidates if source_allowed_for_user(source, user_context))
+    return tuple(source for source in sources_for_intent(intent) if source_allowed_for_user(source, user_context))
 
 
 def describe_denial(user_context: UserContext | None, intent: str) -> str:
@@ -29,4 +28,3 @@ def describe_denial(user_context: UserContext | None, intent: str) -> str:
     if user_context.status != "active":
         return "The user is not active."
     return f"Role '{user_context.role}' is not allowed to query structured source intent '{intent}'."
-

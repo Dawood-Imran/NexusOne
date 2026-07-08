@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
 
 from app.agents.sql_subgraph import SQLSubgraph, SQLSubgraphOutput, SQLSubgraphRun
 from app.agents.sql_subgraph.db import SQLAlchemyExecutor
-from app.agents.sql_subgraph.presentation import format_safe_terminal_answer, safe_summary_payload
+from app.agents.sql_subgraph.presentation import format_safe_terminal_answer, output_domain, safe_summary_payload
 
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg2://nexusone:nexusone_dev_password@localhost:5492/nexusone"
@@ -32,7 +32,13 @@ NODE_DESCRIPTIONS = {
     "build_schema_context": "Builds a compact schema prompt from allowed sources only. The model never sees unrestricted DB schema.",
     "draft_sql": "Drafts a PostgreSQL SELECT query. Uses OpenAI when enabled; otherwise uses deterministic SQL templates.",
     "validate_sql_safety": "Validates the SQL before execution: SELECT-only, one statement, allowed sources, required user filters, and row limits.",
+    "record_validation_feedback": "Stores validation feedback so the SQL planner can repair the query without exposing raw schema.",
+    "repair_sql": "Repairs the SQL using validator, execution, or grounding feedback, then loops back to validation.",
     "execute_or_package": "Executes validated SQL against Postgres, or packages the validated SQL when execution is disabled.",
+    "record_execution_feedback": "Stores safe database execution feedback so the query can be repaired.",
+    "check_answer_grounding": "Checks whether the result shape matches the question before the final answer is formatted.",
+    "record_answer_feedback": "Stores answer-grounding feedback when a query is too broad, too narrow, or otherwise not answerable.",
+    "finalize_repair_failure": "Stops the loop when repair attempts are exhausted and returns a safe refusal or error.",
 }
 
 
@@ -92,6 +98,8 @@ def make_planner(use_openai: bool):
 def summarize_with_openai(question: str, output: SQLSubgraphOutput, planner: Any) -> str | None:
     if planner is None or output.sql_status not in {"answered", "validated"}:
         return None
+    if output_domain(output) == "ticket_status":
+        return None
     model = getattr(planner, "model", None)
     if model is None:
         return None
@@ -123,9 +131,12 @@ def print_trace(run: SQLSubgraphRun) -> None:
         for key in ("status", "intent", "allowed_sources", "schema_context_chars"):
             if details.get(key) not in (None, [], {}, ""):
                 print(f"   {key}: {details[key]}")
-        parameters = details.get("parameters")
-        if parameters:
-            print(f"   parameter_keys: {sorted(parameters.keys())}")
+        parameter_keys = details.get("parameter_keys")
+        if parameter_keys:
+            print(f"   parameter_keys: {parameter_keys}")
+        repair_reasons = details.get("repair_reasons")
+        if repair_reasons:
+            print(f"   repair_reasons: {repair_reasons}")
         user = details.get("user")
         if user:
             print(
@@ -148,8 +159,8 @@ def print_trace(run: SQLSubgraphRun) -> None:
         print()
 
 
-def print_rows(output: SQLSubgraphOutput) -> None:
-    print(format_safe_terminal_answer(output))
+def print_rows(output: SQLSubgraphOutput, question: str | None = None) -> None:
+    print(format_safe_terminal_answer(output, question=question))
 
 
 def print_intro(user_id: str, use_openai: bool, show_nodes: bool, execute: bool) -> None:
@@ -229,7 +240,7 @@ def main() -> int:
         if openai_answer:
             print(openai_answer)
         else:
-            print_rows(run.output)
+            print_rows(run.output, question=question)
         print()
 
 

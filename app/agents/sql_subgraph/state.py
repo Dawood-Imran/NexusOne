@@ -86,6 +86,7 @@ class SQLValidationResult:
     used_sources: tuple[str, ...] = ()
     normalized_sql: str | None = None
     rewritten_sql: str | None = None
+    feedback_for_repair: str | None = None
 
     @property
     def sql_to_execute(self) -> str | None:
@@ -146,8 +147,14 @@ class SQLSubgraphState:
     validation: SQLValidationResult | None = None
     execution_result: SQLExecutionResult | None = None
 
-    attempts: int = 0
-    max_attempts: int = 2
+    repair_attempts: int = 0
+    max_repair_attempts: int = 2
+    planner_error: str | None = None
+    validation_feedback: str | None = None
+    execution_feedback: str | None = None
+    answer_feedback: str | None = None
+    repair_history: list[str] = field(default_factory=list)
+    final_answer_grounded: bool = False
 
     sql_status: SQLStatus = "error"
     refusal_reason: str | None = None
@@ -190,3 +197,16 @@ class SQLPlanner(Protocol):
         user_id: str,
     ) -> tuple[str, Mapping[str, Any]]:
         """Draft SQL and named parameters for the allowed schema context."""
+
+    def repair_sql(
+        self,
+        question: str,
+        intent: SQLIntent,
+        schema_context: str,
+        allowed_sources: tuple[SourceDefinition, ...],
+        previous_sql: str,
+        previous_parameters: Mapping[str, Any],
+        feedback: str,
+        user_id: str,
+    ) -> tuple[str, Mapping[str, Any]]:
+        """Repair a failed SQL draft using safe feedback."""

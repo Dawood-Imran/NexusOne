@@ -31,6 +31,19 @@ KNOWN_INTENTS = {
     "document_metadata",
 }
 
+ASSIGNMENT_TERMS = (
+    "assigned",
+    "assignee",
+    "handling",
+    "handler",
+    "handled by",
+    "responsible",
+    "who is working",
+    "who's working",
+    "working on",
+    "taking care",
+)
+
 
 def load_user_context(state: SQLSubgraphState, executor: SQLExecutor | None = None) -> SQLSubgraphState:
     if state.user_context is not None:
@@ -73,6 +86,33 @@ def load_user_context(state: SQLSubgraphState, executor: SQLExecutor | None = No
     return state
 
 
+def _detect_ticket_id(question: str) -> str | None:
+    match = re.search(r"\b[A-Z]{2,5}-\d{3,6}\b", question.upper())
+    return match.group(0) if match else None
+
+
+def _asks_for_ticket_assignment(question: str) -> bool:
+    lowered = question.lower()
+    return any(term in lowered for term in ASSIGNMENT_TERMS)
+
+
+def _detect_region(question: str) -> str | None:
+    lowered = question.lower()
+    known_regions = {
+        "pakistan": "Pakistan",
+        "united states": "United States",
+        "usa": "United States",
+        "us": "United States",
+        "uae": "UAE",
+        "uk": "United Kingdom",
+        "united kingdom": "United Kingdom",
+    }
+    for needle, region in known_regions.items():
+        if re.search(rf"\b{re.escape(needle)}\b", lowered):
+            return region
+    return None
+
+
 def _heuristic_classify_sql_intent(state: SQLSubgraphState) -> SQLSubgraphState:
     requested = (state.requested_intent or "").strip()
     if requested in KNOWN_INTENTS:
@@ -80,7 +120,8 @@ def _heuristic_classify_sql_intent(state: SQLSubgraphState) -> SQLSubgraphState:
         return state
 
     question = state.question.lower()
-    if any(term in question for term in ("ticket", "case", "request status", "queue")):
+    has_ticket_id = _detect_ticket_id(state.question) is not None
+    if has_ticket_id or any(term in question for term in ("ticket", "ticker", "case", "request status", "queue", "assigned", "assignee")):
         state.sql_intent = "ticket_status"
     elif any(term in question for term in ("holiday", "holidays", "office closed")):
         state.sql_intent = "public_lookup"
@@ -120,7 +161,7 @@ def classify_sql_intent(state: SQLSubgraphState, planner: SQLPlanner | None = No
             state.sql_intent = planner.classify_intent(state.question, state.requested_intent, KNOWN_INTENTS)
             return state
         except Exception as exc:  # noqa: BLE001 - fall back to deterministic classifier.
-            state.error_message = f"Planner intent classification failed: {type(exc).__name__}"
+            state.planner_error = f"Planner intent classification failed: {type(exc).__name__}"
 
     return _heuristic_classify_sql_intent(state)
 
@@ -151,32 +192,39 @@ def build_schema_context(state: SQLSubgraphState) -> SQLSubgraphState:
     return state
 
 
-def _source_ref(source_name: str) -> str:
-    if source_name in {"accessible_tickets", "accessible_ticket_events"}:
-        return f"{source_name}(:user_id)"
-    return source_name
-
-
-def _detect_region(question: str) -> str | None:
-    lowered = question.lower()
-    known_regions = {
-        "pakistan": "Pakistan",
-        "united states": "United States",
-        "usa": "United States",
-        "us": "United States",
-        "india": "India",
-        "uk": "United Kingdom",
-        "united kingdom": "United Kingdom",
-    }
-    for needle, region in known_regions.items():
-        if re.search(rf"\b{re.escape(needle)}\b", lowered):
-            return region
-    return None
-
-
-def _detect_ticket_id(question: str) -> str | None:
-    match = re.search(r"\b[A-Z]{2,5}-\d{3,6}\b", question.upper())
-    return match.group(0) if match else None
+def _draft_ticket_sql(state: SQLSubgraphState) -> tuple[str, dict[str, Any]]:
+    params: dict[str, Any] = {"user_id": state.user_id}
+    ticket_id = _detect_ticket_id(state.question)
+    wants_assignment = _asks_for_ticket_assignment(state.question)
+    if ticket_id:
+        params["ticket_id"] = ticket_id
+    if wants_assignment:
+        if ticket_id:
+            return (
+                "SELECT ticket_id, department, category, priority, status, updated_at, "
+                "assignee_name, assignee_title, assignee_department, support_team "
+                "FROM accessible_ticket_assignments(:user_id) "
+                "WHERE ticket_id = :ticket_id ORDER BY updated_at DESC LIMIT 1",
+                params,
+            )
+        return (
+            "SELECT ticket_id, department, category, priority, status, updated_at, "
+            "assignee_name, assignee_title, assignee_department, support_team "
+            "FROM accessible_ticket_assignments(:user_id) ORDER BY updated_at DESC LIMIT 25",
+            params,
+        )
+    if ticket_id:
+        return (
+            "SELECT ticket_id, department, category, priority, status, updated_at "
+            "FROM accessible_tickets(:user_id) WHERE ticket_id = :ticket_id "
+            "ORDER BY updated_at DESC LIMIT 1",
+            params,
+        )
+    return (
+        "SELECT ticket_id, department, category, priority, status, updated_at "
+        "FROM accessible_tickets(:user_id) ORDER BY updated_at DESC LIMIT 25",
+        params,
+    )
 
 
 def _heuristic_draft_sql(state: SQLSubgraphState) -> SQLSubgraphState:
@@ -218,19 +266,7 @@ def _heuristic_draft_sql(state: SQLSubgraphState) -> SQLSubgraphState:
                 "FROM project_status_public ORDER BY last_updated DESC LIMIT 25"
             )
     elif state.sql_intent == "ticket_status":
-        ticket_id = _detect_ticket_id(state.question)
-        if ticket_id:
-            params["ticket_id"] = ticket_id
-            state.candidate_sql = (
-                "SELECT ticket_id, department, category, priority, status, updated_at "
-                "FROM accessible_tickets(:user_id) WHERE ticket_id = :ticket_id "
-                "ORDER BY updated_at DESC LIMIT 1"
-            )
-        else:
-            state.candidate_sql = (
-                "SELECT ticket_id, department, category, priority, status, updated_at "
-                "FROM accessible_tickets(:user_id) ORDER BY updated_at DESC LIMIT 25"
-            )
+        state.candidate_sql, params = _draft_ticket_sql(state)
     elif state.sql_intent == "finance_budget":
         state.candidate_sql = (
             "SELECT period, department, allocated_budget, actual_spend, forecast_spend, variance, risk_level "
@@ -280,18 +316,16 @@ def _heuristic_draft_sql(state: SQLSubgraphState) -> SQLSubgraphState:
             "ORDER BY title LIMIT 50"
         )
 
-    if state.candidate_sql is None:
-        source = state.allowed_sources[0]
-        source_ref = _source_ref(source.name)
-        selected_columns = ", ".join(source.column_names[: min(5, len(source.column_names))])
-        state.candidate_sql = f"SELECT {selected_columns} FROM {source_ref} LIMIT {source.max_rows}"
-
     state.sql_parameters = params
     return state
 
 
 def draft_sql(state: SQLSubgraphState, planner: SQLPlanner | None = None) -> SQLSubgraphState:
     if state.sql_intent is None or not state.allowed_sources:
+        return state
+
+    if state.sql_intent == "ticket_status" and _asks_for_ticket_assignment(state.question):
+        state.candidate_sql, state.sql_parameters = _draft_ticket_sql(state)
         return state
 
     if planner is not None:
@@ -306,23 +340,24 @@ def draft_sql(state: SQLSubgraphState, planner: SQLPlanner | None = None) -> SQL
             state.candidate_sql = sql
             merged_parameters = dict(parameters)
             merged_parameters["user_id"] = state.user_id
+            ticket_id = _detect_ticket_id(state.question)
+            if ticket_id:
+                merged_parameters.setdefault("ticket_id", ticket_id)
             state.sql_parameters = merged_parameters
             return state
         except Exception as exc:  # noqa: BLE001 - fall back to deterministic SQL draft.
-            state.error_message = f"Planner SQL draft failed: {type(exc).__name__}"
+            state.planner_error = f"Planner SQL draft failed: {type(exc).__name__}"
 
     return _heuristic_draft_sql(state)
 
 
 def validate_candidate_sql(state: SQLSubgraphState) -> SQLSubgraphState:
     if state.candidate_sql is None:
-        state.output = format_refusal("No SQL could be drafted.", status="needs_clarification")
-        state.sql_status = state.output.sql_status
+        state.validation_feedback = "No SQL could be drafted."
         return state
     state.validation = validate_sql(state.candidate_sql, state.allowed_sources)
     if not state.validation.is_safe:
-        state.output = format_refusal(state.validation.reason or "SQL failed validation.")
-        state.sql_status = state.output.sql_status
+        state.validation_feedback = state.validation.feedback_for_repair or state.validation.reason
     return state
 
 
@@ -349,8 +384,91 @@ def execute_or_package(state: SQLSubgraphState, executor: SQLExecutor | None = N
         state.output = format_execution_output(sql, state.sql_parameters, state.allowed_sources, used_sources, result)
         state.sql_status = state.output.sql_status
     except Exception as exc:  # noqa: BLE001 - package safe message, do not leak raw DB details to final answer.
-        state.output = format_error(f"Database execution failed: {type(exc).__name__}")
+        state.execution_feedback = f"Database execution failed: {type(exc).__name__}"
+        state.output = format_error(state.execution_feedback)
         state.sql_status = state.output.sql_status
+    return state
+
+
+def check_answer_grounding(state: SQLSubgraphState) -> SQLSubgraphState:
+    output = state.output
+    if output is None:
+        state.answer_feedback = "No output was produced."
+        return state
+    if output.sql_status not in {"answered", "validated"}:
+        return state
+
+    wants_assignment = _asks_for_ticket_assignment(state.question)
+    used_sources = set(output.sql_used_tables)
+    if wants_assignment and "accessible_ticket_assignments" not in used_sources:
+        state.answer_feedback = "The question asks who is assigned or handling the ticket; use accessible_ticket_assignments."
+        state.final_answer_grounded = False
+        return state
+
+    if wants_assignment and output.sql_status == "answered" and output.sql_rows:
+        first = output.sql_rows[0]
+        if "assignee_name" not in first and "support_team" not in first:
+            state.answer_feedback = "The assignment answer lacks safe display assignment fields."
+            state.final_answer_grounded = False
+            return state
+
+    state.answer_feedback = None
+    state.final_answer_grounded = True
+    return state
+
+
+def collect_repair_feedback(state: SQLSubgraphState) -> str:
+    parts = [value for value in (state.validation_feedback, state.execution_feedback, state.answer_feedback) if value]
+    return " ".join(parts) or "Repair the SQL using the allowlisted schema and safe output columns."
+
+
+def repair_sql(state: SQLSubgraphState, planner: SQLPlanner | None = None) -> SQLSubgraphState:
+    if state.sql_intent is None:
+        return state
+    state.repair_attempts += 1
+    feedback = collect_repair_feedback(state)
+    state.repair_history.append(feedback)
+
+    previous_sql = state.candidate_sql or ""
+    previous_parameters: Mapping[str, Any] = dict(state.sql_parameters)
+    if planner is not None and hasattr(planner, "repair_sql"):
+        try:
+            sql, parameters = planner.repair_sql(
+                question=state.question,
+                intent=state.sql_intent,
+                schema_context=state.schema_context,
+                allowed_sources=state.allowed_sources,
+                previous_sql=previous_sql,
+                previous_parameters=previous_parameters,
+                feedback=feedback,
+                user_id=state.user_id,
+            )
+            state.candidate_sql = sql
+            state.sql_parameters = dict(parameters)
+            state.sql_parameters["user_id"] = state.user_id
+            ticket_id = _detect_ticket_id(state.question)
+            if ticket_id:
+                state.sql_parameters.setdefault("ticket_id", ticket_id)
+        except Exception as exc:  # noqa: BLE001
+            state.planner_error = f"Planner SQL repair failed: {type(exc).__name__}"
+            _heuristic_draft_sql(state)
+    else:
+        _heuristic_draft_sql(state)
+
+    state.validation = None
+    state.execution_result = None
+    state.output = None
+    state.validation_feedback = None
+    state.execution_feedback = None
+    state.answer_feedback = None
+    state.final_answer_grounded = False
+    return state
+
+
+def finalize_repair_failure(state: SQLSubgraphState) -> SQLSubgraphState:
+    reason = state.answer_feedback or state.execution_feedback or state.validation_feedback or "The SQL request could not be safely completed."
+    state.output = format_refusal(reason, status="refused")
+    state.sql_status = state.output.sql_status
     return state
 
 

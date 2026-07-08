@@ -1,0 +1,21 @@
+{
+  "chunk_count": 106,
+  "chunks_by_confidentiality": {
+    "ceo_only": 3,
+    "department_internal": 6,
+    "executive": 15,
+    "finance_sensitive": 11,
+    "hr_sensitive": 10,
+    "it_sensitive": 9,
+    "manager_only": 14,
+    "public_internal": 38
+  },
+  "chunks_by_source_type": {
+    "markdown": 39,
+    "pdf": 67
+  },
+  "document_count": 71,
+  "faiss_path": "/home/tk-lpt-0427/Dawood Personal/NexusOne_Copilot/data/faiss/nexusone_chunks.index",
+  "faiss_status": "written",
+  "metadata_path": "/home/tk-lpt-0427/Dawood Personal/NexusOne_Copilot/data/faiss/nexusone_chunks_metadata.jsonl"
+}

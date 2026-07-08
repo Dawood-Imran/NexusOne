@@ -38,4 +38,3 @@ class SQLAlchemyExecutor:
         rows = tuple(dict(row) for row in result)
         columns = tuple(rows[0].keys()) if rows else ()
         return SQLExecutionResult(columns=columns, rows=rows, row_count=len(rows), elapsed_ms=elapsed_ms)
-

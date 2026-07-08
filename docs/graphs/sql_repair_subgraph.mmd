@@ -1,0 +1,47 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	load_user_context(load_user_context)
+	classify_sql_intent(classify_sql_intent)
+	select_allowed_sources(select_allowed_sources)
+	build_schema_context(build_schema_context)
+	draft_sql(draft_sql)
+	validate_sql_safety(validate_sql_safety)
+	record_validation_feedback(record_validation_feedback)
+	repair_sql(repair_sql)
+	execute_or_package(execute_or_package)
+	record_execution_feedback(record_execution_feedback)
+	check_answer_grounding(check_answer_grounding)
+	record_answer_feedback(record_answer_feedback)
+	format_safe_answer(format_safe_answer)
+	finalize_repair_failure(finalize_repair_failure)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> load_user_context;
+	build_schema_context --> draft_sql;
+	check_answer_grounding -. &nbsp;grounded&nbsp; .-> format_safe_answer;
+	check_answer_grounding -. &nbsp;answer_feedback&nbsp; .-> record_answer_feedback;
+	classify_sql_intent --> select_allowed_sources;
+	draft_sql --> validate_sql_safety;
+	execute_or_package -. &nbsp;ok&nbsp; .-> check_answer_grounding;
+	execute_or_package -. &nbsp;execution_feedback&nbsp; .-> record_execution_feedback;
+	load_user_context --> classify_sql_intent;
+	record_answer_feedback -. &nbsp;finalize&nbsp; .-> finalize_repair_failure;
+	record_answer_feedback -. &nbsp;repair&nbsp; .-> repair_sql;
+	record_execution_feedback -. &nbsp;finalize&nbsp; .-> finalize_repair_failure;
+	record_execution_feedback -. &nbsp;repair&nbsp; .-> repair_sql;
+	record_validation_feedback -. &nbsp;finalize&nbsp; .-> finalize_repair_failure;
+	record_validation_feedback -. &nbsp;repair&nbsp; .-> repair_sql;
+	repair_sql --> validate_sql_safety;
+	select_allowed_sources -. &nbsp;allowed&nbsp; .-> build_schema_context;
+	select_allowed_sources -. &nbsp;refused&nbsp; .-> finalize_repair_failure;
+	validate_sql_safety -. &nbsp;safe&nbsp; .-> execute_or_package;
+	validate_sql_safety -. &nbsp;validation_feedback&nbsp; .-> record_validation_feedback;
+	finalize_repair_failure --> __end__;
+	format_safe_answer --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

@@ -1,0 +1,15 @@
+#!/usr/bin/env python
+"""Build NexusOne RAG chunk metadata and optional FAISS index."""
+
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from app.ingestion.build_index import main
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
