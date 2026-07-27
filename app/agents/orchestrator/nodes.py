@@ -8,6 +8,7 @@ from typing import Any
 from app.actions.ticket_service import TicketService
 from app.agents.orchestrator.action_routing import extract_ticket_request
 from app.agents.orchestrator.answer_composer import AnswerComposer
+from app.agents.orchestrator.knowledge import build_local_general_answer, casual_response
 from app.agents.orchestrator.routing import route_message
 from app.agents.orchestrator.state import OrchestratorState
 from app.agents.sql_subgraph import SQLSubgraph, clean_question_text
@@ -131,6 +132,25 @@ def make_route_question_node() -> Any:
         return next_state
 
     return route_question
+
+
+def make_respond_casual_node() -> Any:
+    def respond_casual(state: OrchestratorState) -> OrchestratorState:
+        message = casual_response(state["clean_message"]) or "Hi! How can I help you today?"
+        next_state: OrchestratorState = {
+            **state,
+            "casual_message": message,
+            "status": "answered",
+            "reason_code": "CASUAL",
+        }
+        next_state["trace"] = append_trace(
+            next_state,
+            "deterministic_casual_response",
+            {"status": "answered", "route": "CASUAL"},
+        )
+        return next_state
+
+    return respond_casual
 
 
 def make_run_sql_node(executor: SQLExecutor | None, planner: SQLPlanner | None) -> Any:
@@ -289,6 +309,10 @@ def make_validate_answer_node() -> Any:
             reason = "NO_TOOL_ANSWER"
         elif route == "ticket_create" and state.get("status") not in {"ticket_created", "needs_clarification"}:
             reason = "TICKET_ACTION_NOT_COMPLETED"
+        elif route == "CASUAL" and not state.get("casual_message"):
+            reason = "CASUAL_RESPONSE_NOT_COMPLETED"
+        elif route == "GENERAL_KNOWLEDGE" and not state.get("final_answer"):
+            reason = "GENERAL_KNOWLEDGE_NOT_COMPOSED"
         validation = {
             "status": "safe" if safe else "unsafe",
             "safe": safe,
@@ -296,6 +320,8 @@ def make_validate_answer_node() -> Any:
             "route": route,
             "has_sql_answer": has_sql_answer,
             "has_rag_answer": has_rag_answer,
+            "has_casual_answer": bool(state.get("casual_message")),
+            "has_general_answer": bool(state.get("final_answer")),
         }
         next_state: OrchestratorState = {**state, "validation": validation}
         next_state["trace"] = append_trace(next_state, "validate_answer", validation)
@@ -309,6 +335,10 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
         route = state.get("route", "rag")
         profile = state["profile"]
         sql_output = state.get("sql_output")
+        if route == "GENERAL_KNOWLEDGE":
+            local_answer = build_local_general_answer(state.get("clean_message", ""))
+        else:
+            local_answer = None
         status = _response_status_for_success(state)
         context = {
             "question": state.get("clean_message"),
@@ -320,6 +350,7 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             "sql_answer": state.get("sql_message", ""),
             "rag_answer": state.get("rag_message", ""),
             "action_answer": state.get("ticket_message", ""),
+            "general_answer": local_answer or "",
             "citations": state.get("rag_citations", []),
             "sources": state.get("sql_sources", []),
             "sql_status": sql_output.sql_status if sql_output is not None else None,
@@ -329,7 +360,11 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             **state,
             "final_answer": composition.answer,
             "composer_backend": composition.backend,
+            "general_answer": local_answer or "",
+            "general_answer_available": bool(local_answer),
         }
+        if route == "GENERAL_KNOWLEDGE" and composition.backend.startswith("openai"):
+            next_state["general_answer_available"] = True
         if composition.error:
             next_state["composer_error"] = composition.error
         if composition.fallback_reason:
@@ -485,6 +520,35 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
             **_turn_context(state),
         }
 
+    if route == "CASUAL":
+        return {
+            "status": "answered",
+            "reason_code": "CASUAL",
+            "route": route,
+            "model_backend": "deterministic",
+            "category": category,
+            "message": state.get("casual_message", "Hi! How can I help you today?"),
+            "sql_execution": {"status": "not_run", "row_count": 0},
+            "profile": profile.to_public_dict(),
+            "latency_ms": _elapsed_ms(started_at),
+            **_turn_context(state),
+        }
+
+    if route == "GENERAL_KNOWLEDGE":
+        answered = bool(state.get("general_answer_available", False))
+        return {
+            "status": "answered" if answered else "no_answer",
+            "reason_code": "GENERAL_KNOWLEDGE" if answered else "GENERAL_KNOWLEDGE_UNAVAILABLE",
+            "route": route,
+            "model_backend": state.get("composer_backend"),
+            "category": category,
+            "message": state.get("final_answer", ""),
+            "sql_execution": {"status": "not_run", "row_count": 0},
+            "profile": profile.to_public_dict(),
+            "latency_ms": _elapsed_ms(started_at),
+            **_turn_context(state),
+        }
+
     has_results = int(state.get("rag_result_count", 0)) > 0
     return {
         "status": "answered" if has_results else "no_answer",
@@ -521,6 +585,10 @@ def _response_status_for_success(state: OrchestratorState) -> str:
         return state["sql_output"].sql_status
     if route == "ticket_create":
         return state.get("status", "error")
+    if route == "CASUAL":
+        return "answered"
+    if route == "GENERAL_KNOWLEDGE":
+        return "answered" if state.get("general_answer_available") else "no_answer"
     return "answered" if int(state.get("rag_result_count", 0)) > 0 else "no_answer"
 
 

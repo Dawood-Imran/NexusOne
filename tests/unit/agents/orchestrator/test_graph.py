@@ -2,7 +2,8 @@ import unittest
 
 from app.actions.ticket_service import InMemoryTicketRepository, TicketService
 from app.agents.orchestrator import NexusOneOrchestrator
-from app.agents.orchestrator.answer_composer import DeterministicAnswerComposer
+from app.agents.orchestrator.answer_composer import AnswerComposition, DeterministicAnswerComposer
+from app.agents.orchestrator.routing import route_message
 
 
 class NexusOneOrchestratorTest(unittest.TestCase):
@@ -12,6 +13,70 @@ class NexusOneOrchestratorTest(unittest.TestCase):
             answer_composer=DeterministicAnswerComposer(),
             ticket_service=TicketService(self.ticket_repository),
         )
+
+    def test_casual_greeting_uses_deterministic_route_without_composer(self) -> None:
+        composer = _SpyComposer()
+        orchestrator = NexusOneOrchestrator(answer_composer=composer, ticket_service=TicketService(self.ticket_repository))
+
+        response = orchestrator.invoke(
+            {"user_id": "u001", "message": "  HELLO!  ", "include_trace": True}
+        )
+
+        self.assertEqual("answered", response["status"])
+        self.assertEqual("CASUAL", response["route"])
+        self.assertEqual("Hi! How can I help you today?", response["message"])
+        self.assertEqual(0, composer.calls)
+        nodes = [step["node"] for step in response["trace"]]
+        self.assertIn("deterministic_casual_response", nodes)
+        self.assertIn("validate_answer", nodes)
+        self.assertNotIn("retrieve_rag_context", nodes)
+        self.assertNotIn("run_sql_subgraph", nodes)
+
+    def test_casual_thanks_and_goodbye_are_deterministic(self) -> None:
+        for message, expected in (
+            ("Thanks so much!", "You're welcome!"),
+            ("See you later.", "Goodbye!"),
+        ):
+            response = self.orchestrator.invoke({"user_id": "u001", "message": message})
+            self.assertEqual("CASUAL", response["route"])
+            self.assertIn(expected, response["message"])
+
+    def test_general_knowledge_uses_composer_without_protected_paths(self) -> None:
+        for message in (
+            "What is machine learning?",
+            "What is a REST API?",
+            "Explain Docker.",
+            "What is a vector database?",
+        ):
+            response = self.orchestrator.invoke(
+                {"user_id": "u001", "message": message, "include_trace": True}
+            )
+            self.assertEqual("answered", response["status"], message)
+            self.assertEqual("GENERAL_KNOWLEDGE", response["route"], message)
+            self.assertEqual("deterministic", response["model_backend"], message)
+            self.assertNotIn("retrieve_rag_context", [step["node"] for step in response["trace"]])
+            self.assertNotIn("run_sql_subgraph", [step["node"] for step in response["trace"]])
+            self.assertIn("compose_final_answer", [step["node"] for step in response["trace"]])
+            self.assertIn("validate_answer", [step["node"] for step in response["trace"]])
+
+    def test_general_knowledge_reuses_injected_answer_composer(self) -> None:
+        composer = _RecordingComposer()
+        orchestrator = NexusOneOrchestrator(answer_composer=composer)
+
+        response = orchestrator.invoke({"user_id": "u001", "message": "What is machine learning?"})
+
+        self.assertEqual("GENERAL_KNOWLEDGE", response["route"])
+        self.assertEqual("fixture-answer", response["message"])
+        self.assertEqual("GENERAL_KNOWLEDGE", composer.context["route"])
+        self.assertIn("Machine learning is", composer.context["general_answer"])
+
+    def test_route_classifier_preserves_internal_and_structured_protections(self) -> None:
+        self.assertEqual("CASUAL", route_message("Good morning"))
+        self.assertEqual("GENERAL_KNOWLEDGE", route_message("How does TCP work?"))
+        self.assertEqual("rag", route_message("What is our company's vacation policy?"))
+        self.assertEqual("GENERAL_KNOWLEDGE", route_message("What is a typical vacation policy?"))
+        self.assertEqual("sql", route_message("How many employees are in Engineering?"))
+        self.assertEqual("rag", route_message("How does NexusOne's ticket system work?"))
 
     def test_rag_question_uses_permission_filtered_context(self) -> None:
         response = self.orchestrator.invoke(
@@ -168,6 +233,24 @@ class NexusOneOrchestratorTest(unittest.TestCase):
         nodes = [step["node"] for step in response["trace"]]
         self.assertNotIn("run_ticket_action", nodes)
         self.assertEqual([], self.ticket_repository.tickets)
+
+
+class _SpyComposer:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def compose(self, context):
+        self.calls += 1
+        return AnswerComposition(answer="unexpected composer call", backend="spy")
+
+
+class _RecordingComposer:
+    def __init__(self) -> None:
+        self.context = None
+
+    def compose(self, context):
+        self.context = context
+        return AnswerComposition(answer="fixture-answer", backend="fixture")
 
 
 if __name__ == "__main__":

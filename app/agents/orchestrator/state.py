@@ -9,7 +9,16 @@ from app.agents.sql_subgraph.state import SQLNodeTrace, SQLSubgraphOutput
 from app.guardrails.policy import AccessDecision
 
 
-RouteName = Literal["rag", "sql", "combined", "ticket_create", "deny", "error"]
+RouteName = Literal[
+    "rag",
+    "sql",
+    "combined",
+    "ticket_create",
+    "CASUAL",
+    "GENERAL_KNOWLEDGE",
+    "deny",
+    "error",
+]
 
 
 class OrchestratorState(TypedDict, total=False):
@@ -30,6 +39,10 @@ class OrchestratorState(TypedDict, total=False):
     rag_citations: list[dict[str, Any]]
     rag_result_count: int
     rag_backend: str
+
+    casual_message: str
+    general_answer: str
+    general_answer_available: bool
 
     sql_output: SQLSubgraphOutput
     sql_message: str

@@ -102,6 +102,10 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("function renderDeniedNextStep(payload)", self.app_js)
         self.assertIn("function renderRetry(text)", self.app_js)
 
+    def test_route_metadata_is_safe_and_visible_for_new_routes(self) -> None:
+        self.assertIn("route: payload.route || null,", self.app_js)
+        self.assertIn('<div><dt>Route</dt><dd>${escapeHtml(message.route || "-")}</dd></div>', self.app_js)
+
     def test_trace_inspector_distinguishes_graph_and_sql_subgraph(self) -> None:
         self.assertIn("subgraph_trace: payload.subgraph_trace || [],", self.app_js)
         self.assertIn('subgraphTitle.textContent = "SQL subgraph trace";', self.app_js)
@@ -167,7 +171,7 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr)", styles)
         self.assertIn(".profile-cards .profile-card:hover", styles)
         self.assertIn(".skip-link:focus", styles)
-        self.assertIn("formatRole(profile.role)", self.app_js)
+        self.assertIn("formatRole(account.role)", self.app_js)
         self.assertIn("@media (max-width: 1400px)", styles)
         self.assertIn(".inspector.open", styles)
 
