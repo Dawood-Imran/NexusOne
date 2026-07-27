@@ -20,6 +20,7 @@ from app.agents.orchestrator.nodes import (
     make_validate_answer_node,
 )
 from app.agents.orchestrator.state import OrchestratorRun, OrchestratorState
+from app.agents.sql_subgraph.planner import build_default_sql_planner
 from app.agents.sql_subgraph.state import SQLExecutor, SQLPlanner
 from app.observability.langsmith import build_langsmith_config
 from app.retrieval.chunk_index import MetadataChunkRetriever
@@ -46,7 +47,10 @@ def build_orchestrator_graph(
     graph.add_node("precheck_guardrails", make_precheck_guardrails_node())
     graph.add_node("route_question", make_route_question_node())
     graph.add_node("run_ticket_action", make_run_ticket_action_node(ticket_service))
-    graph.add_node("run_sql_subgraph", make_run_sql_node(sql_executor, sql_planner))
+    graph.add_node(
+        "run_sql_subgraph",
+        make_run_sql_node(sql_executor, sql_planner if sql_planner is not None else build_default_sql_planner()),
+    )
     graph.add_node("retrieve_rag_context", make_retrieve_rag_node(chunk_retriever, local_retriever))
     graph.add_node("validate_answer", make_validate_answer_node())
     graph.add_node("compose_final_answer", make_compose_final_answer_node(answer_composer or build_default_answer_composer()))
@@ -117,6 +121,10 @@ class NexusOneOrchestrator:
             "include_trace": bool(payload.get("include_trace", False)),
             "execute_sql": bool(payload.get("execute_sql", False)),
         }
+        # Authenticated API callers may pass the immutable server-resolved
+        # profile so the graph does not reconstruct identity from client data.
+        if payload.get("profile") is not None:
+            state["profile"] = payload["profile"]
         output = self.graph.invoke(state, config=build_langsmith_config(state))
         response = output["response"]
         trace = tuple(output.get("trace", ()))

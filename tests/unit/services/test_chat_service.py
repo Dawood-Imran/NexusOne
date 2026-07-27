@@ -1,13 +1,19 @@
+import os
 import unittest
+from unittest.mock import patch
 
 from app.actions.audit_service import AuditService, InMemoryAuditRepository
 from app.actions.feedback_service import FeedbackService, InMemoryFeedbackRepository
 from app.agents.orchestrator.answer_composer import DeterministicAnswerComposer
+from app.agents.sql_subgraph.db import SQLAlchemyExecutor
+from app.agents.sql_subgraph.state import SQLExecutionResult
 from app.services.chat_service import ChatService
 
 
 class ChatServiceTest(unittest.TestCase):
     def setUp(self) -> None:
+        self.environment = patch.dict(os.environ, {}, clear=True)
+        self.environment.start()
         self.feedback_repository = InMemoryFeedbackRepository()
         self.audit_repository = InMemoryAuditRepository()
         self.service = ChatService(
@@ -15,6 +21,9 @@ class ChatServiceTest(unittest.TestCase):
             feedback_service=FeedbackService(self.feedback_repository),
             audit_service=AuditService(self.audit_repository),
         )
+
+    def tearDown(self) -> None:
+        self.environment.stop()
 
     def test_allowed_public_kb_question_returns_citation(self) -> None:
         response = self.service.handle_message("u001", "How do I request AWS access?")
@@ -46,13 +55,90 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual("error", response["status"])
         self.assertEqual("UNKNOWN_USER", response["reason_code"])
 
-    def test_sql_route_returns_validated_when_no_executor_is_configured(self) -> None:
+    def test_sql_route_returns_explicit_validation_only_capability_without_executor(self) -> None:
         response = self.service.handle_message("u001", "What holidays apply in Pakistan?", include_trace=True)
 
         self.assertEqual("validated", response["status"])
         self.assertEqual("SQL_SUBGRAPH", response["reason_code"])
-        self.assertIn("SQL subgraph validated", response["message"])
+        self.assertIn("validation-only", response["message"])
+        self.assertEqual("validation_only", response["capabilities"]["sql"]["mode"])
+        self.assertEqual("validation_only", response["sql_execution"]["status"])
+        self.assertEqual("deterministic", response["capabilities"]["answer_composer"]["provider"])
+        self.assertEqual("OPENAI_API_KEY_NOT_CONFIGURED", response["capabilities"]["answer_composer"]["fallback_reason"])
+        self.assertEqual("OPENAI_API_KEY_NOT_CONFIGURED", response["capabilities"]["sql_planner"]["fallback_reason"])
         self.assertTrue(response["trace"])
+        self.assertEqual("validation_only", response["trace"][3]["details"]["execution_status"])
+
+    def test_database_url_builds_the_http_sql_executor(self) -> None:
+        with patch.dict(os.environ, {"DATABASE_URL": "sqlite+pysqlite:///:memory:"}, clear=True):
+            with patch("app.services.chat_service.create_engine", return_value=object()) as create_engine:
+                service = ChatService(answer_composer=DeterministicAnswerComposer())
+
+        self.assertIsInstance(service.sql_executor, SQLAlchemyExecutor)
+        create_engine.assert_called_once_with("sqlite+pysqlite:///:memory:")
+        self.assertEqual("live", service._capabilities_for_response({})["sql"]["mode"])
+
+    def test_injected_executor_returns_live_sanitized_rows(self) -> None:
+        service = ChatService(
+            sql_executor=_FakeExecutor(),
+            answer_composer=DeterministicAnswerComposer(),
+            feedback_service=FeedbackService(InMemoryFeedbackRepository()),
+            audit_service=AuditService(InMemoryAuditRepository()),
+        )
+
+        response = service.handle_message("u001", "What holidays apply in Pakistan?", include_trace=True)
+
+        self.assertEqual("answered", response["status"])
+        self.assertEqual(
+            [{"region": "Pakistan", "holiday_name": "Fixture Day", "date": "2026-01-01"}],
+            response["rows"],
+        )
+        self.assertEqual("connected", response["capabilities"]["sql"]["status"])
+        self.assertEqual("executed", response["sql_execution"]["status"])
+        self.assertEqual(1, response["sql_execution"]["row_count"])
+        self.assertNotIn("requester_id", str(response["rows"]))
+        self.assertEqual("executed", response["trace"][3]["details"]["execution_status"])
+
+    def test_executor_error_is_safe_and_not_reported_as_connected_success(self) -> None:
+        service = ChatService(
+            sql_executor=_FailingExecutor(),
+            answer_composer=DeterministicAnswerComposer(),
+            feedback_service=FeedbackService(InMemoryFeedbackRepository()),
+            audit_service=AuditService(InMemoryAuditRepository()),
+        )
+
+        response = service.handle_message("u001", "What holidays apply in Pakistan?")
+
+        self.assertIn(response["status"], {"refused", "error"})
+        self.assertEqual("error", response["capabilities"]["sql"]["status"])
+        self.assertNotIn("database exploded", response["message"])
+
+    def test_configured_openai_selects_safe_provider_metadata_without_key_exposure(self) -> None:
+        class FakeOpenAIComposer:
+            provider_name = "openai"
+            model_name = "fixture-answer-model"
+
+        class FakeOpenAIPlanner:
+            provider_name = "openai"
+            model_name = "fixture-sql-model"
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "fixture-token-not-for-output"}, clear=True):
+            with patch(
+                "app.agents.orchestrator.answer_composer.LangChainOpenAIAnswerComposer.from_env",
+                return_value=FakeOpenAIComposer(),
+            ), patch(
+                "app.agents.sql_subgraph.planner.LangChainOpenAISQLPlanner.from_env",
+                return_value=FakeOpenAIPlanner(),
+            ):
+                service = ChatService(
+                    feedback_service=FeedbackService(InMemoryFeedbackRepository()),
+                    audit_service=AuditService(InMemoryAuditRepository()),
+                )
+
+        capabilities = service._capabilities_for_response({})
+        self.assertEqual("openai", capabilities["answer_composer"]["provider"])
+        self.assertEqual("openai", capabilities["sql_planner"]["provider"])
+        self.assertNotIn("fixture-token-not-for-output", repr(capabilities))
 
     def test_feedback_submission_is_stored(self) -> None:
         response = self.service.submit_feedback(
@@ -66,6 +152,33 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual("stored", response["status"])
         self.assertEqual(1, response["feedback_id"])
         self.assertEqual("Useful source.", self.feedback_repository.rows[0]["comment"])
+
+
+class _FakeExecutor:
+    def fetch_one(self, query, parameters):
+        return None
+
+    def fetch_all(self, query, parameters, max_rows):
+        return SQLExecutionResult(
+            columns=("region", "holiday_name", "date", "requester_id"),
+            rows=(
+                {
+                    "region": "Pakistan",
+                    "holiday_name": "Fixture Day",
+                    "date": "2026-01-01",
+                    "requester_id": "hidden-user",
+                },
+            ),
+            row_count=1,
+        )
+
+
+class _FailingExecutor:
+    def fetch_one(self, query, parameters):
+        return None
+
+    def fetch_all(self, query, parameters, max_rows):
+        raise RuntimeError("database exploded")
 
 
 if __name__ == "__main__":

@@ -63,7 +63,13 @@ class NexusOneOrchestratorTest(unittest.TestCase):
 
         self.assertEqual("validated", response["status"])
         self.assertEqual("SQL_SUBGRAPH", response["reason_code"])
+        self.assertEqual("sql", response["route"])
+        self.assertEqual("deterministic", response["model_backend"])
+        self.assertEqual("validation_only", response["sql_execution"]["status"])
         self.assertIn("SQL subgraph validated", response["message"])
+        self.assertEqual("validated", response["trace"][3]["status"])
+        self.assertEqual("validated", response["subgraph_trace"][-1]["status"])
+        self.assertEqual("validated", response["trace"][-1]["status"])
         nodes = [step["node"] for step in response["trace"]]
         self.assertIn("run_sql_subgraph", nodes)
         self.assertIn("compose_final_answer", nodes)

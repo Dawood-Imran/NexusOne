@@ -1,1 +1,1 @@
-"""Authentication/profile helpers for the NexusOne demo."""
+"""Local-only authentication and server-owned synthetic user profiles."""

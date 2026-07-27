@@ -13,6 +13,7 @@ class AnswerComposition:
     answer: str
     backend: str
     error: str | None = None
+    fallback_reason: str | None = None
 
 
 class AnswerComposer(Protocol):
@@ -26,6 +27,10 @@ class DeterministicAnswerComposer:
     """Local fallback composer used by tests and offline development."""
 
     backend = "deterministic"
+    provider_name = "deterministic"
+
+    def __init__(self, fallback_reason: str | None = None) -> None:
+        self.fallback_reason = fallback_reason
 
     def compose(self, context: Mapping[str, Any]) -> AnswerComposition:
         route = str(context.get("route", "rag"))
@@ -55,13 +60,19 @@ class DeterministicAnswerComposer:
         if status == "validated" and "SQL subgraph validated" not in answer:
             answer = (
                 "I can route this to the structured-data connector and the SQL subgraph validated a safe query. "
-                "Start local Postgres execution to return live rows."
+                "Live database execution is not enabled in local validation-only mode."
             )
-        return AnswerComposition(answer=_ensure_minimum_citation(answer, context), backend=self.backend)
+        return AnswerComposition(
+            answer=_ensure_minimum_citation(answer, context),
+            backend=self.backend,
+            fallback_reason=self.fallback_reason,
+        )
 
 
 class LangChainOpenAIAnswerComposer:
     """LLM-backed answer composer using LangChain's OpenAI integration."""
+
+    provider_name = "openai"
 
     def __init__(self, model_name: str | None = None, temperature: float | None = None) -> None:
         try:
@@ -130,17 +141,28 @@ class FallbackAnswerComposer:
                 answer=fallback.answer,
                 backend=f"{fallback.backend}_after_llm_error",
                 error=type(exc).__name__,
+                fallback_reason=f"OPENAI_RUNTIME_ERROR_{type(exc).__name__.upper()}",
             )
         fallback = self.fallback.compose(context)
-        return AnswerComposition(answer=fallback.answer, backend=f"{fallback.backend}_after_empty_llm")
+        return AnswerComposition(
+            answer=fallback.answer,
+            backend=f"{fallback.backend}_after_empty_llm",
+            fallback_reason="OPENAI_EMPTY_RESPONSE",
+        )
 
 
 def build_default_answer_composer() -> AnswerComposer:
     """Use OpenAI when configured, otherwise keep the graph runnable offline."""
 
-    if os.getenv("OPENAI_API_KEY"):
+    from app.runtime.config import RuntimeConfig
+
+    config = RuntimeConfig.from_env()
+    if not config.openai_api_key_configured:
+        return DeterministicAnswerComposer(fallback_reason="OPENAI_API_KEY_NOT_CONFIGURED")
+    try:
         return FallbackAnswerComposer(LangChainOpenAIAnswerComposer.from_env())
-    return DeterministicAnswerComposer()
+    except Exception:  # noqa: BLE001 - provider setup must not break local startup.
+        return DeterministicAnswerComposer(fallback_reason="OPENAI_PROVIDER_UNAVAILABLE")
 
 
 def _compact_context(context: Mapping[str, Any]) -> str:

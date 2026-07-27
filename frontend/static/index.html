@@ -10,68 +10,159 @@
   </head>
   <body>
     <a class="skip-link" href="#messageInput">Skip to chat input</a>
-    <section id="authView" class="auth-view" aria-labelledby="authTitle">
-      <div class="auth-copy">
-        <div class="brand-lockup">
-          <div class="brand-mark" aria-hidden="true">N1</div>
-          <div>
-            <p class="eyebrow">NexusOne Technologies</p>
-            <h1 id="authTitle">NexusOne Copilot</h1>
-          </div>
-        </div>
-        <p class="auth-kicker">Role-aware knowledge, ticket actions, and cited answers for internal teams.</p>
-        <p class="auth-summary">
-          Sign in with a demo identity to ask policy questions, inspect your tickets, create support
-          requests, and view source-backed answers with role-aware guardrails.
-        </p>
-        <div class="auth-proof" aria-label="Security model">
-          <span>Server-side permissions</span>
-          <span>Cited answers</span>
-          <span>Ticket actions</span>
-        </div>
-      </div>
 
-      <div class="login-panel">
-        <div class="panel-heading">
-          <p class="eyebrow">Demo sign in</p>
-          <h2>Choose your workspace profile</h2>
+    <section id="authView" class="auth-view" aria-labelledby="authTitle">
+      <div class="auth-frame">
+        <aside class="auth-brand" aria-label="NexusOne Copilot">
+          <div class="brand-lockup brand-lockup-on-dark">
+            <div class="brand-mark" aria-hidden="true">N1</div>
+            <div>
+              <p class="eyebrow">NexusOne Technologies</p>
+              <p class="brand-name">NexusOne Copilot</p>
+            </div>
+          </div>
+          <div class="auth-brand-copy">
+            <p class="auth-kicker">A clearer path to the answer.</p>
+            <h1>Company knowledge, with the right guardrails.</h1>
+            <p>
+              Ask about policies, processes, or tickets in plain language. Copilot checks your
+              server-assigned access before it searches or takes action.
+            </p>
+          </div>
+          <ul class="auth-proof" aria-label="NexusOne Copilot capabilities">
+            <li><span class="proof-mark" aria-hidden="true">01</span><span>Answers grounded in approved sources</span></li>
+            <li><span class="proof-mark" aria-hidden="true">02</span><span>Role permissions enforced before retrieval</span></li>
+            <li><span class="proof-mark" aria-hidden="true">03</span><span>Support actions with a clear audit trail</span></li>
+          </ul>
+        </aside>
+
+        <div class="login-panel">
+          <div class="service-banner" role="status" aria-live="polite">
+            <span id="authServiceIndicator" class="status-dot is-neutral" aria-hidden="true"></span>
+            <span id="authServiceStatus">Connecting to sign-in service…</span>
+          </div>
+          <form id="loginForm" class="login-form" novalidate>
+            <p class="eyebrow">Secure sign in</p>
+            <h2 id="authTitle">Welcome back</h2>
+            <p class="login-intro">
+              Use your NexusOne username and password. Your account and access scope come from the
+              authenticated session—there is no profile or role switcher here.
+            </p>
+
+            <div class="form-field">
+              <label for="usernameInput">Username or work email</label>
+              <input
+                id="usernameInput"
+                name="username"
+                type="text"
+                inputmode="email"
+                autocomplete="username"
+                placeholder="you@nexusone.example"
+                required
+              />
+            </div>
+            <div class="form-field">
+              <div class="field-label-row">
+                <label for="passwordInput">Password</label>
+              </div>
+              <input
+                id="passwordInput"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="Enter your password"
+                required
+              />
+            </div>
+            <button id="loginButton" class="login-button" type="submit">
+              <span>Sign in</span>
+              <span class="button-arrow" aria-hidden="true">→</span>
+            </button>
+            <p id="authError" class="form-message is-error" role="alert" aria-live="assertive"></p>
+            <p id="authStatus" class="form-message" role="status" aria-live="polite"></p>
+            <p class="login-note">
+              Access is assigned by your NexusOne account. If your account is not working, contact
+              your administrator rather than trying another role.
+            </p>
+          </form>
         </div>
-        <div id="profileCards" class="profile-cards" aria-live="polite"></div>
-        <p id="authError" class="form-note" role="status"></p>
       </div>
     </section>
 
-    <div id="appView" class="app-shell hidden" aria-label="Workspace context">
+    <div id="appView" class="app-shell hidden" aria-label="NexusOne Copilot workspace">
       <aside class="conversation-rail" aria-label="Workspace navigation and conversations">
-        <div class="rail-header">
-          <div class="brand-mini">
-            <div class="brand-mark small" aria-hidden="true">N1</div>
-            <div>
-              <strong>NexusOne Copilot</strong>
-              <span id="sessionRole">Workspace</span>
+        <header class="rail-header">
+          <a class="brand-mini" href="#pageTitle" aria-label="NexusOne Copilot home">
+            <span class="brand-mark small" aria-hidden="true">N1</span>
+            <span class="brand-mini-copy">
+              <strong>NexusOne</strong>
+              <span>Copilot</span>
+            </span>
+          </a>
+          <div class="account-control-wrap">
+            <button
+              id="accountButton"
+              class="account-control"
+              type="button"
+              aria-expanded="false"
+              aria-controls="accountPopover"
+              aria-label="Open account details"
+            >
+              <span class="account-avatar" aria-hidden="true">
+                <img id="accountAvatarImage" alt="" hidden />
+                <span id="accountAvatarFallback">—</span>
+              </span>
+              <span class="account-control-copy">
+                <strong id="accountName">Account</strong>
+                <span id="accountRole">Signed in</span>
+              </span>
+              <span class="account-chevron" aria-hidden="true">⌄</span>
+            </button>
+            <div id="accountPopover" class="account-popover" role="dialog" aria-labelledby="accountPopoverTitle" hidden>
+              <div class="account-popover-heading">
+                <div class="account-avatar account-avatar-large" aria-hidden="true">
+                  <img id="popoverAvatarImage" alt="" hidden />
+                  <span id="popoverAvatarFallback">—</span>
+                </div>
+                <div>
+                  <h2 id="accountPopoverTitle">Your account</h2>
+                  <p id="popoverAccountName">Signed-in account</p>
+                  <p id="popoverAccountTitle">Authenticated NexusOne account</p>
+                </div>
+              </div>
+              <dl class="account-details">
+                <div><dt>Role</dt><dd id="accountDetailRole">—</dd></div>
+                <div><dt>Department</dt><dd id="accountDetailDepartment">—</dd></div>
+                <div><dt>Location</dt><dd id="accountDetailLocation">—</dd></div>
+                <div><dt>Email</dt><dd id="accountDetailEmail">—</dd></div>
+              </dl>
+              <p class="account-safety-note">Permissions are checked by the service on every request.</p>
+              <button id="logoutButton" class="logout-button" type="button">Sign out</button>
             </div>
           </div>
-          <button id="accountButton" class="icon-button" type="button" aria-label="Switch demo profile">Switch</button>
-        </div>
+        </header>
 
         <nav class="workspace-nav" aria-label="Primary navigation">
-          <a class="nav-item active" href="#pageTitle" aria-current="page">Ask Copilot <span class="nav-live">Live</span></a>
+          <a class="nav-item active" href="#pageTitle" aria-current="page">
+            <span class="nav-icon" aria-hidden="true">＋</span>
+            <span>Ask Copilot</span>
+            <span class="nav-live">Live</span>
+          </a>
         </nav>
 
-        <section class="workspace-identity" aria-labelledby="identityHeading">
-          <div class="section-heading">
-            <p class="eyebrow" id="identityHeading">Workspace identity</p>
-            <span class="status-dot" title="Profile switching is active" aria-label="Profile switching is active"></span>
+        <section class="conversation-section" aria-labelledby="conversationHeading">
+          <div class="rail-section-heading">
+            <p class="eyebrow" id="conversationHeading">Conversations</p>
+            <button id="newChatButton" class="new-chat-button" type="button" aria-label="Start a new conversation" title="Start a new conversation">+</button>
           </div>
-          <label class="field-label" for="profileSelect">Signed in as</label>
-          <select id="profileSelect" class="select" disabled>
-            <option value="">Loading profiles…</option>
-          </select>
-          <p class="access-note"><span aria-hidden="true">✓</span> Access is checked by the service on every request.</p>
+          <nav id="conversationList" class="conversation-list" aria-label="Previous conversations"></nav>
+          <p id="conversationEmpty" class="rail-empty">Your recent conversations will appear here.</p>
         </section>
 
-        <button id="newChatButton" class="primary-action" type="button">+ New chat</button>
-        <nav id="conversationList" class="conversation-list" aria-label="Previous conversations"></nav>
+        <footer class="rail-footer">
+          <span id="serviceStatusIndicator" class="status-dot is-neutral" aria-hidden="true"></span>
+          <span id="serviceStatus">Waiting for an authenticated session</span>
+        </footer>
       </aside>
 
       <main class="chat-workspace" aria-labelledby="pageTitle">
@@ -79,9 +170,10 @@
           <div class="topbar-title">
             <p class="eyebrow">Company knowledge desk</p>
             <h1 id="pageTitle">How can we help today?</h1>
-            <p id="conversationTitle" class="conversation-title">New chat</p>
+            <p id="conversationTitle" class="conversation-title">New conversation</p>
           </div>
           <div class="topbar-actions">
+            <span class="capability-state"><span class="status-dot is-live" aria-hidden="true"></span><span id="capabilityStatus">Server-checked access</span></span>
             <label class="trace-toggle">
               <input id="traceToggle" type="checkbox" />
               <span>Trace</span>
@@ -91,70 +183,44 @@
         </header>
 
         <section class="conversation-status" id="conversationStatus" role="status" aria-live="polite">Ready when you are.</section>
-        <section id="messages" class="messages" aria-live="polite" aria-relevant="additions">
-          <div id="emptyState" class="empty-state">
-            <div class="empty-mark" aria-hidden="true">N1</div>
-            <p class="eyebrow">Start with a question</p>
-            <h2>Find the answer without hunting through folders.</h2>
-            <p>Ask in plain language. Copilot checks your profile first, then searches only the sources you can use.</p>
-            <div class="capability-list" aria-label="Available question types">
-              <div class="capability"><strong>Policies</strong><small>Leave, expenses, remote work</small></div>
-              <div class="capability"><strong>Processes</strong><small>Access, onboarding, approvals</small></div>
-              <div class="capability"><strong>Tickets</strong><small>Check your support requests</small></div>
-            </div>
-          </div>
-        </section>
+        <section id="messages" class="messages" aria-live="polite" aria-relevant="additions"></section>
 
         <section id="suggestions" class="suggestions" aria-labelledby="suggestionsHeading">
           <div class="suggestions-heading">
-            <p class="eyebrow" id="suggestionsHeading">Try a question</p>
-            <span class="suggestions-hint">Select to edit, then send</span>
+            <p class="eyebrow" id="suggestionsHeading">Start with a suggestion</p>
+            <span class="suggestions-hint">Select to edit</span>
           </div>
           <div class="suggestion-grid">
-            <button type="button" data-prompt="How do I request AWS access?"><span class="suggestion-label">Access</span><span>Request AWS access</span><span aria-hidden="true">↗</span></button>
-            <button type="button" data-prompt="Create an IT ticket for AWS sandbox access needed for billing migration."><span class="suggestion-label">Support</span><span>Create an IT ticket</span><span aria-hidden="true">↗</span></button>
-            <button type="button" data-prompt="How do I request annual leave?"><span class="suggestion-label">Policy</span><span>Request annual leave</span><span aria-hidden="true">↗</span></button>
-            <button type="button" data-prompt="What are the Q4 revenue risks?"><span class="suggestion-label">Role-aware</span><span>Review revenue risks</span><span aria-hidden="true">↗</span></button>
-            <button type="button" data-prompt="Show my ticket status."><span class="suggestion-label">Tickets</span><span>Check my ticket status</span><span aria-hidden="true">↗</span></button>
+            <button type="button" data-prompt="How do I request AWS access?"><span class="suggestion-label">Access</span><span>Request AWS access</span><span class="suggestion-arrow" aria-hidden="true">↗</span></button>
+            <button type="button" data-prompt="Create an IT ticket for AWS sandbox access needed for billing migration."><span class="suggestion-label">Support</span><span>Create an IT ticket</span><span class="suggestion-arrow" aria-hidden="true">↗</span></button>
+            <button type="button" data-prompt="How do I request annual leave?"><span class="suggestion-label">Policy</span><span>Request annual leave</span><span class="suggestion-arrow" aria-hidden="true">↗</span></button>
+            <button type="button" data-prompt="What are the Q4 revenue risks?"><span class="suggestion-label">Role-aware</span><span>Review revenue risks</span><span class="suggestion-arrow" aria-hidden="true">↗</span></button>
+            <button type="button" data-prompt="Show my ticket status."><span class="suggestion-label">Tickets</span><span>Check my ticket status</span><span class="suggestion-arrow" aria-hidden="true">↗</span></button>
           </div>
         </section>
 
         <form id="chatForm" class="composer" aria-label="Ask NexusOne Copilot">
           <label class="sr-only" for="messageInput">Your question</label>
           <div class="composer-input-wrap">
-            <textarea id="messageInput" rows="2" maxlength="2000" placeholder="Ask about a policy, process, or ticket…" autocomplete="off"></textarea>
-            <div class="composer-meta"><span>Use plain language</span><span id="characterCount">0 / 2000</span></div>
+            <textarea id="messageInput" rows="1" maxlength="2000" placeholder="Ask about a policy, process, or ticket…" autocomplete="off"></textarea>
+            <div class="composer-meta"><span>Enter a question in plain language</span><span id="characterCount">0 / 2000</span></div>
           </div>
-          <button id="sendButton" class="send-button" type="submit" disabled><span>Send</span><span class="send-icon" aria-hidden="true">↗</span></button>
+          <button id="sendButton" class="send-button" type="submit" disabled>
+            <span>Send</span>
+            <span class="send-icon" aria-hidden="true">↗</span>
+          </button>
         </form>
-        <p class="composer-footnote">Copilot can make mistakes. Check the linked source when the answer matters.</p>
+        <p class="composer-footnote">Copilot can make mistakes. Review the linked source when the answer matters.</p>
       </main>
 
       <aside id="inspector" class="inspector" aria-label="Conversation details">
         <div class="inspector-header">
           <div>
             <p class="eyebrow">Context</p>
-            <h2>Details</h2>
+            <h2>Conversation details</h2>
           </div>
-          <button id="closeInspectorButton" class="icon-button" type="button" aria-label="Close details panel">Close</button>
+          <button id="closeInspectorButton" class="icon-button" type="button" aria-label="Close conversation details">Close</button>
         </div>
-
-        <section class="profile-summary" aria-live="polite">
-          <p class="eyebrow">Signed in as</p>
-          <div class="profile-heading">
-            <div id="profileAvatar" class="avatar" aria-hidden="true">—</div>
-            <div>
-              <h3 id="profileName">Loading profile</h3>
-              <p id="profileTitle">Preparing your workspace</p>
-            </div>
-          </div>
-          <dl>
-            <div><dt>Role</dt><dd id="profileRole">-</dd></div>
-            <div><dt>Department</dt><dd id="profileDepartment">-</dd></div>
-            <div><dt>Location</dt><dd id="profileLocation">-</dd></div>
-          </dl>
-        </section>
-
         <section id="inspectorContent" class="inspector-content">
           <p class="empty-note">Select an answer to inspect sources, ticket details, feedback, and trace output.</p>
         </section>
