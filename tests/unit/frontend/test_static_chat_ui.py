@@ -102,6 +102,19 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn(".message.denied", styles)
         self.assertIn(".message.error", styles)
 
+    def test_professional_workspace_visual_system_is_loaded(self) -> None:
+        styles = (ROOT / "frontend" / "static" / "professional.css").read_text(encoding="utf-8")
+        self.assertIn('href="/professional.css"', self.index_html)
+        self.assertIn("Professional enterprise product layer", styles)
+        self.assertIn(".message.assistant.selected", styles)
+        self.assertIn(".conversation-status::before", styles)
+        self.assertIn("grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr)", styles)
+        self.assertIn(".profile-cards .profile-card:hover", styles)
+        self.assertIn(".skip-link:focus", styles)
+        self.assertIn("formatRole(profile.role)", self.app_js)
+        self.assertIn("@media (max-width: 1400px)", styles)
+        self.assertIn(".inspector.open", styles)
+
 
 if __name__ == "__main__":
     unittest.main()

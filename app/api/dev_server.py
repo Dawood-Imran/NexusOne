@@ -30,6 +30,9 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
         if path == "/styles.css":
             self._send_static(STATIC_ROOT / "styles.css", "text/css; charset=utf-8")
             return
+        if path == "/professional.css":
+            self._send_static(STATIC_ROOT / "professional.css", "text/css; charset=utf-8")
+            return
         if path == "/app.js":
             self._send_static(STATIC_ROOT / "app.js", "application/javascript; charset=utf-8")
             return

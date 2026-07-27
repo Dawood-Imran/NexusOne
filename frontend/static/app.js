@@ -80,7 +80,7 @@ function renderProfileCards() {
       <span class="profile-card-scope"></span>
     `;
     button.querySelector(".profile-card-name").textContent = profile.name;
-    button.querySelector(".profile-card-meta").textContent = `${profile.role} - ${profile.department} - ${profile.location}`;
+    button.querySelector(".profile-card-meta").textContent = `${formatRole(profile.role)} · ${formatRole(profile.department)} · ${profile.location}`;
     button.querySelector(".profile-card-scope").textContent = accessSummary(profile.role);
     button.addEventListener("click", () => signIn(profile.user_id));
     profileCards.appendChild(button);
@@ -779,7 +779,13 @@ function accessSummary(role) {
 }
 
 function formatRole(role) {
-  return String(role || "").replaceAll("_", " ");
+  const formatted = String(role || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+  return formatted
+    .replace(/\bHr\b/g, "HR")
+    .replace(/\bIt\b/g, "IT")
+    .replace(/\bCeo\b/g, "CEO");
 }
 
 function initials(name) {

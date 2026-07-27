@@ -4,7 +4,7 @@
 
 - State: in-progress
 - Active phase: Phase 4 - Ticket Actions and Feedback / integration validation
-- Last run: integrated full unit suite, focused frontend/action checks, compile checks, and local HTTP smoke passed; browser validation was not run because no browser harness/tooling is available
+- Last run: professional UI pass added a dedicated visual layer, responsive inspector drawer at <=1400px, corrected role labels, and hidden-until-focus skip navigation; static frontend checks and the full unit suite pass (84 tests). Local HTTP checks confirm the new stylesheet is served. Browser visual review identified and addressed the desktop clipping caused by the three-column layout; a later browser-profile reload reported unavailable while direct local API checks continued to pass.
 - Integration note: `docs/requirements-coverage.md` is retained as the frontend/audit branch's durable R1-R14 evidence matrix; the integrated UI preserves the action-aware conversation inspector and adds its explicit loading, denied, no-answer, error/retry, responsive, and profile-switching states.
 - Main risks:
   - FastAPI/React production adapters are not wired yet; the app still uses a framework-independent service layer plus stdlib dev server.
