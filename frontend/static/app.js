@@ -44,6 +44,8 @@ const accountDetailDepartment = document.querySelector("#accountDetailDepartment
 const accountDetailLocation = document.querySelector("#accountDetailLocation");
 const accountDetailEmail = document.querySelector("#accountDetailEmail");
 const newChatButton = document.querySelector("#newChatButton");
+const conversationRail = document.querySelector("#conversationRail");
+const leftSidebarToggle = document.querySelector("#leftSidebarToggle");
 const conversationList = document.querySelector("#conversationList");
 const conversationEmpty = document.querySelector("#conversationEmpty");
 const conversationTitle = document.querySelector("#conversationTitle");
@@ -219,8 +221,11 @@ function enterWorkspace(account, sessionToken = null) {
   renderConversationList();
   renderActiveConversation();
   setConversationStatus("Ready when you are.");
-  setServiceState("Authenticated session · server permissions enabled", "live");
-  capabilityStatus.textContent = "Server-checked access";
+  setServiceState("Session ready", "live");
+  capabilityStatus.textContent = "Access checked";
+  setSidebarExpanded(true);
+  if (window.matchMedia("(min-width: 981px)").matches) openInspector();
+  else closeInspector();
   setComposerAvailability();
   autoResizeComposer();
   messageInput.focus();
@@ -423,7 +428,7 @@ function renderEmptyState() {
 function renderMessage(message) {
   const statusClass = message.status === "denied"
     ? "denied"
-    : message.status === "error"
+    : ["error", "refused"].includes(message.status)
       ? "error"
       : message.status === "no_answer"
         ? "no-answer"
@@ -460,14 +465,30 @@ function renderMessage(message) {
   article.appendChild(meta);
   article.appendChild(body);
   if (message.ticket) article.appendChild(renderTicketSummary(message.ticket));
+  else if (message.category === "own_ticket" && ["error", "refused"].includes(message.status)) article.appendChild(renderTicketStatusState());
+  if (message.trace?.length || message.subgraph_trace?.length) {
+    article.appendChild(renderTrace(message.trace || [], message.subgraph_trace || [], message.trace_expanded !== false, (expanded) => {
+      message.trace_expanded = expanded;
+      saveConversations();
+    }));
+  }
   if (message.status === "denied") article.appendChild(renderDeniedNextStep(message));
   if (message.status === "no_answer") article.appendChild(renderNoAnswerNextStep());
-  if (message.status === "error") article.appendChild(renderRetry(message.request_text || state.lastSubmittedText));
-  if (message.role === "assistant" && !["error", "ready"].includes(message.status)) article.appendChild(renderFeedbackControls(message));
+  if (["error", "refused"].includes(message.status)) article.appendChild(renderRetry(message.request_text || state.lastSubmittedText, message.status === "refused" ? "Status unavailable" : "Connection issue"));
+  if (message.role === "assistant" && !["error", "refused", "ready"].includes(message.status)) article.appendChild(renderFeedbackControls(message));
   return article;
 }
 
 function selectAssistantMessage(messageId) {
+  const conversation = activeConversation();
+  if (conversation) {
+    conversation.messages.forEach((message) => {
+      if (message.role === "assistant" && (message.trace?.length || message.subgraph_trace?.length)) {
+        message.trace_expanded = message.id === messageId;
+      }
+    });
+    saveConversations();
+  }
   state.selectedAssistantMessageId = messageId;
   renderInspector();
   messages.querySelectorAll(".message.assistant").forEach((node) => node.classList.remove("selected"));
@@ -477,6 +498,9 @@ function selectAssistantMessage(messageId) {
 function addUserMessage(text) {
   const conversation = activeConversation();
   if (!conversation) return;
+  conversation.messages.forEach((message) => {
+    if (message.role === "assistant") message.trace_expanded = false;
+  });
   conversation.messages.push({ id: `user-${Date.now()}`, role: "user", message: text });
   conversation.updatedAt = new Date().toISOString();
   if (conversation.title === "New conversation") conversation.title = summarizeTitle(text);
@@ -516,8 +540,11 @@ function addAssistantMessage(payload) {
     sql_execution: payload.sql_execution || null,
     model_backend: payload.model_backend || null,
     capabilities: payload.capabilities || null,
+    route: payload.route || null,
+    category: payload.category || null,
     subgraph_trace: payload.subgraph_trace || [],
-    ticket: payload.ticket || null,
+    ticket: sanitizeTicket(payload.ticket),
+    trace_expanded: Boolean(payload.trace?.length || payload.subgraph_trace?.length),
     missing_fields: payload.missing_fields || [],
     allowed_alternatives: payload.allowed_alternatives || [],
     trace: payload.trace || [],
@@ -543,13 +570,33 @@ function collectSourceItems(payload) {
   return [...citations, ...sources];
 }
 
+function sanitizeTicket(ticket) {
+  if (!ticket || typeof ticket !== "object") return null;
+  const safe = {};
+  ["ticket_id", "department", "category", "priority", "created_at", "updated_at"].forEach((field) => {
+    if (ticket[field] != null && String(ticket[field]).trim()) safe[field] = String(ticket[field]).trim();
+  });
+  if (ticket.status != null) safe.status = safeTicketStatus(ticket.status) || "unavailable";
+  return Object.keys(safe).length ? safe : null;
+}
+
+function safeTicketStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  const allowed = new Set(["created", "open", "in progress", "pending", "waiting on user", "resolved", "closed", "error", "unavailable"]);
+  if (!allowed.has(normalized.replaceAll("_", " "))) return normalized.length <= 24 && /^[a-z0-9 -]+$/.test(normalized) ? normalized : null;
+  return normalized.replaceAll("_", " ");
+}
+
 function renderTicketSummary(ticket) {
+  const safeTicket = sanitizeTicket(ticket);
+  if (!safeTicket) return document.createDocumentFragment();
+  if (!safeTicket.status) safeTicket.status = "unavailable";
   const section = document.createElement("section");
   section.className = "ticket-summary";
   const title = document.createElement("h3");
-  title.textContent = "Ticket created";
+  title.textContent = safeTicket.status === "error" || safeTicket.status === "unavailable" ? "Ticket status" : "Ticket details";
   const list = document.createElement("dl");
-  [["ID", ticket.ticket_id], ["Status", ticket.status], ["Team", ticket.department], ["Category", ticket.category], ["Priority", ticket.priority]].forEach(([label, value]) => {
+  [["ID", safeTicket.ticket_id], ["Status", safeTicket.status], ["Team", safeTicket.department], ["Category", safeTicket.category], ["Priority", safeTicket.priority], ["Updated", safeTicket.updated_at]].forEach(([label, value]) => {
     if (!value) return;
     const row = document.createElement("div");
     const term = document.createElement("dt");
@@ -562,6 +609,18 @@ function renderTicketSummary(ticket) {
   });
   section.appendChild(title);
   section.appendChild(list);
+  return section;
+}
+
+function renderTicketStatusState() {
+  const section = document.createElement("section");
+  section.className = "ticket-summary ticket-status-unavailable";
+  const title = document.createElement("h3");
+  title.textContent = "Ticket status";
+  const status = document.createElement("p");
+  status.textContent = "Status unavailable";
+  section.appendChild(title);
+  section.appendChild(status);
   return section;
 }
 
@@ -650,14 +709,36 @@ function selectSource(referenceId) {
   source.focus({ preventScroll: true });
 }
 
-function openInspector() {
-  inspector.classList.add("open");
-  mobileInspectorButton.setAttribute("aria-expanded", "true");
-}
-
 function closeInspector() {
   inspector.classList.remove("open");
+  inspector.classList.add("is-collapsed");
+  appView.classList.add("right-inspector-collapsed");
   mobileInspectorButton.setAttribute("aria-expanded", "false");
+  mobileInspectorButton.setAttribute("aria-label", "Show conversation details");
+  mobileInspectorButton.textContent = "Show details";
+  closeInspectorButton.setAttribute("aria-label", "Expand conversation details");
+  closeInspectorButton.textContent = "Show details";
+  if (document.activeElement !== mobileInspectorButton && document.activeElement !== messageInput) mobileInspectorButton.focus();
+}
+
+function openInspector() {
+  inspector.classList.remove("is-collapsed");
+  inspector.classList.add("open");
+  appView.classList.remove("right-inspector-collapsed");
+  mobileInspectorButton.setAttribute("aria-expanded", "true");
+  mobileInspectorButton.setAttribute("aria-label", "Hide conversation details");
+  mobileInspectorButton.textContent = "Hide details";
+  closeInspectorButton.setAttribute("aria-label", "Collapse conversation details");
+  closeInspectorButton.textContent = "Hide details";
+}
+
+function setSidebarExpanded(expanded) {
+  conversationRail.classList.toggle("is-collapsed", !expanded);
+  appView.classList.toggle("left-sidebar-collapsed", !expanded);
+  leftSidebarToggle.setAttribute("aria-expanded", String(expanded));
+  leftSidebarToggle.setAttribute("aria-label", expanded ? "Collapse navigation" : "Expand navigation");
+  leftSidebarToggle.querySelector(".sidebar-toggle-label").textContent = expanded ? "Collapse navigation" : "Expand navigation";
+  leftSidebarToggle.querySelector(".sidebar-toggle-icon").textContent = expanded ? "‹" : "›";
 }
 
 function renderInspector() {
@@ -668,6 +749,7 @@ function renderInspector() {
     return;
   }
   if (message.ticket) inspectorContent.appendChild(renderTicketSummary(message.ticket));
+  else if (message.category === "own_ticket" && ["error", "refused"].includes(message.status)) inspectorContent.appendChild(renderTicketStatusState());
   if (message.rows.length) inspectorContent.appendChild(renderStructuredRows(message));
   const sourceItems = collectSourceItems(message);
   if (sourceItems.length) inspectorContent.appendChild(renderSources(sourceItems));
@@ -688,25 +770,20 @@ function renderInspector() {
   }
   const meta = document.createElement("section");
   meta.className = "detail-section";
-  const capabilities = message.capabilities || {};
-  const sqlCapability = capabilities.sql || {};
-  const answerCapability = capabilities.answer_composer || {};
-  const plannerCapability = capabilities.sql_planner || {};
   meta.innerHTML = `
     <h3>Answer metadata</h3>
     <dl>
       <div><dt>Status</dt><dd>${escapeHtml(message.status || "answered")}</dd></div>
-      <div><dt>Reason</dt><dd>${escapeHtml(message.reason_code || "-")}</dd></div>
       <div><dt>Latency</dt><dd>${message.latency_ms == null ? "-" : `${message.latency_ms}ms`}</dd></div>
-      <div><dt>Model backend</dt><dd>${escapeHtml(message.model_backend || "-")}</dd></div>
-      <div><dt>Answer mode</dt><dd>${escapeHtml(answerCapability.provider || "-")} · ${escapeHtml(answerCapability.mode || "-")} · ${escapeHtml(answerCapability.model || "-")}</dd></div>
-      <div><dt>SQL capability</dt><dd>${escapeHtml(sqlCapability.status || sqlCapability.mode || "not used")} · ${message.row_count || 0} row(s)</dd></div>
-      <div><dt>SQL planner</dt><dd>${escapeHtml(plannerCapability.provider || "-")} · ${escapeHtml(plannerCapability.mode || "-")}</dd></div>
+      <div><dt>Structured rows</dt><dd>${message.row_count || 0}</dd></div>
       <div><dt>Feedback</dt><dd>${escapeHtml(message.feedback || "Not submitted")}</dd></div>
     </dl>`;
   inspectorContent.appendChild(meta);
   if ((message.trace && message.trace.length) || (message.subgraph_trace && message.subgraph_trace.length)) {
-    inspectorContent.appendChild(renderTrace(message.trace || [], message.subgraph_trace || []));
+    inspectorContent.appendChild(renderTrace(message.trace || [], message.subgraph_trace || [], message.trace_expanded !== false, (expanded) => {
+      message.trace_expanded = expanded;
+      saveConversations();
+    }));
   }
 }
 
@@ -725,7 +802,7 @@ function renderStructuredRows(message) {
   const section = document.createElement("section");
   section.className = "structured-results";
   const title = document.createElement("h3");
-  title.textContent = `Live structured data · ${message.row_count || message.rows.length} row(s)`;
+  title.textContent = `Structured data · ${message.row_count || message.rows.length} row(s)`;
   section.appendChild(title);
   const wrapper = document.createElement("div");
   wrapper.className = "structured-results-scroll";
@@ -814,9 +891,14 @@ function sourceMeta(item) {
   return details.join(" · ");
 }
 
-function renderTrace(trace, subgraphTrace = []) {
-  const section = document.createElement("section");
+function renderTrace(trace, subgraphTrace = [], expanded = true, onToggle = null) {
+  const section = document.createElement("details");
   section.className = "trace";
+  section.open = expanded;
+  const summary = document.createElement("summary");
+  summary.textContent = "Trace for this answer";
+  summary.addEventListener("click", (event) => event.stopPropagation());
+  section.appendChild(summary);
   const title = document.createElement("h3");
   title.textContent = "Graph trace";
   section.appendChild(title);
@@ -827,6 +909,7 @@ function renderTrace(trace, subgraphTrace = []) {
     section.appendChild(subgraphTitle);
     section.appendChild(renderTraceList(subgraphTrace));
   }
+  if (onToggle) section.addEventListener("toggle", () => onToggle(section.open));
   return section;
 }
 
@@ -868,11 +951,11 @@ function renderNoAnswerNextStep() {
   return section;
 }
 
-function renderRetry(text) {
+function renderRetry(text, titleText = "Connection issue") {
   const section = document.createElement("section");
   section.className = "message-next-step";
   const title = document.createElement("h3");
-  title.textContent = "Connection issue";
+  title.textContent = titleText;
   const retry = document.createElement("button");
   retry.type = "button";
   retry.className = "retry-button";
@@ -950,29 +1033,17 @@ async function sendMessage(text, options = {}) {
 function updateResponseStatus(payload) {
   if (payload.status === "denied") {
     setConversationStatus("This request was stopped before restricted sources were searched.");
-  } else if (payload.status === "error") {
+  } else if (payload.status === "error" || payload.status === "refused") {
     setConversationStatus("The request needs attention.", "error");
   } else if (payload.status === "no_answer") {
     setConversationStatus("No approved source matched that question.");
   } else {
-    setConversationStatus("Answer ready. Review the approved sources below it.");
+    setConversationStatus("Answer received.");
   }
 }
 
-function updateCapabilityStatus(payload) {
-  const answer = payload?.capabilities?.answer_composer;
-  const sql = payload?.capabilities?.sql;
-  if (answer) {
-    const answerLabel = `${answer.provider || "Answer"} · ${answer.mode || "configured"}`;
-    const sqlLabel = sql ? ` · SQL ${sql.status || sql.mode || "not used"}` : "";
-    capabilityStatus.textContent = `${answerLabel}${sqlLabel}`;
-  } else if (payload?.model || payload?.backend) {
-    capabilityStatus.textContent = `${payload.backend || "Model"} · server permissions`;
-  } else if (payload?.status === "error") {
-    capabilityStatus.textContent = "Chat service needs attention";
-  } else {
-    capabilityStatus.textContent = "Server-checked access";
-  }
+function updateCapabilityStatus() {
+  capabilityStatus.textContent = "Access checked";
 }
 
 function setConversationStatus(text, stateName = "") {
@@ -1055,7 +1126,7 @@ function payloadMessage(payload) {
 }
 
 function statusLabel(status) {
-  const labels = { answered: "Ready", denied: "Access limited", error: "Needs attention", no_answer: "No match", ready: "Ready" };
+  const labels = { answered: "Ready", denied: "Access limited", error: "Needs attention", refused: "Needs attention", no_answer: "No match", ready: "Ready" };
   return labels[status] || "Response";
 }
 
@@ -1082,7 +1153,16 @@ accountButton.addEventListener("click", toggleAccountPopover);
 accountButton.addEventListener("focus", openAccountPopover);
 logoutButton.addEventListener("click", logout);
 newChatButton.addEventListener("click", startNewChat);
-mobileInspectorButton.addEventListener("click", openInspector);
+leftSidebarToggle.addEventListener("click", () => {
+  const expanded = leftSidebarToggle.getAttribute("aria-expanded") === "true";
+  setSidebarExpanded(!expanded);
+  leftSidebarToggle.focus();
+});
+mobileInspectorButton.addEventListener("click", () => {
+  const expanded = mobileInspectorButton.getAttribute("aria-expanded") === "true";
+  if (expanded) closeInspector();
+  else openInspector();
+});
 closeInspectorButton.addEventListener("click", closeInspector);
 chatForm.addEventListener("submit", (event) => {
   event.preventDefault();

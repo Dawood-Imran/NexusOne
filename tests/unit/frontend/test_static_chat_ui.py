@@ -32,7 +32,7 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("rows: Array.isArray(payload.rows) ? payload.rows : [],", self.app_js)
         self.assertIn("function renderStructuredRows(message)", self.app_js)
         self.assertIn("cell.textContent = String(value);", self.app_js)
-        self.assertIn("Live structured data", self.app_js)
+        self.assertIn("Structured data", self.app_js)
 
     def test_combined_responses_render_citations_and_sql_sources(self) -> None:
         self.assertIn("function collectSourceItems(payload)", self.app_js)
@@ -98,9 +98,9 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("function renderTicketSummary(ticket)", self.app_js)
         self.assertIn("function renderFeedbackControls(payload)", self.app_js)
         self.assertIn('fetch("/api/feedback"', self.app_js)
-        self.assertIn("function renderTrace(trace, subgraphTrace = [])", self.app_js)
+        self.assertIn("function renderTrace(trace, subgraphTrace = [], expanded = true, onToggle = null)", self.app_js)
         self.assertIn("function renderDeniedNextStep(payload)", self.app_js)
-        self.assertIn("function renderRetry(text)", self.app_js)
+        self.assertIn("function renderRetry(text, titleText = \"Connection issue\")", self.app_js)
 
     def test_trace_inspector_distinguishes_graph_and_sql_subgraph(self) -> None:
         self.assertIn("subgraph_trace: payload.subgraph_trace || [],", self.app_js)
@@ -113,9 +113,41 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("function closeInspector()", self.app_js)
         self.assertIn("mobileInspectorButton.setAttribute(\"aria-expanded\", \"true\");", self.app_js)
         self.assertIn("mobileInspectorButton.setAttribute(\"aria-expanded\", \"false\");", self.app_js)
+        self.assertIn("mobileInspectorButton.focus();", self.app_js)
 
     def test_ready_message_does_not_show_feedback_controls(self) -> None:
-        self.assertIn("![\"error\", \"ready\"].includes(message.status)", self.app_js)
+        self.assertIn("![\"error\", \"refused\", \"ready\"].includes(message.status)", self.app_js)
+
+    def test_requested_shell_copy_and_provider_diagnostics_are_not_user_facing(self) -> None:
+        self.assertNotIn(">Ask Copilot<", self.index_html)
+        self.assertNotIn(">Live<", self.index_html)
+        self.assertNotIn("Answer ready. Review the approved sources below it.", self.app_js)
+        self.assertNotIn("Enter a question in plain language", self.index_html)
+        self.assertNotIn("Waiting for an authenticated session", self.index_html)
+        self.assertNotIn("configured_with_fallback", self.index_html)
+        self.assertNotIn("configured_with_fallback", self.app_js)
+        self.assertNotIn("SQL capability", self.app_js)
+        self.assertIn('capabilityStatus.textContent = "Access checked"', self.app_js)
+
+    def test_ticket_cards_are_structured_and_error_states_are_concise(self) -> None:
+        self.assertIn("function sanitizeTicket(ticket)", self.app_js)
+        self.assertIn('function safeTicketStatus(value)', self.app_js)
+        self.assertIn('function renderTicketStatusState()', self.app_js)
+        self.assertIn('status.textContent = "Status unavailable"', self.app_js)
+        self.assertIn('ticket: sanitizeTicket(payload.ticket)', self.app_js)
+        self.assertNotIn("ticket.message", self.app_js)
+        self.assertNotIn("ticket.error", self.app_js)
+
+    def test_each_answer_owns_a_reopenable_trace_and_new_questions_collapse_previous(self) -> None:
+        self.assertIn("trace_expanded: Boolean(payload.trace?.length || payload.subgraph_trace?.length)", self.app_js)
+        self.assertIn("message.trace_expanded = false", self.app_js)
+        self.assertIn('summary.textContent = "Trace for this answer"', self.app_js)
+        self.assertIn('section.className = "trace"', self.app_js)
+        self.assertIn('section.addEventListener("toggle", () => onToggle(section.open))', self.app_js)
+        self.assertIn('function setSidebarExpanded(expanded)', self.app_js)
+        self.assertIn('leftSidebarToggle.setAttribute("aria-expanded", String(expanded))', self.app_js)
+        self.assertIn('id="leftSidebarToggle"', self.index_html)
+        self.assertIn('aria-controls="conversationRail"', self.index_html)
 
     def test_shell_has_accessible_profile_context_and_composer_states(self) -> None:
         self.assertIn('aria-label="NexusOne Copilot workspace"', self.index_html)
@@ -153,6 +185,7 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn('@media (max-width: 480px)', self.styles)
         self.assertIn('@media (prefers-reduced-motion: reduce)', self.styles)
         self.assertIn(".inspector.open", self.styles)
+        self.assertIn(".conversation-rail.is-collapsed", (ROOT / "frontend" / "static" / "professional.css").read_text(encoding="utf-8"))
         self.assertIn("touch-action: manipulation", self.styles)
         self.assertIn("min-height: 46px", self.styles)
         self.assertIn(".message.denied", self.styles)
@@ -167,7 +200,7 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr)", styles)
         self.assertIn(".profile-cards .profile-card:hover", styles)
         self.assertIn(".skip-link:focus", styles)
-        self.assertIn("function formatRole(role)", self.app_js)
+        self.assertIn("formatRole(account.role)", self.app_js)
         self.assertIn("@media (max-width: 1400px)", styles)
         self.assertIn(".inspector.open", styles)
 
