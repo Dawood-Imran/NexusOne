@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NexusOne Frontend Redesign Review</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f3ee;
+        --surface: #ffffff;
+        --surface-muted: #f8f7f4;
+        --text: #1d2521;
+        --muted: #66716b;
+        --line: #d9ddd6;
+        --brand: #245b4a;
+        --brand-strong: #184135;
+        --accent: #b25736;
+        --danger: #8f2f2f;
+        --focus: #2d6cdf;
+        --shadow: 0 16px 40px rgba(32, 38, 35, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+      }
+
+      main {
+        display: grid;
+        gap: 24px;
+        width: min(1180px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 32px 0 56px;
+      }
+
+      .hero,
+      .section {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+        min-height: 360px;
+      }
+
+      .hero-copy {
+        padding: 34px;
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 760px;
+        margin-bottom: 16px;
+        font-size: clamp(34px, 5vw, 58px);
+        line-height: 1.02;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin-bottom: 12px;
+        font-size: 24px;
+        letter-spacing: 0;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 16px;
+        letter-spacing: 0;
+      }
+
+      p,
+      li {
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .hero-copy p {
+        max-width: 700px;
+        font-size: 17px;
+      }
+
+      .login-preview {
+        display: grid;
+        align-content: center;
+        gap: 16px;
+        padding: 26px;
+        border-left: 1px solid var(--line);
+        background: var(--surface-muted);
+      }
+
+      .login-box {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .input,
+      .button {
+        min-height: 42px;
+        border-radius: 8px;
+        font: inherit;
+      }
+
+      .input {
+        border: 1px solid var(--line);
+        background: var(--surface);
+        padding: 0 12px;
+        color: var(--text);
+      }
+
+      .button {
+        border: 0;
+        background: var(--brand);
+        color: #fff;
+        font-weight: 800;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 18px;
+      }
+
+      .chip {
+        display: inline-flex;
+        min-height: 30px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--surface-muted);
+        color: var(--brand-strong);
+        padding: 0 10px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .section {
+        padding: 24px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-muted);
+      }
+
+      .screen {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr) 300px;
+        min-height: 520px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+
+      .rail {
+        padding: 16px;
+        border-right: 1px solid var(--line);
+        background: #fcfbf8;
+      }
+
+      .chat {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        min-width: 0;
+      }
+
+      .context {
+        padding: 16px;
+        border-left: 1px solid var(--line);
+        background: var(--surface-muted);
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .conversation {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .conversation button {
+        width: 100%;
+        min-height: 48px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text);
+        text-align: left;
+        padding: 8px 10px;
+      }
+
+      .conversation .active {
+        border-color: #cbd9d1;
+        background: #edf5f0;
+      }
+
+      .message {
+        max-width: 70%;
+        margin: 16px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-muted);
+      }
+
+      .message.user {
+        justify-self: end;
+        background: #eef7f3;
+      }
+
+      .composer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 92px;
+        gap: 10px;
+        padding: 14px;
+        border-top: 1px solid var(--line);
+      }
+
+      .question-list {
+        display: grid;
+        gap: 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .question-list li {
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-muted);
+      }
+
+      .question-list strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--text);
+      }
+
+      .warning {
+        border-color: #e3c4b5;
+        background: #fff8f3;
+      }
+
+      @media (max-width: 980px) {
+        .hero,
+        .screen {
+          grid-template-columns: 1fr;
+        }
+
+        .login-preview,
+        .context,
+        .rail {
+          border-left: 0;
+          border-right: 0;
+          border-top: 1px solid var(--line);
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .message {
+          max-width: 88%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">NexusOne frontend redesign</p>
+          <h1>Move from demo shell to authenticated work app.</h1>
+          <p>
+            The current interface starts directly in chat with a role selector. The target product
+            should start with a controlled demo login, land users in a conversation workspace, and
+            let them switch between prior chats without losing role context, sources, tickets, or
+            feedback state.
+          </p>
+          <div class="chips">
+            <span class="chip">Authentication first</span>
+            <span class="chip">Conversation history</span>
+            <span class="chip">Role-aware workspace</span>
+            <span class="chip">Source and ticket panels</span>
+          </div>
+        </div>
+        <aside class="login-preview" aria-label="Authentication preview">
+          <div class="login-box">
+            <p class="eyebrow">Proposed entry</p>
+            <h2>Sign in to NexusOne</h2>
+            <div class="field">
+              <label>Demo identity</label>
+              <div class="input">Ayesha Khan - employee</div>
+            </div>
+            <div class="field">
+              <label>Access mode</label>
+              <div class="input">Role-based demo session</div>
+            </div>
+            <button class="button">Continue to Copilot</button>
+          </div>
+        </aside>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Target user flow</p>
+        <div class="grid">
+          <article class="card">
+            <h3>1. Authentication</h3>
+            <p>Profile selection belongs on a sign-in screen, not permanently as the primary app control.</p>
+          </article>
+          <article class="card">
+            <h3>2. Conversation hub</h3>
+            <p>After sign-in, users land in a workspace with prior conversations, new chat, and clear role context.</p>
+          </article>
+          <article class="card">
+            <h3>3. Chat + context</h3>
+            <p>The chat view should preserve sources, ticket summaries, feedback, and trace/debug state per conversation.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Proposed workspace composition</p>
+        <div class="screen">
+          <aside class="rail">
+            <h3>Conversations</h3>
+            <button class="button">New chat</button>
+            <div class="conversation">
+              <button class="active">AWS access request<br /><small>Today - employee</small></button>
+              <button>Ticket IT-1048<br /><small>Yesterday - employee</small></button>
+              <button>Leave policy<br /><small>Feb 14 - employee</small></button>
+            </div>
+          </aside>
+          <section class="chat">
+            <header class="topbar">
+              <div>
+                <h3>AWS access request</h3>
+                <p class="eyebrow">Ayesha Khan - employee - engineering</p>
+              </div>
+              <span class="chip">Trace off</span>
+            </header>
+            <div>
+              <div class="message">How do I request AWS sandbox access?</div>
+              <div class="message user">Create an IT ticket for AWS sandbox access.</div>
+              <div class="message">Created ticket IT-1048 for it / cloud_access. Status is open.</div>
+            </div>
+            <div class="composer">
+              <div class="input">Ask about policies, tickets, or source-backed procedures</div>
+              <button class="button">Send</button>
+            </div>
+          </section>
+          <aside class="context">
+            <h3>Context panel</h3>
+            <p>Show selected conversation metadata, role permissions, citations, ticket state, and feedback history.</p>
+            <div class="card">
+              <strong>Source [1]</strong>
+              <p>AWS Access Request - updated 2026-02-02</p>
+            </div>
+            <div class="card">
+              <strong>Ticket</strong>
+              <p>IT-1048 - open - normal priority</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Grilling questions</p>
+        <h2>Answer these before implementation so the frontend does not drift again.</h2>
+        <ul class="question-list">
+          <li>
+            <strong>1. Is login a fake demo selector or a real credential flow?</strong>
+            Recommended for this project: fake demo login with profile cards, because backend auth is not in scope yet.
+          </li>
+          <li>
+            <strong>2. Should conversations persist across page refresh?</strong>
+            Recommended: yes, use localStorage first; DB persistence can come after the UX is accepted.
+          </li>
+          <li>
+            <strong>3. Are conversations scoped per user profile?</strong>
+            Recommended: yes. Switching from employee to CEO should not show the employee's prior chat thread.
+          </li>
+          <li>
+            <strong>4. What should the default post-login screen be?</strong>
+            Recommended: latest conversation if it exists, otherwise a blank new chat with suggested tasks.
+          </li>
+          <li>
+            <strong>5. Where should citations, tickets, and trace live?</strong>
+            Recommended: right context panel on desktop; collapsible details below messages on mobile.
+          </li>
+          <li class="warning">
+            <strong>6. Are we allowed to keep the role-switcher after login?</strong>
+            My recommendation: only expose it through a demo account menu, because a permanent role selector makes the app feel fake.
+          </li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <p class="eyebrow">Implementation proposal</p>
+        <div class="grid">
+          <article class="card">
+            <h3>Phase A</h3>
+            <p>Replace first screen with authentication/demo profile selection and session state.</p>
+          </article>
+          <article class="card">
+            <h3>Phase B</h3>
+            <p>Add conversation list, new chat, rename/archive/delete, active conversation state, and local persistence.</p>
+          </article>
+          <article class="card">
+            <h3>Phase C</h3>
+            <p>Refactor chat layout into conversation workspace with context panel, responsive mobile behavior, and Playwright checks.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

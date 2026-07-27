@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.agents.orchestrator.action_routing import wants_ticket_creation
 from app.agents.orchestrator.state import RouteName
 
 
@@ -40,6 +41,8 @@ def route_message(message: str) -> RouteName:
     """Choose graph route using deterministic, testable rules."""
 
     lowered = message.lower()
+    if wants_ticket_creation(message):
+        return "ticket_create"
     has_structured = any(term in lowered for term in STRUCTURED_TERMS)
     has_rag = any(term in lowered for term in RAG_TERMS)
     asks_two_things = " and " in lowered or " also " in lowered

@@ -97,27 +97,35 @@ scripts/
 
 ## Current Task
 
-Continue Phase 2 and then move into the main LangGraph orchestrator.
+Continue Phase 4 ticket actions, feedback, and audit hardening.
 
-Phase 1 current state:
+Current app state:
 
 - `app/auth/profiles.py` provides fake profile switching data.
 - `app/guardrails/policy.py` enforces pre-retrieval role denials and prompt-injection handling.
 - `app/retrieval/local_kb.py` provides permission-aware Markdown KB retrieval with citations.
 - `app/retrieval/chunk_index.py` reads generated chunk metadata and provides permission-aware metadata-backed retrieval across Markdown and PDF-source chunks.
 - `app/agents/orchestrator/` contains the main LangGraph workflow for user loading, guardrail precheck, deterministic routing, SQL subgraph calls, RAG retrieval, answer validation, and final response packaging.
+- `app/actions/` contains deterministic ticket, feedback, and audit services with in-memory repositories for tests/no-DB demos and SQLAlchemy repositories for configured Postgres writes.
+- Ticket creation requests route to `ticket_create`, then `run_ticket_action`, then validation, final answer composition, and final response packaging. They do not call RAG or the SQL subgraph.
 - RAG answers now include inline source markers such as `[1]`, and citation payloads include the permitted source chunk text for frontend source cards.
 - Graph invocations now attach LangSmith-compatible run config with safe metadata, tags, and run names while excluding message text, final answers, SQL text, and source chunks from metadata.
-- `app/services/chat_service.py` delegates chat requests to the main orchestrator while keeping the frontend/API response contract stable.
-- `app/api/dev_server.py` exposes `/api/profiles` and `/api/chat` through a stdlib HTTP server.
-- `frontend/static/` contains the current static frontend shell. Combined SQL+RAG answers now render both document citations and SQL source metadata instead of hiding SQL sources when citations exist.
-- `tests/unit/services/` covers guardrail policy, local KB permissions, and chat service behavior.
+- `app/services/chat_service.py` delegates chat requests to the main orchestrator, submits feedback, and writes safe audit metadata with redacted query text.
+- `app/api/dev_server.py` exposes `/api/profiles`, `/api/chat`, and `/api/feedback` through a stdlib HTTP server.
+- `frontend/static/` contains an auth-first static frontend. Users choose a demo profile on a sign-in screen, then enter a profile-scoped conversation workspace with previous chats, central chat, and a right inspector for sources, tickets, feedback, and trace output.
+- `tests/unit/` covers guardrail policy, local KB permissions, chat service behavior, action services, graph ticket routing, frontend contracts, ingestion, observability, and retrieval.
 
 Latest verification:
 
-- `./venv/bin/python -m unittest discover -s tests -p 'test_*.py'` passed with 61 tests.
+- `./venv/bin/python -m unittest discover -s tests -p 'test_*.py'` passed with 77 tests.
+- `node --check frontend/static/app.js` passed after the frontend state rewrite.
 - `./venv/bin/python -m compileall app scripts` passed.
+- `./venv/bin/python -m unittest tests.unit.actions.test_ticket_service tests.unit.actions.test_feedback_service tests.unit.actions.test_audit_service tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service tests.unit.frontend.test_static_chat_ui` passed with 28 focused Phase 4 tests.
 - `./venv/bin/python -m unittest tests.unit.agents.orchestrator.test_graph tests.unit.frontend.test_static_chat_ui tests.unit.services.test_chat_service` passed with 14 focused Phase 3 tests.
+- `./venv/bin/python scripts/run_orchestrator.py --deterministic-composer --user-id u001 --trace "Create an IT ticket for AWS sandbox access needed for billing migration."` returned `ticket_created` with safe ticket fields and no RAG/SQL nodes in the graph trace.
+- `./venv/bin/python scripts/smoke_phase4_actions.py` passed against live Postgres outside the sandbox. It created ticket `IT-1047`, feedback `1`, and audit `1`, and verified rows in `tickets`, `ticket_events`, `feedback`, and `audit_logs`.
+- Local HTTP API smoke on `http://127.0.0.1:8011` passed outside the sandbox: `/api/chat` created ticket `IT-1048`, `/api/feedback` stored feedback `2`, and incomplete ticket creation returned `needs_clarification`.
+- Local static asset smoke on `http://127.0.0.1:8012` confirmed the redesigned auth view, app view, conversation list, inspector, and profile-scoped conversation JavaScript markers are served.
 - `./venv/bin/python scripts/build_rag_index.py` wrote 106 chunks from 71 documents and generated `data/faiss/nexusone_chunks.index` with `faiss_status=written`.
 - `./venv/bin/python scripts/run_orchestrator.py --user-id u001 --execute-sql "What holidays apply in Pakistan?"` returned 3 live Postgres holiday rows when run outside the sandbox.
 - Local `/api/chat` smoke test returned `From AWS Access Request [1]:` and citation `[1]` included the AWS chunk text containing the ticket request step.
@@ -126,7 +134,7 @@ Latest verification:
 
 Next implementation step:
 
-Continue Phase 3 with broader combined SQL+RAG/E2E coverage, then move into Phase 4 ticket actions/feedback.
+Continue Phase 4 with browser-level E2E review for ticket creation and feedback UX. Playwright is not currently available through MCP or the local venv.
 
 SQL repair-loop graph artifacts:
 

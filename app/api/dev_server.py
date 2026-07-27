@@ -40,6 +40,9 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
         self._send_json({"status": "error", "message": "Not found."}, HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API.
+        if self.path == "/api/feedback":
+            self._handle_feedback()
+            return
         if self.path != "/api/chat":
             self._send_json({"status": "error", "message": "Not found."}, HTTPStatus.NOT_FOUND)
             return
@@ -51,6 +54,21 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
                 include_trace=bool(body.get("include_trace", False)),
             )
             self._send_json(response)
+        except json.JSONDecodeError:
+            self._send_json({"status": "error", "message": "Invalid JSON payload."}, HTTPStatus.BAD_REQUEST)
+
+    def _handle_feedback(self) -> None:
+        try:
+            body = self._read_json()
+            response = self.service.submit_feedback(
+                conversation_id=_optional_string(body.get("conversation_id")) or "web-chat",
+                turn_id=_optional_string(body.get("turn_id")) or "web-turn",
+                user_id=_optional_string(body.get("user_id")),
+                rating=str(body.get("rating", "")),
+                comment=_optional_string(body.get("comment")),
+            )
+            status = HTTPStatus.OK if response.get("status") == "stored" else HTTPStatus.BAD_REQUEST
+            self._send_json(response, status)
         except json.JSONDecodeError:
             self._send_json({"status": "error", "message": "Invalid JSON payload."}, HTTPStatus.BAD_REQUEST)
 
@@ -88,6 +106,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     return parser
+
+
+def _optional_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
 
 
 def main() -> int:

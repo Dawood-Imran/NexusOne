@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NexusOne UI Theme Options</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      :root {
+        color-scheme: light;
+        --page: #f4f2ed;
+        --ink: #1d2521;
+        --muted: #66716b;
+        --line: #dadfd7;
+        --panel: #ffffff;
+        --soft: #f8f7f4;
+        --green: #245b4a;
+        --blue: #285f8f;
+        --copper: #a35232;
+        --slate: #2f3a42;
+        --shadow: 0 18px 48px rgba(29, 37, 33, 0.1);
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--page);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+      }
+
+      body,
+      button,
+      input {
+        font: inherit;
+      }
+
+      .page {
+        width: min(1380px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 32px 0 56px;
+      }
+
+      .intro {
+        display: grid;
+        gap: 14px;
+        margin-bottom: 24px;
+      }
+
+      .eyebrow {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 920px;
+        margin-bottom: 0;
+        font-size: clamp(36px, 5vw, 64px);
+        line-height: 1.02;
+        letter-spacing: 0;
+      }
+
+      .intro p {
+        max-width: 860px;
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.55;
+      }
+
+      .theme-grid {
+        display: grid;
+        gap: 28px;
+      }
+
+      .theme {
+        display: grid;
+        gap: 18px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .theme-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: start;
+      }
+
+      .theme-head h2 {
+        margin-bottom: 8px;
+        font-size: 24px;
+        letter-spacing: 0;
+      }
+
+      .theme-head p {
+        max-width: 820px;
+        margin-bottom: 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .tag {
+        display: inline-flex;
+        min-height: 30px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--soft);
+        color: var(--ink);
+        padding: 0 11px;
+        font-size: 13px;
+        font-weight: 750;
+        white-space: nowrap;
+      }
+
+      .mockups {
+        display: grid;
+        grid-template-columns: 360px minmax(0, 1fr);
+        gap: 18px;
+      }
+
+      .login,
+      .workspace {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+      }
+
+      .login {
+        display: grid;
+        align-content: start;
+        gap: 18px;
+        padding: 22px;
+        min-height: 560px;
+      }
+
+      .brand-row,
+      .topbar,
+      .row-between {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+      }
+
+      .mark {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 8px;
+        color: #fff;
+        font-weight: 900;
+      }
+
+      .brand strong,
+      .brand span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .brand span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .login h3 {
+        margin-bottom: 8px;
+        font-size: 26px;
+        letter-spacing: 0;
+      }
+
+      .login p,
+      .card p,
+      .small {
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .field {
+        display: grid;
+        gap: 7px;
+      }
+
+      label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      .input,
+      .select-like,
+      .button {
+        min-height: 42px;
+        border-radius: 8px;
+      }
+
+      .input,
+      .select-like {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink);
+        padding: 0 12px;
+      }
+
+      .button {
+        border: 0;
+        color: #fff;
+        font-weight: 850;
+      }
+
+      .profile-card,
+      .card,
+      .message,
+      .source-card {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--soft);
+      }
+
+      .profile-card {
+        display: grid;
+        gap: 6px;
+        padding: 12px;
+      }
+
+      .profile-card strong {
+        color: var(--ink);
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: 240px minmax(0, 1fr) 280px;
+        min-height: 560px;
+      }
+
+      .rail,
+      .context {
+        min-width: 0;
+        padding: 14px;
+      }
+
+      .rail {
+        border-right: 1px solid var(--line);
+      }
+
+      .context {
+        border-left: 1px solid var(--line);
+        background: var(--soft);
+      }
+
+      .chat {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        min-width: 0;
+      }
+
+      .topbar {
+        min-height: 66px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .topbar h3,
+      .rail h3,
+      .context h3 {
+        margin: 0;
+        font-size: 15px;
+      }
+
+      .topbar p {
+        margin: 3px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .conversation-list {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .conversation {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+        padding: 10px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .conversation strong {
+        overflow: hidden;
+        color: var(--ink);
+        font-size: 13px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .messages {
+        display: grid;
+        align-content: start;
+        gap: 12px;
+        min-width: 0;
+        padding: 16px;
+      }
+
+      .message {
+        max-width: 72%;
+        padding: 11px 12px;
+        color: var(--ink);
+        line-height: 1.45;
+      }
+
+      .message.user {
+        justify-self: end;
+      }
+
+      .composer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 86px;
+        gap: 10px;
+        padding: 14px;
+        border-top: 1px solid var(--line);
+      }
+
+      .source-card,
+      .card {
+        display: grid;
+        gap: 6px;
+        padding: 10px;
+        margin-top: 10px;
+      }
+
+      .source-card strong,
+      .card strong {
+        font-size: 13px;
+      }
+
+      .source-card p,
+      .card p {
+        margin-bottom: 0;
+        font-size: 12px;
+      }
+
+      .theme-a {
+        --local-bg: #f6f5f1;
+        --local-panel: #ffffff;
+        --local-soft: #f8f8f5;
+        --local-line: #d8ddd7;
+        --local-brand: #245b4a;
+        --local-accent: #2f6f9f;
+      }
+
+      .theme-b {
+        --local-bg: #f7f8fb;
+        --local-panel: #ffffff;
+        --local-soft: #f3f6fb;
+        --local-line: #d8e0ea;
+        --local-brand: #285f8f;
+        --local-accent: #2f7a64;
+      }
+
+      .theme-c {
+        --local-bg: #f2f0eb;
+        --local-panel: #fffdfa;
+        --local-soft: #f7f4ee;
+        --local-line: #d9d1c5;
+        --local-brand: #2f3a42;
+        --local-accent: #9c5634;
+      }
+
+      .theme-a .mark,
+      .theme-a .button {
+        background: var(--local-brand);
+      }
+
+      .theme-b .mark,
+      .theme-b .button {
+        background: var(--local-brand);
+      }
+
+      .theme-c .mark,
+      .theme-c .button {
+        background: var(--local-brand);
+      }
+
+      .theme-a .login,
+      .theme-a .workspace {
+        background: var(--local-panel);
+      }
+
+      .theme-b .login,
+      .theme-b .workspace {
+        background: var(--local-panel);
+      }
+
+      .theme-c .login,
+      .theme-c .workspace {
+        background: var(--local-panel);
+      }
+
+      .theme-a .rail,
+      .theme-a .context,
+      .theme-a .profile-card,
+      .theme-a .card,
+      .theme-a .source-card,
+      .theme-a .message {
+        background: var(--local-soft);
+      }
+
+      .theme-b .rail,
+      .theme-b .context,
+      .theme-b .profile-card,
+      .theme-b .card,
+      .theme-b .source-card,
+      .theme-b .message {
+        background: var(--local-soft);
+      }
+
+      .theme-c .rail,
+      .theme-c .context,
+      .theme-c .profile-card,
+      .theme-c .card,
+      .theme-c .source-card,
+      .theme-c .message {
+        background: var(--local-soft);
+      }
+
+      .theme-a .conversation.active,
+      .theme-a .message.user {
+        border-color: #bcd1c8;
+        background: #eef6f2;
+      }
+
+      .theme-b .conversation.active,
+      .theme-b .message.user {
+        border-color: #c4d8ed;
+        background: #eef5fc;
+      }
+
+      .theme-c .conversation.active,
+      .theme-c .message.user {
+        border-color: #d9c7b8;
+        background: #fbf3ed;
+      }
+
+      .theme-a .tag {
+        color: var(--local-brand);
+      }
+
+      .theme-b .tag {
+        color: var(--local-brand);
+      }
+
+      .theme-c .tag {
+        color: var(--local-accent);
+      }
+
+      @media (max-width: 1120px) {
+        .mockups,
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .login {
+          min-height: auto;
+        }
+
+        .rail,
+        .context {
+          border: 0;
+          border-top: 1px solid var(--line);
+        }
+
+        .message {
+          max-width: 88%;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          width: min(100vw - 20px, 1380px);
+          padding-top: 18px;
+        }
+
+        .theme {
+          padding: 12px;
+        }
+
+        .theme-head {
+          grid-template-columns: 1fr;
+        }
+
+        .composer {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="intro">
+        <p class="eyebrow">NexusOne frontend theme prototypes</p>
+        <h1>Three directions for a serious internal AI product.</h1>
+        <p>
+          Each option includes the missing product structure: authentication first, profile-scoped
+          conversation history, a real chat workspace, and a context panel for sources, tickets,
+          feedback, and trace state.
+        </p>
+      </section>
+
+      <section class="theme theme-a">
+        <header class="theme-head">
+          <div>
+            <p class="eyebrow">Option 1</p>
+            <h2>Enterprise Knowledge Console</h2>
+            <p>
+              Clean, neutral, and work-focused. This is the safest direction for NexusOne because it
+              supports RAG, SQL, citations, tickets, and role context without making the interface
+              look like a chatbot toy.
+            </p>
+          </div>
+          <span class="tag">Recommended</span>
+        </header>
+        <div class="mockups">
+          <aside class="login">
+            <div class="brand-row">
+              <div class="brand">
+                <div class="mark">N1</div>
+                <div>
+                  <strong>NexusOne Copilot</strong>
+                  <span>Secure internal assistant</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h3>Sign in to your workspace</h3>
+              <p>Choose a demo profile. Permissions apply before retrieval, SQL, or ticket actions.</p>
+            </div>
+            <div class="field">
+              <label>Demo profile</label>
+              <div class="select-like">Ayesha Khan - employee - engineering</div>
+            </div>
+            <div class="profile-card">
+              <strong>Access preview</strong>
+              <span class="small">Public policies, own tickets, IT access procedures.</span>
+            </div>
+            <button class="button">Continue</button>
+          </aside>
+          <section class="workspace">
+            <aside class="rail">
+              <div class="row-between">
+                <h3>Conversations</h3>
+                <span class="tag">New</span>
+              </div>
+              <div class="conversation-list">
+                <div class="conversation active"><strong>AWS access request</strong><span>Today - 3 sources</span></div>
+                <div class="conversation"><strong>Ticket IT-1048</strong><span>Open - normal</span></div>
+                <div class="conversation"><strong>Leave policy</strong><span>Yesterday</span></div>
+              </div>
+            </aside>
+            <div class="chat">
+              <header class="topbar">
+                <div>
+                  <h3>AWS access request</h3>
+                  <p>Ayesha Khan - employee - engineering</p>
+                </div>
+                <span class="tag">Trace off</span>
+              </header>
+              <div class="messages">
+                <div class="message">Create an IT ticket with category Cloud access and include manager approval [1].</div>
+                <div class="message user">Create the ticket for AWS sandbox access.</div>
+                <div class="message">Created ticket IT-1048 for it / cloud_access. Status is open.</div>
+              </div>
+              <div class="composer">
+                <div class="input">Ask about policies, tickets, or source-backed procedures</div>
+                <button class="button">Send</button>
+              </div>
+            </div>
+            <aside class="context">
+              <h3>Context</h3>
+              <div class="source-card"><strong>Source [1]</strong><p>AWS Access Request - updated 2026-02-02</p></div>
+              <div class="card"><strong>Ticket</strong><p>IT-1048 - open - normal priority</p></div>
+            </aside>
+          </section>
+        </div>
+      </section>
+
+      <section class="theme theme-b">
+        <header class="theme-head">
+          <div>
+            <p class="eyebrow">Option 2</p>
+            <h2>Support Desk Copilot</h2>
+            <p>
+              More operational and ticket-centric. The UI feels like a support console where answers,
+              ticket creation, feedback, and queue visibility are first-class.
+            </p>
+          </div>
+          <span class="tag">Best for ticket workflows</span>
+        </header>
+        <div class="mockups">
+          <aside class="login">
+            <div class="brand-row">
+              <div class="brand">
+                <div class="mark">N1</div>
+                <div>
+                  <strong>Support Copilot</strong>
+                  <span>Requests, tickets, and answers</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h3>Open your support workspace</h3>
+              <p>Start from identity, then route to tickets, source-backed answers, or restricted denials.</p>
+            </div>
+            <div class="field">
+              <label>Profile</label>
+              <div class="select-like">Ayesha Khan - employee</div>
+            </div>
+            <div class="profile-card">
+              <strong>Recent activity</strong>
+              <span class="small">2 open tickets, 1 feedback item, 4 recent answers.</span>
+            </div>
+            <button class="button">Enter support desk</button>
+          </aside>
+          <section class="workspace">
+            <aside class="rail">
+              <div class="row-between">
+                <h3>Inbox</h3>
+                <span class="tag">4</span>
+              </div>
+              <div class="conversation-list">
+                <div class="conversation active"><strong>IT-1048 AWS access</strong><span>Open - assigned queue</span></div>
+                <div class="conversation"><strong>VPN issue</strong><span>Needs details</span></div>
+                <div class="conversation"><strong>Payroll question</strong><span>HR guidance</span></div>
+              </div>
+            </aside>
+            <div class="chat">
+              <header class="topbar">
+                <div>
+                  <h3>IT-1048 AWS access</h3>
+                  <p>Ticket conversation - employee access</p>
+                </div>
+                <span class="tag">Open</span>
+              </header>
+              <div class="messages">
+                <div class="message">I can create that ticket. Please provide target environment and business reason.</div>
+                <div class="message user">Sandbox for billing migration testing.</div>
+                <div class="message">Ticket IT-1048 is open. IT will review least-privilege access.</div>
+              </div>
+              <div class="composer">
+                <div class="input">Reply with details or ask for next steps</div>
+                <button class="button">Reply</button>
+              </div>
+            </div>
+            <aside class="context">
+              <h3>Ticket details</h3>
+              <div class="card"><strong>Status</strong><p>Open - normal priority - cloud_access</p></div>
+              <div class="source-card"><strong>Policy source</strong><p>Software Access Control Policy 2026</p></div>
+            </aside>
+          </section>
+        </div>
+      </section>
+
+      <section class="theme theme-c">
+        <header class="theme-head">
+          <div>
+            <p class="eyebrow">Option 3</p>
+            <h2>Executive Workspace</h2>
+            <p>
+              Quiet, denser, and more boardroom-like. This works if you want the product to emphasize
+              access control, auditability, and high-confidence sourced answers.
+            </p>
+          </div>
+          <span class="tag">Best for premium feel</span>
+        </header>
+        <div class="mockups">
+          <aside class="login">
+            <div class="brand-row">
+              <div class="brand">
+                <div class="mark">N1</div>
+                <div>
+                  <strong>NexusOne Intelligence</strong>
+                  <span>Role-scoped knowledge access</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h3>Confirm your access context</h3>
+              <p>Each answer is composed from sources, structured data, and permission checks.</p>
+            </div>
+            <div class="field">
+              <label>Identity</label>
+              <div class="select-like">Maya Rao - executive</div>
+            </div>
+            <div class="profile-card">
+              <strong>Access boundary</strong>
+              <span class="small">Executive reports, public policies, own tickets. CEO-only remains blocked.</span>
+            </div>
+            <button class="button">Open workspace</button>
+          </aside>
+          <section class="workspace">
+            <aside class="rail">
+              <div class="row-between">
+                <h3>Workspace</h3>
+                <span class="tag">Exec</span>
+              </div>
+              <div class="conversation-list">
+                <div class="conversation active"><strong>Revenue risk summary</strong><span>Restricted - cited</span></div>
+                <div class="conversation"><strong>Budget variance</strong><span>SQL + sources</span></div>
+                <div class="conversation"><strong>Travel policy</strong><span>Public internal</span></div>
+              </div>
+            </aside>
+            <div class="chat">
+              <header class="topbar">
+                <div>
+                  <h3>Revenue risk summary</h3>
+                  <p>Maya Rao - executive - strategy</p>
+                </div>
+                <span class="tag">Audited</span>
+              </header>
+              <div class="messages">
+                <div class="message">I found 3 accessible risk records and 2 executive source documents.</div>
+                <div class="message user">Summarize the top customer renewal risk.</div>
+                <div class="message">The highest risk is tagged customer_renewal and requires VP review [1].</div>
+              </div>
+              <div class="composer">
+                <div class="input">Ask a sourced executive question</div>
+                <button class="button">Send</button>
+              </div>
+            </div>
+            <aside class="context">
+              <h3>Evidence</h3>
+              <div class="source-card"><strong>Source [1]</strong><p>Q4 Revenue Risk Register - restricted</p></div>
+              <div class="card"><strong>Audit</strong><p>Route: combined - validation passed</p></div>
+            </aside>
+          </section>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

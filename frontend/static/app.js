@@ -1,10 +1,24 @@
+const STORAGE_PREFIX = "nexusone.conversations.";
+const SESSION_KEY = "nexusone.activeUserId";
+
 const state = {
   profiles: [],
-  activeUserId: "u001",
+  activeUserId: null,
+  conversations: [],
+  activeConversationId: null,
+  selectedAssistantMessageId: null,
   sending: false,
 };
 
-const profileSelect = document.querySelector("#profileSelect");
+const authView = document.querySelector("#authView");
+const appView = document.querySelector("#appView");
+const profileCards = document.querySelector("#profileCards");
+const authError = document.querySelector("#authError");
+const accountButton = document.querySelector("#accountButton");
+const sessionRole = document.querySelector("#sessionRole");
+const newChatButton = document.querySelector("#newChatButton");
+const conversationList = document.querySelector("#conversationList");
+const conversationTitle = document.querySelector("#conversationTitle");
 const profileName = document.querySelector("#profileName");
 const profileRole = document.querySelector("#profileRole");
 const profileDepartment = document.querySelector("#profileDepartment");
@@ -14,81 +28,245 @@ const chatForm = document.querySelector("#chatForm");
 const messageInput = document.querySelector("#messageInput");
 const sendButton = document.querySelector("#sendButton");
 const traceToggle = document.querySelector("#traceToggle");
+const suggestions = document.querySelector("#suggestions");
+const inspector = document.querySelector("#inspector");
+const inspectorContent = document.querySelector("#inspectorContent");
+const mobileInspectorButton = document.querySelector("#mobileInspectorButton");
+const closeInspectorButton = document.querySelector("#closeInspectorButton");
 
 async function init() {
   try {
     const response = await fetch("/api/profiles");
     const payload = await response.json();
     state.profiles = payload.profiles || [];
-    renderProfiles();
+    renderProfileCards();
+    const savedUserId = window.localStorage.getItem(SESSION_KEY);
+    if (savedUserId && state.profiles.some((profile) => profile.user_id === savedUserId)) {
+      signIn(savedUserId);
+    }
   } catch (error) {
-    addAssistantMessage({
-      status: "error",
-      message: "Could not load demo profiles. Check that the local server is running.",
-    });
+    authError.textContent = "Could not load demo profiles. Check that the local server is running.";
   }
 }
 
-function renderProfiles() {
-  profileSelect.innerHTML = "";
+function renderProfileCards() {
+  profileCards.innerHTML = "";
   state.profiles.forEach((profile) => {
-    const option = document.createElement("option");
-    option.value = profile.user_id;
-    option.textContent = `${profile.name} - ${profile.role}`;
-    profileSelect.appendChild(option);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "profile-card";
+    button.innerHTML = `
+      <span class="profile-card-name"></span>
+      <span class="profile-card-meta"></span>
+      <span class="profile-card-scope"></span>
+    `;
+    button.querySelector(".profile-card-name").textContent = profile.name;
+    button.querySelector(".profile-card-meta").textContent = `${profile.role} - ${profile.department} - ${profile.location}`;
+    button.querySelector(".profile-card-scope").textContent = accessSummary(profile.role);
+    button.addEventListener("click", () => signIn(profile.user_id));
+    profileCards.appendChild(button);
   });
-  profileSelect.value = state.activeUserId;
-  updateProfilePanel();
 }
 
-function updateProfilePanel() {
-  const profile = activeProfile();
-  if (!profile) return;
-  profileName.textContent = profile.name;
-  profileRole.textContent = profile.role;
-  profileDepartment.textContent = profile.department;
-  profileLocation.textContent = profile.location;
+function signIn(userId) {
+  state.activeUserId = userId;
+  window.localStorage.setItem(SESSION_KEY, userId);
+  state.conversations = loadConversations(userId);
+  if (!state.conversations.length) {
+    state.conversations.push(createConversation());
+    saveConversations();
+  }
+  state.activeConversationId = state.conversations[0].id;
+  state.selectedAssistantMessageId = latestAssistantMessage(activeConversation())?.id || null;
+  authView.classList.add("hidden");
+  appView.classList.remove("hidden");
+  updateProfilePanel();
+  renderConversationList();
+  renderActiveConversation();
+  messageInput.focus();
+}
+
+function signOut() {
+  state.activeUserId = null;
+  state.conversations = [];
+  state.activeConversationId = null;
+  state.selectedAssistantMessageId = null;
+  window.localStorage.removeItem(SESSION_KEY);
+  closeInspector();
+  appView.classList.add("hidden");
+  authView.classList.remove("hidden");
+  const firstProfile = profileCards.querySelector("button");
+  if (firstProfile) firstProfile.focus();
 }
 
 function activeProfile() {
   return state.profiles.find((profile) => profile.user_id === state.activeUserId);
 }
 
-function addUserMessage(text) {
-  const article = document.createElement("article");
-  article.className = "message user";
-  article.innerHTML = `
-    <div class="message-meta">You</div>
-    <div class="message-body"></div>
-  `;
-  article.querySelector(".message-body").textContent = text;
-  messages.appendChild(article);
+function activeConversation() {
+  return state.conversations.find((conversation) => conversation.id === state.activeConversationId);
+}
+
+function updateProfilePanel() {
+  const profile = activeProfile();
+  if (!profile) return;
+  sessionRole.textContent = `${profile.name} - ${profile.role}`;
+  profileName.textContent = profile.name;
+  profileRole.textContent = profile.role;
+  profileDepartment.textContent = profile.department;
+  profileLocation.textContent = profile.location;
+}
+
+function createConversation(title = "New chat") {
+  const now = new Date().toISOString();
+  return {
+    id: `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    title,
+    createdAt: now,
+    updatedAt: now,
+    messages: [
+      {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        status: "ready",
+        message:
+          "Ask a NexusOne question. I can answer from permitted sources, create IT/HR/Admin tickets, and explain when access is restricted.",
+      },
+    ],
+  };
+}
+
+function loadConversations(userId) {
+  try {
+    const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${userId}`);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveConversations() {
+  if (!state.activeUserId) return;
+  window.localStorage.setItem(`${STORAGE_PREFIX}${state.activeUserId}`, JSON.stringify(state.conversations.slice(0, 30)));
+}
+
+function renderConversationList() {
+  conversationList.innerHTML = "";
+  state.conversations.forEach((conversation) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = conversation.id === state.activeConversationId ? "conversation-item active" : "conversation-item";
+    button.innerHTML = `
+      <span class="conversation-name"></span>
+      <span class="conversation-meta"></span>
+    `;
+    button.querySelector(".conversation-name").textContent = conversation.title;
+    button.querySelector(".conversation-meta").textContent = conversationMeta(conversation);
+    button.addEventListener("click", () => {
+      state.activeConversationId = conversation.id;
+      state.selectedAssistantMessageId = latestAssistantMessage(conversation)?.id || null;
+      renderConversationList();
+      renderActiveConversation();
+    });
+    conversationList.appendChild(button);
+  });
+}
+
+function renderActiveConversation() {
+  const conversation = activeConversation();
+  if (!conversation) return;
+  conversationTitle.textContent = conversation.title;
+  messages.innerHTML = "";
+  conversation.messages.forEach((message) => {
+    messages.appendChild(renderMessage(message));
+  });
+  renderInspector();
   scrollMessages();
 }
 
-function addAssistantMessage(payload) {
+function renderMessage(message) {
   const article = document.createElement("article");
-  const statusClass = payload.status === "denied" ? "denied" : payload.status === "error" ? "error" : "";
-  article.className = `message assistant ${statusClass}`.trim();
+  article.className = `message ${message.role} ${message.status === "denied" ? "denied" : ""} ${message.status === "error" ? "error" : ""}`.trim();
+  if (message.role === "assistant") {
+    article.tabIndex = 0;
+    article.classList.toggle("selected", message.id === state.selectedAssistantMessageId);
+    article.addEventListener("click", () => selectAssistantMessage(message.id));
+    article.addEventListener("focus", () => selectAssistantMessage(message.id));
+  }
+
   const meta = document.createElement("div");
   meta.className = "message-meta";
-  meta.textContent = payload.status ? `Assistant - ${payload.status}` : "Assistant";
+  meta.textContent = message.role === "user" ? "You" : `Assistant - ${message.status || "answered"}`;
   const body = document.createElement("div");
   body.className = "message-body";
-  const citations = payload.citations || [];
-  renderMessageBody(body, payload.message || "No response was returned.", citations);
+  renderMessageBody(body, message.message || "No response was returned.", message.citations || [], () => {
+    if (message.role === "assistant") {
+      selectAssistantMessage(message.id);
+    }
+  });
   article.appendChild(meta);
   article.appendChild(body);
 
-  const sourceItems = collectSourceItems(payload);
-  if (sourceItems.length) {
-    article.appendChild(renderSources(sourceItems));
+  if (message.ticket) {
+    article.appendChild(renderTicketSummary(message.ticket));
   }
-  if (payload.trace && payload.trace.length) {
-    article.appendChild(renderTrace(payload.trace));
+  if (message.role === "assistant" && !["error", "ready"].includes(message.status)) {
+    article.appendChild(renderFeedbackControls(message));
   }
-  messages.appendChild(article);
-  scrollMessages();
+  return article;
+}
+
+function selectAssistantMessage(messageId) {
+  state.selectedAssistantMessageId = messageId;
+  renderInspector();
+  messages.querySelectorAll(".message.assistant").forEach((node) => node.classList.remove("selected"));
+  const conversation = activeConversation();
+  const index = conversation.messages.filter((message) => message.role === "assistant").findIndex((message) => message.id === messageId);
+  const selected = messages.querySelectorAll(".message.assistant")[index];
+  if (selected) selected.classList.add("selected");
+}
+
+function addUserMessage(text) {
+  const conversation = activeConversation();
+  const message = {
+    id: `user-${Date.now()}`,
+    role: "user",
+    message: text,
+  };
+  conversation.messages.push(message);
+  conversation.updatedAt = new Date().toISOString();
+  if (conversation.title === "New chat") {
+    conversation.title = summarizeTitle(text);
+  }
+  saveConversations();
+  renderConversationList();
+  renderActiveConversation();
+}
+
+function addAssistantMessage(payload) {
+  const conversation = activeConversation();
+  const message = {
+    id: `assistant-${Date.now()}`,
+    role: "assistant",
+    status: payload.status || "answered",
+    reason_code: payload.reason_code,
+    message: payload.message || "No response was returned.",
+    citations: payload.citations || [],
+    sources: payload.sources || [],
+    ticket: payload.ticket || null,
+    missing_fields: payload.missing_fields || [],
+    trace: payload.trace || [],
+    conversation_id: payload.conversation_id || "web-chat",
+    turn_id: payload.turn_id || "web-turn",
+    latency_ms: payload.latency_ms,
+  };
+  conversation.messages.push(message);
+  conversation.updatedAt = new Date().toISOString();
+  state.selectedAssistantMessageId = message.id;
+  saveConversations();
+  renderConversationList();
+  renderActiveConversation();
 }
 
 function collectSourceItems(payload) {
@@ -97,7 +275,87 @@ function collectSourceItems(payload) {
   return [...citations, ...sources];
 }
 
-function renderMessageBody(container, text, citations) {
+function renderTicketSummary(ticket) {
+  const section = document.createElement("section");
+  section.className = "ticket-summary";
+  const title = document.createElement("h3");
+  title.textContent = "Ticket created";
+  const list = document.createElement("dl");
+  [
+    ["ID", ticket.ticket_id],
+    ["Status", ticket.status],
+    ["Team", ticket.department],
+    ["Category", ticket.category],
+    ["Priority", ticket.priority],
+  ].forEach(([label, value]) => {
+    if (!value) return;
+    const row = document.createElement("div");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    detail.textContent = value;
+    row.appendChild(term);
+    row.appendChild(detail);
+    list.appendChild(row);
+  });
+  section.appendChild(title);
+  section.appendChild(list);
+  return section;
+}
+
+function renderFeedbackControls(payload) {
+  const section = document.createElement("section");
+  section.className = "feedback";
+  section.setAttribute("aria-label", "Answer feedback");
+  [
+    ["helpful", "Helpful"],
+    ["not_helpful", "Not helpful"],
+    ["missing_source", "Source issue"],
+  ].forEach(([rating, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = payload.feedback === rating ? "Saved" : label;
+    button.addEventListener("click", () => sendFeedback(button, payload, rating));
+    section.appendChild(button);
+  });
+  return section;
+}
+
+async function sendFeedback(button, payload, rating) {
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Saving";
+  try {
+    const response = await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        conversation_id: payload.conversation_id || "web-chat",
+        turn_id: payload.turn_id || "web-turn",
+        user_id: state.activeUserId,
+        rating,
+      }),
+    });
+    const result = await response.json();
+    if (result.status === "stored") {
+      payload.feedback = rating;
+      button.textContent = "Saved";
+      saveConversations();
+      renderInspector();
+    } else {
+      button.textContent = "Failed";
+    }
+  } catch (error) {
+    button.textContent = "Failed";
+  } finally {
+    setTimeout(() => {
+      button.textContent = payload.feedback === rating ? "Saved" : original;
+      button.disabled = false;
+    }, 1200);
+  }
+}
+
+function renderMessageBody(container, text, citations, beforeCitationSelect = null) {
   container.textContent = "";
   const sourceIds = new Set(
     citations
@@ -117,14 +375,94 @@ function renderMessageBody(container, text, citations) {
     button.className = "citation-ref";
     button.textContent = part;
     button.setAttribute("aria-label", `Show source ${referenceId}`);
-    button.addEventListener("click", () => {
-      const source = document.querySelector(`#source-${referenceId}`);
-      if (!source) return;
-      source.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      source.focus({ preventScroll: true });
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (beforeCitationSelect) beforeCitationSelect();
+      window.requestAnimationFrame(() => selectSource(referenceId));
     });
     container.appendChild(button);
   });
+}
+
+function selectSource(referenceId) {
+  openInspector();
+  const source = document.querySelector(`#source-${referenceId}`);
+  if (!source) return;
+  source.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  source.focus({ preventScroll: true });
+}
+
+function openInspector() {
+  inspector.classList.add("open");
+  mobileInspectorButton.setAttribute("aria-expanded", "true");
+}
+
+function closeInspector() {
+  inspector.classList.remove("open");
+  mobileInspectorButton.setAttribute("aria-expanded", "false");
+}
+
+function renderInspector() {
+  const message = selectedAssistantMessage();
+  inspectorContent.innerHTML = "";
+  if (!message) {
+    const empty = document.createElement("p");
+    empty.className = "empty-note";
+    empty.textContent = "Select an answer to inspect sources, ticket details, feedback, and trace output.";
+    inspectorContent.appendChild(empty);
+    return;
+  }
+
+  if (message.ticket) {
+    inspectorContent.appendChild(renderTicketSummary(message.ticket));
+  }
+
+  const sourceItems = collectSourceItems(message);
+  if (sourceItems.length) {
+    inspectorContent.appendChild(renderSources(sourceItems));
+  }
+
+  if (message.missing_fields && message.missing_fields.length) {
+    const section = document.createElement("section");
+    section.className = "detail-section";
+    section.innerHTML = "<h3>Missing details</h3>";
+    const list = document.createElement("ul");
+    message.missing_fields.forEach((field) => {
+      const item = document.createElement("li");
+      item.textContent = field;
+      list.appendChild(item);
+    });
+    section.appendChild(list);
+    inspectorContent.appendChild(section);
+  }
+
+  const meta = document.createElement("section");
+  meta.className = "detail-section";
+  meta.innerHTML = `
+    <h3>Answer metadata</h3>
+    <dl>
+      <div><dt>Status</dt><dd>${escapeHtml(message.status || "answered")}</dd></div>
+      <div><dt>Reason</dt><dd>${escapeHtml(message.reason_code || "-")}</dd></div>
+      <div><dt>Latency</dt><dd>${message.latency_ms == null ? "-" : `${message.latency_ms}ms`}</dd></div>
+      <div><dt>Feedback</dt><dd>${escapeHtml(message.feedback || "Not submitted")}</dd></div>
+    </dl>
+  `;
+  inspectorContent.appendChild(meta);
+
+  if (message.trace && message.trace.length) {
+    inspectorContent.appendChild(renderTrace(message.trace));
+  }
+}
+
+function selectedAssistantMessage() {
+  const conversation = activeConversation();
+  if (!conversation) return null;
+  return conversation.messages.find((message) => message.id === state.selectedAssistantMessageId && message.role === "assistant") || null;
+}
+
+function latestAssistantMessage(conversation) {
+  if (!conversation) return null;
+  return [...conversation.messages].reverse().find((message) => message.role === "assistant") || null;
 }
 
 function renderSources(items) {
@@ -188,7 +526,7 @@ function renderTrace(trace) {
   const list = document.createElement("ol");
   trace.forEach((item) => {
     const li = document.createElement("li");
-    li.textContent = `${item.node}: ${item.details.status || "running"}`;
+    li.textContent = `${item.node}: ${item.details?.status || "running"}`;
     list.appendChild(li);
   });
   section.appendChild(title);
@@ -228,14 +566,59 @@ async function sendMessage(text) {
   }
 }
 
+function startNewChat() {
+  const conversation = createConversation();
+  state.conversations.unshift(conversation);
+  state.activeConversationId = conversation.id;
+  state.selectedAssistantMessageId = latestAssistantMessage(conversation)?.id || null;
+  saveConversations();
+  renderConversationList();
+  renderActiveConversation();
+  messageInput.focus();
+}
+
 function scrollMessages() {
   messages.scrollTop = messages.scrollHeight;
 }
 
-profileSelect.addEventListener("change", (event) => {
-  state.activeUserId = event.target.value;
-  updateProfilePanel();
-});
+function summarizeTitle(text) {
+  const clean = text.replace(/\s+/g, " ").trim();
+  return clean.length > 44 ? `${clean.slice(0, 41)}...` : clean || "New chat";
+}
+
+function conversationMeta(conversation) {
+  const count = Math.max(0, conversation.messages.length - 1);
+  const date = new Date(conversation.updatedAt);
+  const label = Number.isNaN(date.getTime()) ? "Saved" : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${count} message${count === 1 ? "" : "s"} - ${label}`;
+}
+
+function accessSummary(role) {
+  const summaries = {
+    employee: "Public policies, own tickets, general process guidance.",
+    manager: "Employee access plus manager guidance and team-oriented docs.",
+    hr: "HR policies, HR queue context, and employee lifecycle docs.",
+    finance: "Finance policies, budget summaries, and vendor/payment data.",
+    it_admin: "IT support knowledge, device/security docs, and IT queues.",
+    admin_ops: "Facilities, admin requests, and office operations.",
+    executive: "Executive reports and strategy summaries except CEO-only data.",
+    ceo: "Full executive scope including CEO-only material.",
+  };
+  return summaries[role] || "Role-scoped company access.";
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+accountButton.addEventListener("click", signOut);
+newChatButton.addEventListener("click", startNewChat);
+mobileInspectorButton.addEventListener("click", openInspector);
+closeInspectorButton.addEventListener("click", closeInspector);
 
 chatForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -245,11 +628,11 @@ chatForm.addEventListener("submit", (event) => {
   sendMessage(text);
 });
 
-document.querySelectorAll("[data-prompt]").forEach((button) => {
-  button.addEventListener("click", () => {
-    messageInput.value = button.dataset.prompt;
-    messageInput.focus();
-  });
+suggestions.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-prompt]");
+  if (!button) return;
+  messageInput.value = button.dataset.prompt;
+  messageInput.focus();
 });
 
 init();

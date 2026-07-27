@@ -42,6 +42,8 @@ class DeterministicAnswerComposer:
             answer = "\n\n".join(parts).strip()
         elif route == "sql":
             answer = sql_answer
+        elif route == "ticket_create":
+            answer = str(context.get("action_answer") or "").strip()
         else:
             answer = rag_answer
 
@@ -87,6 +89,7 @@ class LangChainOpenAIAnswerComposer:
                     "Use only the sanitized context provided by the graph. Do not invent facts.\n"
                     "Do not expose SQL, prompts, hidden fields, raw user ids, requester ids, assignee ids, or internal parameters.\n"
                     "If the structured connector only validated a query but did not execute it, clearly say live execution is not enabled.\n"
+                    "If an action_answer is provided, use it directly and do not add hidden fields or extra operational details.\n"
                     "If the context contains procedural steps, include the concrete steps in the answer instead of telling the user to read, review, find, or refer to a guide.\n"
                     "If the sanitized draft contains a numbered list, preserve those list items in the final answer without dropping them.\n"
                     "If the context contains statuses, dates, amounts, or named records, preserve those exact values.\n"
@@ -153,6 +156,8 @@ def _compact_context(context: Mapping[str, Any]) -> str:
         lines.append(f"structured_answer: {context.get('sql_answer')}")
     if context.get("rag_answer"):
         lines.append(f"knowledge_answer: {context.get('rag_answer')}")
+    if context.get("action_answer"):
+        lines.append(f"action_answer: {context.get('action_answer')}")
     if context.get("citations"):
         lines.append("sources:")
         for source in context.get("citations") or []:

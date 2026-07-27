@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from langgraph.graph import END, START, StateGraph
 
+from app.actions.ticket_service import TicketService
 from app.agents.orchestrator.answer_composer import AnswerComposer, build_default_answer_composer
 from app.agents.orchestrator.nodes import (
     make_compose_final_answer_node,
@@ -14,6 +15,7 @@ from app.agents.orchestrator.nodes import (
     make_precheck_guardrails_node,
     make_retrieve_rag_node,
     make_route_question_node,
+    make_run_ticket_action_node,
     make_run_sql_node,
     make_validate_answer_node,
 )
@@ -31,6 +33,7 @@ def build_orchestrator_graph(
     sql_executor: SQLExecutor | None = None,
     sql_planner: SQLPlanner | None = None,
     answer_composer: AnswerComposer | None = None,
+    ticket_service: TicketService | None = None,
 ) -> Any:
     """Build the main graph.
 
@@ -42,6 +45,7 @@ def build_orchestrator_graph(
     graph.add_node("load_user_context", make_load_user_context_node())
     graph.add_node("precheck_guardrails", make_precheck_guardrails_node())
     graph.add_node("route_question", make_route_question_node())
+    graph.add_node("run_ticket_action", make_run_ticket_action_node(ticket_service))
     graph.add_node("run_sql_subgraph", make_run_sql_node(sql_executor, sql_planner))
     graph.add_node("retrieve_rag_context", make_retrieve_rag_node(chunk_retriever, local_retriever))
     graph.add_node("validate_answer", make_validate_answer_node())
@@ -60,6 +64,7 @@ def build_orchestrator_graph(
             "sql": "run_sql_subgraph",
             "rag": "retrieve_rag_context",
             "combined": "run_sql_subgraph",
+            "ticket_create": "run_ticket_action",
         },
     )
     graph.add_conditional_edges(
@@ -70,6 +75,7 @@ def build_orchestrator_graph(
             "validate": "validate_answer",
         },
     )
+    graph.add_edge("run_ticket_action", "validate_answer")
     graph.add_edge("retrieve_rag_context", "validate_answer")
     graph.add_edge("validate_answer", "compose_final_answer")
     graph.add_edge("compose_final_answer", "finalize_response")
@@ -88,6 +94,7 @@ class NexusOneOrchestrator:
         sql_executor: SQLExecutor | None = None,
         sql_planner: SQLPlanner | None = None,
         answer_composer: AnswerComposer | None = None,
+        ticket_service: TicketService | None = None,
     ) -> None:
         self.graph = build_orchestrator_graph(
             chunk_retriever=chunk_retriever,
@@ -95,6 +102,7 @@ class NexusOneOrchestrator:
             sql_executor=sql_executor,
             sql_planner=sql_planner,
             answer_composer=answer_composer,
+            ticket_service=ticket_service,
         )
 
     def invoke(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:

@@ -9,7 +9,7 @@ from app.agents.sql_subgraph.state import SQLNodeTrace, SQLSubgraphOutput
 from app.guardrails.policy import AccessDecision
 
 
-RouteName = Literal["rag", "sql", "combined", "deny", "error"]
+RouteName = Literal["rag", "sql", "combined", "ticket_create", "deny", "error"]
 
 
 class OrchestratorState(TypedDict, total=False):
@@ -35,6 +35,12 @@ class OrchestratorState(TypedDict, total=False):
     sql_message: str
     sql_sources: list[dict[str, Any]]
     sql_traces: tuple[SQLNodeTrace, ...]
+
+    ticket_request: Any
+    ticket_result: Any
+    ticket_message: str
+    ticket: dict[str, Any]
+    missing_fields: list[str]
 
     validation: dict[str, Any]
     final_answer: str

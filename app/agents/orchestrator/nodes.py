@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from app.actions.ticket_service import TicketService
+from app.agents.orchestrator.action_routing import extract_ticket_request
 from app.agents.orchestrator.answer_composer import AnswerComposer
 from app.agents.orchestrator.routing import route_message
 from app.agents.orchestrator.state import OrchestratorState
@@ -212,6 +214,43 @@ def make_retrieve_rag_node(
     return retrieve_rag
 
 
+def make_run_ticket_action_node(ticket_service: TicketService | None = None) -> Any:
+    service = ticket_service or TicketService()
+
+    def run_ticket_action(state: OrchestratorState) -> OrchestratorState:
+        profile = state.get("profile")
+        request = extract_ticket_request(state["clean_message"])
+        result = service.create_ticket(profile, request)
+        next_state: OrchestratorState = {
+            **state,
+            "ticket_request": request,
+            "ticket_result": result,
+            "ticket_message": result.message,
+            "status": result.status,
+            "reason_code": result.reason_code or "TICKET_ACTION",
+        }
+        if result.ticket is not None:
+            next_state["ticket"] = dict(result.ticket)
+        if result.missing_fields:
+            next_state["missing_fields"] = list(result.missing_fields)
+        next_state["trace"] = append_trace(
+            next_state,
+            "run_ticket_action",
+            {
+                "status": result.status,
+                "reason_code": result.reason_code,
+                "department": request.department,
+                "category": request.category,
+                "priority": request.priority,
+                "missing_fields": list(result.missing_fields),
+                "ticket_id": result.ticket.get("ticket_id") if result.ticket else None,
+            },
+        )
+        return next_state
+
+    return run_ticket_action
+
+
 def make_validate_answer_node() -> Any:
     def validate_answer(state: OrchestratorState) -> OrchestratorState:
         route = state.get("route")
@@ -227,6 +266,8 @@ def make_validate_answer_node() -> Any:
             reason = "SQL_NOT_ANSWERED"
         elif route == "combined" and not (has_sql_answer or has_rag_answer):
             reason = "NO_TOOL_ANSWER"
+        elif route == "ticket_create" and state.get("status") not in {"ticket_created", "needs_clarification"}:
+            reason = "TICKET_ACTION_NOT_COMPLETED"
         validation = {
             "safe": safe,
             "reason": reason,
@@ -256,6 +297,7 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             "validation": state.get("validation", {}),
             "sql_answer": state.get("sql_message", ""),
             "rag_answer": state.get("rag_message", ""),
+            "action_answer": state.get("ticket_message", ""),
             "citations": state.get("rag_citations", []),
             "sources": state.get("sql_sources", []),
             "sql_status": sql_output.sql_status if sql_output is not None else None,
@@ -298,6 +340,7 @@ def make_finalize_response_node() -> Any:
                 "message": state.get("error_message", "The request could not be handled."),
                 "latency_ms": _elapsed_ms(started_at),
             }
+            response.update(_turn_context(state))
         elif status == "denied" and decision is not None:
             response = {
                 "status": "denied",
@@ -308,6 +351,7 @@ def make_finalize_response_node() -> Any:
                 "profile": profile.to_public_dict(),
                 "latency_ms": _elapsed_ms(started_at),
             }
+            response.update(_turn_context(state))
         else:
             response = _successful_response(state, started_at)
 
@@ -348,6 +392,7 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
             "sources": state.get("sql_sources", []),
             "profile": profile.to_public_dict(),
             "latency_ms": _elapsed_ms(started_at),
+            **_turn_context(state),
         }
 
     if route == "combined":
@@ -361,6 +406,21 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
             "sources": state.get("sql_sources", []),
             "profile": profile.to_public_dict(),
             "latency_ms": _elapsed_ms(started_at),
+            **_turn_context(state),
+        }
+
+    if route == "ticket_create":
+        status = state.get("status", "error")
+        return {
+            "status": status,
+            "reason_code": state.get("reason_code"),
+            "category": category,
+            "message": final_answer or state.get("ticket_message", ""),
+            "ticket": state.get("ticket"),
+            "missing_fields": state.get("missing_fields", []),
+            "profile": profile.to_public_dict(),
+            "latency_ms": _elapsed_ms(started_at),
+            **_turn_context(state),
         }
 
     has_results = int(state.get("rag_result_count", 0)) > 0
@@ -372,6 +432,7 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
         "citations": state.get("rag_citations", []),
         "profile": profile.to_public_dict(),
         "latency_ms": _elapsed_ms(started_at),
+        **_turn_context(state),
     }
 
 
@@ -383,7 +444,16 @@ def _response_status_for_success(state: OrchestratorState) -> str:
         if int(state.get("rag_result_count", 0)) > 0:
             return "answered"
         return state["sql_output"].sql_status
+    if route == "ticket_create":
+        return state.get("status", "error")
     return "answered" if int(state.get("rag_result_count", 0)) > 0 else "no_answer"
+
+
+def _turn_context(state: OrchestratorState) -> dict[str, str]:
+    return {
+        "conversation_id": str(state.get("conversation_id", "web-chat")),
+        "turn_id": str(state.get("turn_id", "web-turn")),
+    }
 
 
 def _elapsed_ms(started: float) -> int:
