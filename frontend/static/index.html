@@ -90,7 +90,18 @@
     </section>
 
     <div id="appView" class="app-shell hidden" aria-label="NexusOne Copilot workspace">
-      <aside class="conversation-rail" aria-label="Workspace navigation and conversations">
+      <aside id="conversationRail" class="conversation-rail" aria-label="Workspace navigation and conversations">
+        <button
+          id="leftSidebarToggle"
+          class="sidebar-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="conversationRail"
+          aria-label="Collapse navigation"
+        >
+          <span class="sidebar-toggle-icon" aria-hidden="true">‹</span>
+          <span class="sidebar-toggle-label">Collapse navigation</span>
+        </button>
         <header class="rail-header">
           <a class="brand-mini" href="#pageTitle" aria-label="NexusOne Copilot home">
             <span class="brand-mark small" aria-hidden="true">N1</span>
@@ -145,8 +156,7 @@
         <nav class="workspace-nav" aria-label="Primary navigation">
           <a class="nav-item active" href="#pageTitle" aria-current="page">
             <span class="nav-icon" aria-hidden="true">＋</span>
-            <span>Ask Copilot</span>
-            <span class="nav-live">Live</span>
+            <span>Workspace</span>
           </a>
         </nav>
 
@@ -161,7 +171,7 @@
 
         <footer class="rail-footer">
           <span id="serviceStatusIndicator" class="status-dot is-neutral" aria-hidden="true"></span>
-          <span id="serviceStatus">Waiting for an authenticated session</span>
+          <span id="serviceStatus" aria-live="polite"></span>
         </footer>
       </aside>
 
@@ -178,7 +188,7 @@
               <input id="traceToggle" type="checkbox" />
               <span>Trace</span>
             </label>
-            <button id="mobileInspectorButton" class="secondary-action" type="button" aria-expanded="false" aria-controls="inspector">Details</button>
+            <button id="mobileInspectorButton" class="secondary-action" type="button" aria-expanded="false" aria-controls="inspector" aria-label="Show conversation details">Show details</button>
           </div>
         </header>
 
@@ -203,7 +213,7 @@
           <label class="sr-only" for="messageInput">Your question</label>
           <div class="composer-input-wrap">
             <textarea id="messageInput" rows="1" maxlength="2000" placeholder="Ask about a policy, process, or ticket…" autocomplete="off"></textarea>
-            <div class="composer-meta"><span>Enter a question in plain language</span><span id="characterCount">0 / 2000</span></div>
+            <div class="composer-meta"><span id="characterCount">0 / 2000</span></div>
           </div>
           <button id="sendButton" class="send-button" type="submit" disabled>
             <span>Send</span>
@@ -219,7 +229,7 @@
             <p class="eyebrow">Context</p>
             <h2>Conversation details</h2>
           </div>
-          <button id="closeInspectorButton" class="icon-button" type="button" aria-label="Close conversation details">Close</button>
+          <button id="closeInspectorButton" class="icon-button" type="button" aria-label="Collapse conversation details">Hide details</button>
         </div>
         <section id="inspectorContent" class="inspector-content">
           <p class="empty-note">Select an answer to inspect sources, ticket details, feedback, and trace output.</p>
