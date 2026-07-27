@@ -3,7 +3,9 @@ flowchart TD
   LOAD[Load user context<br/>user_id, role, groups, location]
   PRECHECK{Pre-check guardrails<br/>identity, jailbreak, unsafe request}
   REFUSE[Safe refusal<br/>do not reveal restricted titles]
-  ROUTER{Intent router<br/>docs, sql, ticket, mixed, clarify}
+  ROUTER{Intent router<br/>casual, general knowledge, docs, sql, ticket, mixed, clarify}
+  CASUAL[CASUAL<br/>Deterministic Response]
+  GENERAL[GENERAL_KNOWLEDGE<br/>Answer Composer<br/>OpenAI or existing local fallback]
   CLARIFY[Interrupt / ask clarification<br/>resume into router]
   MERGE[Merge evidence<br/>RAG chunks + SQL rows + tool results]
   ANSWER[Compose grounded answer<br/>format citations and sources]
@@ -60,6 +62,8 @@ flowchart TD
     TICKET_MISSING -- no --> TICKET_AUTH --> TICKET_RUN --> TICKET_OUT
   end
 
+  ROUTER -- casual --> CASUAL --> VALIDATE
+  ROUTER -- general knowledge --> GENERAL --> VALIDATE
   ROUTER -- docs question --> RAG_PERM
   ROUTER -- structured data --> SQL_SCOPE
   ROUTER -- ticket action --> TICKET_INTENT

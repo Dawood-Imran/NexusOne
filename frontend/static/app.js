@@ -531,6 +531,7 @@ function addAssistantMessage(payload) {
     role: "assistant",
     status: payload.status || "answered",
     reason_code: payload.reason_code,
+    route: payload.route || null,
     message: payload.message || "No response was returned.",
     citations: payload.citations || [],
     sources: payload.sources || [],
@@ -774,6 +775,8 @@ function renderInspector() {
     <h3>Answer metadata</h3>
     <dl>
       <div><dt>Status</dt><dd>${escapeHtml(message.status || "answered")}</dd></div>
+      <div><dt>Reason</dt><dd>${escapeHtml(message.reason_code || "-")}</dd></div>
+      <div><dt>Route</dt><dd>${escapeHtml(message.route || "-")}</dd></div>
       <div><dt>Latency</dt><dd>${message.latency_ms == null ? "-" : `${message.latency_ms}ms`}</dd></div>
       <div><dt>Structured rows</dt><dd>${message.row_count || 0}</dd></div>
       <div><dt>Feedback</dt><dd>${escapeHtml(message.feedback || "Not submitted")}</dd></div>

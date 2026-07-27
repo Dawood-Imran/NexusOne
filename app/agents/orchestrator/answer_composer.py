@@ -49,10 +49,17 @@ class DeterministicAnswerComposer:
             answer = sql_answer
         elif route == "ticket_create":
             answer = str(context.get("action_answer") or "").strip()
+        elif route == "GENERAL_KNOWLEDGE":
+            answer = str(context.get("general_answer") or "").strip()
         else:
             answer = rag_answer
 
-        if not answer:
+        if not answer and route == "GENERAL_KNOWLEDGE":
+            answer = (
+                "I do not have a reliable local answer for that general-knowledge question. "
+                "Use an OpenAI-enabled provider or ask about one of the supported topics."
+            )
+        elif not answer:
             answer = (
                 "I do not have enough accessible source context to answer that confidently. "
                 "Try asking about a public policy, an internal process, or your own support tickets."
@@ -62,10 +69,13 @@ class DeterministicAnswerComposer:
                 "I can route this to the structured-data connector and the SQL subgraph validated a safe query. "
                 "Live database execution is not enabled in local validation-only mode."
             )
+        fallback_reason = self.fallback_reason
+        if route == "GENERAL_KNOWLEDGE" and not context.get("general_answer") and fallback_reason is None:
+            fallback_reason = "GENERAL_KNOWLEDGE_NOT_AVAILABLE_LOCAL"
         return AnswerComposition(
             answer=_ensure_minimum_citation(answer, context),
             backend=self.backend,
-            fallback_reason=self.fallback_reason,
+            fallback_reason=fallback_reason,
         )
 
 
@@ -104,6 +114,7 @@ class LangChainOpenAIAnswerComposer:
                     "If the context contains procedural steps, include the concrete steps in the answer instead of telling the user to read, review, find, or refer to a guide.\n"
                     "If the sanitized draft contains a numbered list, preserve those list items in the final answer without dropping them.\n"
                     "If the context contains statuses, dates, amounts, or named records, preserve those exact values.\n"
+                    "For GENERAL_KNOWLEDGE, answer the educational question directly from general knowledge, without using or implying NexusOne sources.\n"
                     "For every factual sentence that uses knowledge/document context, add an inline citation marker like [1].\n"
                     "Use only citation markers that appear in the sanitized source list.\n"
                     "Keep the answer concise, direct, and useful. Preserve important dates, statuses, and policy steps.\n"
@@ -180,6 +191,8 @@ def _compact_context(context: Mapping[str, Any]) -> str:
         lines.append(f"knowledge_answer: {context.get('rag_answer')}")
     if context.get("action_answer"):
         lines.append(f"action_answer: {context.get('action_answer')}")
+    if context.get("general_answer"):
+        lines.append(f"general_answer: {context.get('general_answer')}")
     if context.get("citations"):
         lines.append("sources:")
         for source in context.get("citations") or []:

@@ -102,6 +102,10 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("function renderDeniedNextStep(payload)", self.app_js)
         self.assertIn("function renderRetry(text, titleText = \"Connection issue\")", self.app_js)
 
+    def test_route_metadata_is_safe_and_visible_for_new_routes(self) -> None:
+        self.assertIn("route: payload.route || null,", self.app_js)
+        self.assertIn('<div><dt>Route</dt><dd>${escapeHtml(message.route || "-")}</dd></div>', self.app_js)
+
     def test_trace_inspector_distinguishes_graph_and_sql_subgraph(self) -> None:
         self.assertIn("subgraph_trace: payload.subgraph_trace || [],", self.app_js)
         self.assertIn('subgraphTitle.textContent = "SQL subgraph trace";', self.app_js)

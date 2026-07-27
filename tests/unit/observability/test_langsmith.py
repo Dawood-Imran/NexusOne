@@ -29,6 +29,16 @@ class LangSmithConfigTest(unittest.TestCase):
         self.assertNotIn("sensitive answer", serialized)
         self.assertNotIn("source chunk", serialized)
 
+    def test_route_metadata_accepts_only_safe_route_names(self) -> None:
+        casual = build_langsmith_config({"route": "CASUAL"})
+        general = build_langsmith_config({"route": "GENERAL_KNOWLEDGE"})
+        unsafe = build_langsmith_config({"route": "select * from secrets"})
+
+        self.assertEqual("CASUAL", casual["metadata"]["route"])
+        self.assertIn("route:GENERAL_KNOWLEDGE", general["tags"])
+        self.assertNotIn("route", unsafe["metadata"])
+        self.assertNotIn("select * from secrets", repr(unsafe))
+
     def test_orchestrator_passes_config_to_graph_invoke(self) -> None:
         orchestrator = NexusOneOrchestrator()
         fake_graph = _FakeGraph()

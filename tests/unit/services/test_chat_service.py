@@ -32,6 +32,14 @@ class ChatServiceTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.environment.stop()
 
+    def test_casual_route_reports_deterministic_not_used_capability(self) -> None:
+        response = self.service.handle_message("u001", "Hi")
+
+        self.assertEqual("CASUAL", response["route"])
+        self.assertEqual("deterministic", response["capabilities"]["answer_composer"]["provider"])
+        self.assertEqual("not_used", response["capabilities"]["answer_composer"]["mode"])
+        self.assertEqual("deterministic", response["model_backend"])
+
     def test_allowed_public_kb_question_returns_citation(self) -> None:
         response = self.service.handle_message("u001", "How do I request AWS access?")
 

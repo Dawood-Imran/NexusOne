@@ -221,12 +221,20 @@ class ChatService:
                 "error": "error",
             }.get(execution_status, "configured")
 
-        answer_capability = _provider_metadata(
-            self.answer_composer,
-            configured=self.runtime_config.openai_api_key_configured,
-            model=self.runtime_config.openai_answer_model,
-            unavailable_reason="OPENAI_PROVIDER_UNAVAILABLE",
-        )
+        if response.get("route") == "CASUAL":
+            answer_capability = {
+                "provider": "deterministic",
+                "model": "none",
+                "mode": "not_used",
+                "fallback_reason": None,
+            }
+        else:
+            answer_capability = _provider_metadata(
+                self.answer_composer,
+                configured=self.runtime_config.openai_api_key_configured,
+                model=self.runtime_config.openai_answer_model,
+                unavailable_reason="OPENAI_PROVIDER_UNAVAILABLE",
+            )
         if response.get("model_fallback_reason"):
             answer_capability.update(
                 {

@@ -6,6 +6,9 @@ from typing import Any, Mapping
 
 
 RUN_NAME = "nexusone_main_orchestrator"
+SAFE_ROUTE_NAMES = frozenset(
+    {"rag", "sql", "combined", "ticket_create", "CASUAL", "GENERAL_KNOWLEDGE", "deny", "error"}
+)
 
 
 def build_langsmith_config(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -27,6 +30,11 @@ def build_langsmith_config(payload: Mapping[str, Any]) -> dict[str, Any]:
         "execute_sql": execute_sql,
         "ui_trace_requested": include_trace,
     }
+    route = payload.get("route")
+    if not isinstance(route, str) or route not in SAFE_ROUTE_NAMES:
+        route = None
+    if route:
+        metadata["route"] = route
     tags = [
         "nexusone",
         "orchestrator",
@@ -34,6 +42,8 @@ def build_langsmith_config(payload: Mapping[str, Any]) -> dict[str, Any]:
         f"user:{user_id}",
         "sql-execute" if execute_sql else "sql-validate-only",
     ]
+    if route:
+        tags.append(f"route:{route}")
     return {
         "run_name": RUN_NAME,
         "tags": tags,

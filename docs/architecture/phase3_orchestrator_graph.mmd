@@ -4,14 +4,20 @@ flowchart TD
   PRECHECK --> ROUTE[route_question]
 
   ROUTE -- denied/error --> FINAL[finalize_response]
+  ROUTE -- CASUAL --> CASUAL[deterministic_casual_response]
+  ROUTE -- GENERAL_KNOWLEDGE --> GENERAL[compose_general_knowledge<br/>OpenAI or existing local fallback]
   ROUTE -- sql --> SQL[run_sql_subgraph]
   ROUTE -- rag --> RAG[retrieve_rag_context]
   ROUTE -- combined --> SQL
 
+  CASUAL --> VALIDATE[validate_answer]
+  GENERAL --> VALIDATE
+
   SQL -- sql only --> VALIDATE[validate_answer]
   SQL -- combined --> RAG
   RAG --> VALIDATE
-  VALIDATE --> COMPOSE[compose_final_answer<br/>OpenAI via LangChain]
+  VALIDATE -- CASUAL or GENERAL_KNOWLEDGE --> FINAL
+  VALIDATE -- RAG/SQL/ticket/combined --> COMPOSE[compose_final_answer<br/>OpenAI or existing local fallback]
   COMPOSE --> FINAL
   FINAL --> END([END])
 

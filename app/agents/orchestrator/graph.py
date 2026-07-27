@@ -14,6 +14,7 @@ from app.agents.orchestrator.nodes import (
     make_load_user_context_node,
     make_precheck_guardrails_node,
     make_retrieve_rag_node,
+    make_respond_casual_node,
     make_route_question_node,
     make_run_ticket_action_node,
     make_run_sql_node,
@@ -46,6 +47,7 @@ def build_orchestrator_graph(
     graph.add_node("load_user_context", make_load_user_context_node())
     graph.add_node("precheck_guardrails", make_precheck_guardrails_node())
     graph.add_node("route_question", make_route_question_node())
+    graph.add_node("respond_casual", make_respond_casual_node())
     graph.add_node("run_ticket_action", make_run_ticket_action_node(ticket_service))
     graph.add_node(
         "run_sql_subgraph",
@@ -53,7 +55,9 @@ def build_orchestrator_graph(
     )
     graph.add_node("retrieve_rag_context", make_retrieve_rag_node(chunk_retriever, local_retriever))
     graph.add_node("validate_answer", make_validate_answer_node())
-    graph.add_node("compose_final_answer", make_compose_final_answer_node(answer_composer or build_default_answer_composer()))
+    composer = answer_composer or build_default_answer_composer()
+    graph.add_node("compose_final_answer", make_compose_final_answer_node(composer))
+    graph.add_node("compose_general_knowledge", make_compose_final_answer_node(composer))
     graph.add_node("finalize_response", make_finalize_response_node())
 
     graph.add_edge(START, "load_user_context")
@@ -69,6 +73,8 @@ def build_orchestrator_graph(
             "rag": "retrieve_rag_context",
             "combined": "run_sql_subgraph",
             "ticket_create": "run_ticket_action",
+            "CASUAL": "respond_casual",
+            "GENERAL_KNOWLEDGE": "compose_general_knowledge",
         },
     )
     graph.add_conditional_edges(
@@ -80,8 +86,18 @@ def build_orchestrator_graph(
         },
     )
     graph.add_edge("run_ticket_action", "validate_answer")
+    graph.add_edge("respond_casual", "validate_answer")
     graph.add_edge("retrieve_rag_context", "validate_answer")
-    graph.add_edge("validate_answer", "compose_final_answer")
+    graph.add_conditional_edges(
+        "validate_answer",
+        _route_after_validation,
+        {
+            "casual": "finalize_response",
+            "general_knowledge": "finalize_response",
+            "compose": "compose_final_answer",
+        },
+    )
+    graph.add_edge("compose_general_knowledge", "validate_answer")
     graph.add_edge("compose_final_answer", "finalize_response")
     graph.add_edge("finalize_response", END)
     return graph.compile()
@@ -137,3 +153,12 @@ def _route_after_question(state: OrchestratorState) -> str:
 
 def _route_after_sql(state: OrchestratorState) -> str:
     return "combined" if state.get("route") == "combined" else "validate"
+
+
+def _route_after_validation(state: OrchestratorState) -> str:
+    route = state.get("route")
+    if route == "CASUAL":
+        return "casual"
+    if route == "GENERAL_KNOWLEDGE":
+        return "general_knowledge"
+    return "compose"
