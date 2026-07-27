@@ -70,6 +70,38 @@ class StaticChatUIContractTest(unittest.TestCase):
     def test_ready_message_does_not_show_feedback_controls(self) -> None:
         self.assertIn("![\"error\", \"ready\"].includes(message.status)", self.app_js)
 
+    def test_shell_has_accessible_profile_context_and_composer_states(self) -> None:
+        self.assertIn('aria-label="Workspace context"', self.index_html)
+        self.assertIn('aria-labelledby="pageTitle"', self.index_html)
+        self.assertIn('aria-live="polite"', self.index_html)
+        self.assertIn('id="profileSelect"', self.index_html)
+        self.assertIn('id="messageInput"', self.index_html)
+        self.assertIn('maxlength="2000"', self.index_html)
+        self.assertIn('id="characterCount"', self.index_html)
+        self.assertIn('id="emptyState"', self.index_html)
+
+    def test_frontend_covers_loading_error_denied_and_retry_states(self) -> None:
+        self.assertIn('id = "loadingMessage"', self.app_js)
+        self.assertIn('statusClass = payload.status === "denied"', self.app_js)
+        self.assertIn('status === "error"', self.app_js)
+        self.assertIn('status === "no_answer"', self.app_js)
+        self.assertIn('function renderRetry(text)', self.app_js)
+        self.assertIn('The local service did not respond.', self.app_js)
+
+    def test_chat_request_uses_selected_profile_and_trace_setting(self) -> None:
+        self.assertIn('user_id: state.activeUserId', self.app_js)
+        self.assertIn('include_trace: traceToggle.checked', self.app_js)
+        self.assertIn('state.activeUserId = event.target.value;', self.app_js)
+        self.assertIn('resetConversation();', self.app_js)
+
+    def test_styles_include_narrow_viewport_and_reduced_motion_support(self) -> None:
+        styles = (ROOT / "frontend" / "static" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn("@media (max-width: 760px)", styles)
+        self.assertIn("@media (max-width: 430px)", styles)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", styles)
+        self.assertIn(".message.denied", styles)
+        self.assertIn(".message.error", styles)
+
 
 if __name__ == "__main__":
     unittest.main()

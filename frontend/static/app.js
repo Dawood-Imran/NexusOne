@@ -8,6 +8,8 @@ const state = {
   activeConversationId: null,
   selectedAssistantMessageId: null,
   sending: false,
+  lastSubmittedText: "",
+  messageCount: 0,
 };
 
 const authView = document.querySelector("#authView");
@@ -19,15 +21,21 @@ const sessionRole = document.querySelector("#sessionRole");
 const newChatButton = document.querySelector("#newChatButton");
 const conversationList = document.querySelector("#conversationList");
 const conversationTitle = document.querySelector("#conversationTitle");
+const pageTitle = document.querySelector("#pageTitle");
+const profileSelect = document.querySelector("#profileSelect");
+const profileAvatar = document.querySelector("#profileAvatar");
 const profileName = document.querySelector("#profileName");
+const profileTitle = document.querySelector("#profileTitle");
 const profileRole = document.querySelector("#profileRole");
 const profileDepartment = document.querySelector("#profileDepartment");
 const profileLocation = document.querySelector("#profileLocation");
 const messages = document.querySelector("#messages");
 const chatForm = document.querySelector("#chatForm");
 const messageInput = document.querySelector("#messageInput");
+const characterCount = document.querySelector("#characterCount");
 const sendButton = document.querySelector("#sendButton");
 const traceToggle = document.querySelector("#traceToggle");
+const conversationStatus = document.querySelector("#conversationStatus");
 const suggestions = document.querySelector("#suggestions");
 const inspector = document.querySelector("#inspector");
 const inspectorContent = document.querySelector("#inspectorContent");
@@ -35,22 +43,33 @@ const mobileInspectorButton = document.querySelector("#mobileInspectorButton");
 const closeInspectorButton = document.querySelector("#closeInspectorButton");
 
 async function init() {
+  setConversationStatus("Loading your workspace…", "busy");
   try {
     const response = await fetch("/api/profiles");
+    if (!response.ok) throw new Error(`Profile request failed: ${response.status}`);
     const payload = await response.json();
-    state.profiles = payload.profiles || [];
+    state.profiles = Array.isArray(payload.profiles) ? payload.profiles : [];
+    if (!state.profiles.length) throw new Error("No profiles were returned.");
     renderProfileCards();
     const savedUserId = window.localStorage.getItem(SESSION_KEY);
     if (savedUserId && state.profiles.some((profile) => profile.user_id === savedUserId)) {
       signIn(savedUserId);
+    } else {
+      setConversationStatus("Choose a demo profile to begin.");
     }
   } catch (error) {
+    if (profileSelect) profileSelect.disabled = true;
+    if (sendButton) sendButton.disabled = true;
     authError.textContent = "Could not load demo profiles. Check that the local server is running.";
+    setConversationStatus("Workspace unavailable. Start the local server and reload.", "error");
   }
 }
 
 function renderProfileCards() {
   profileCards.innerHTML = "";
+  if (profileSelect) {
+    profileSelect.innerHTML = '<option value="">Choose a profile…</option>';
+  }
   state.profiles.forEach((profile) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -65,10 +84,20 @@ function renderProfileCards() {
     button.querySelector(".profile-card-scope").textContent = accessSummary(profile.role);
     button.addEventListener("click", () => signIn(profile.user_id));
     profileCards.appendChild(button);
+
+    if (profileSelect) {
+      const option = document.createElement("option");
+      option.value = profile.user_id;
+      option.textContent = `${profile.name} · ${formatRole(profile.role)}`;
+      profileSelect.appendChild(option);
+    }
   });
+  if (profileSelect) profileSelect.disabled = !state.activeUserId;
 }
 
 function signIn(userId) {
+  const profile = state.profiles.find((candidate) => candidate.user_id === userId);
+  if (!profile || state.sending) return;
   state.activeUserId = userId;
   window.localStorage.setItem(SESSION_KEY, userId);
   state.conversations = loadConversations(userId);
@@ -78,11 +107,14 @@ function signIn(userId) {
   }
   state.activeConversationId = state.conversations[0].id;
   state.selectedAssistantMessageId = latestAssistantMessage(activeConversation())?.id || null;
+  resetConversation();
   authView.classList.add("hidden");
   appView.classList.remove("hidden");
   updateProfilePanel();
   renderConversationList();
   renderActiveConversation();
+  setConversationStatus(`Workspace ready for ${profile.name}.`);
+  setComposerAvailability();
   messageInput.focus();
 }
 
@@ -95,6 +127,8 @@ function signOut() {
   closeInspector();
   appView.classList.add("hidden");
   authView.classList.remove("hidden");
+  if (profileSelect) profileSelect.disabled = true;
+  setConversationStatus("Choose a demo profile to begin.");
   const firstProfile = profileCards.querySelector("button");
   if (firstProfile) firstProfile.focus();
 }
@@ -110,11 +144,17 @@ function activeConversation() {
 function updateProfilePanel() {
   const profile = activeProfile();
   if (!profile) return;
-  sessionRole.textContent = `${profile.name} - ${profile.role}`;
+  sessionRole.textContent = `${profile.name} - ${formatRole(profile.role)}`;
   profileName.textContent = profile.name;
-  profileRole.textContent = profile.role;
-  profileDepartment.textContent = profile.department;
-  profileLocation.textContent = profile.location;
+  profileTitle.textContent = profile.title || "NexusOne team member";
+  profileRole.textContent = formatRole(profile.role);
+  profileDepartment.textContent = profile.department || "—";
+  profileLocation.textContent = profile.location || "—";
+  if (profileAvatar) profileAvatar.textContent = initials(profile.name);
+  if (profileSelect) {
+    profileSelect.value = profile.user_id;
+    profileSelect.disabled = state.sending;
+  }
 }
 
 function createConversation(title = "New chat") {
@@ -177,17 +217,26 @@ function renderActiveConversation() {
   const conversation = activeConversation();
   if (!conversation) return;
   conversationTitle.textContent = conversation.title;
+  if (pageTitle) pageTitle.textContent = conversation.title === "New chat" ? "How can we help today?" : conversation.title;
   messages.innerHTML = "";
   conversation.messages.forEach((message) => {
     messages.appendChild(renderMessage(message));
   });
+  state.messageCount = conversation.messages.length;
   renderInspector();
   scrollMessages();
 }
 
 function renderMessage(message) {
+  const statusClass = message.status === "denied"
+    ? "denied"
+    : message.status === "error"
+      ? "error"
+      : message.status === "no_answer"
+        ? "no-answer"
+        : "";
   const article = document.createElement("article");
-  article.className = `message ${message.role} ${message.status === "denied" ? "denied" : ""} ${message.status === "error" ? "error" : ""}`.trim();
+  article.className = `message ${message.role} ${statusClass}`.trim();
   if (message.role === "assistant") {
     article.tabIndex = 0;
     article.classList.toggle("selected", message.id === state.selectedAssistantMessageId);
@@ -197,20 +246,29 @@ function renderMessage(message) {
 
   const meta = document.createElement("div");
   meta.className = "message-meta";
-  meta.textContent = message.role === "user" ? "You" : `Assistant - ${message.status || "answered"}`;
+  if (message.role === "user") {
+    meta.textContent = "You";
+  } else {
+    const assistantName = document.createElement("span");
+    assistantName.textContent = "Copilot";
+    const status = document.createElement("span");
+    status.className = "message-status";
+    status.textContent = statusLabel(message.status);
+    meta.appendChild(assistantName);
+    meta.appendChild(status);
+  }
   const body = document.createElement("div");
   body.className = "message-body";
   renderMessageBody(body, message.message || "No response was returned.", message.citations || [], () => {
-    if (message.role === "assistant") {
-      selectAssistantMessage(message.id);
-    }
+    if (message.role === "assistant") selectAssistantMessage(message.id);
   });
   article.appendChild(meta);
   article.appendChild(body);
 
-  if (message.ticket) {
-    article.appendChild(renderTicketSummary(message.ticket));
-  }
+  if (message.ticket) article.appendChild(renderTicketSummary(message.ticket));
+  if (message.status === "denied") article.appendChild(renderDeniedNextStep(message));
+  if (message.status === "no_answer") article.appendChild(renderNoAnswerNextStep());
+  if (message.status === "error" && state.lastSubmittedText) article.appendChild(renderRetry(state.lastSubmittedText));
   if (message.role === "assistant" && !["error", "ready"].includes(message.status)) {
     article.appendChild(renderFeedbackControls(message));
   }
@@ -222,40 +280,88 @@ function selectAssistantMessage(messageId) {
   renderInspector();
   messages.querySelectorAll(".message.assistant").forEach((node) => node.classList.remove("selected"));
   const conversation = activeConversation();
+  if (!conversation) return;
   const index = conversation.messages.filter((message) => message.role === "assistant").findIndex((message) => message.id === messageId);
   const selected = messages.querySelectorAll(".message.assistant")[index];
   if (selected) selected.classList.add("selected");
 }
 
+function clearEmptyState() {
+  document.querySelector("#emptyState")?.remove();
+}
+
+function resetConversation() {
+  state.messageCount = 0;
+  if (!messages) return;
+  messages.innerHTML = `
+    <div id="emptyState" class="empty-state">
+      <div class="empty-mark" aria-hidden="true">N1</div>
+      <p class="eyebrow">Start with a question</p>
+      <h2>Find the answer without hunting through folders.</h2>
+      <p>Ask in plain language. Copilot checks your profile first, then searches only the sources you can use.</p>
+      <div class="capability-list" aria-label="Available question types">
+        <div class="capability"><span class="capability-icon" aria-hidden="true">▤</span><span><strong>Policies</strong><small>Leave, expenses, remote work</small></span></div>
+        <div class="capability"><span class="capability-icon" aria-hidden="true">↗</span><span><strong>Processes</strong><small>Access, onboarding, approvals</small></span></div>
+        <div class="capability"><span class="capability-icon" aria-hidden="true">#</span><span><strong>Tickets</strong><small>Check your support requests</small></span></div>
+      </div>
+    </div>`;
+}
+
 function addUserMessage(text) {
   const conversation = activeConversation();
-  const message = {
-    id: `user-${Date.now()}`,
-    role: "user",
-    message: text,
-  };
+  if (!conversation) return;
+  const message = { id: `user-${Date.now()}`, role: "user", message: text };
   conversation.messages.push(message);
   conversation.updatedAt = new Date().toISOString();
-  if (conversation.title === "New chat") {
-    conversation.title = summarizeTitle(text);
-  }
+  if (conversation.title === "New chat") conversation.title = summarizeTitle(text);
   saveConversations();
   renderConversationList();
   renderActiveConversation();
 }
 
+function addLoadingMessage() {
+  clearEmptyState();
+  const article = document.createElement("article");
+  article.id = "loadingMessage";
+  article.className = "message assistant loading";
+  const meta = document.createElement("div");
+  meta.className = "message-meta";
+  meta.textContent = "Copilot";
+  const body = document.createElement("div");
+  body.className = "loading-body";
+  body.innerHTML = '<span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span><span>Checking access and approved sources…</span>';
+  article.appendChild(meta);
+  article.appendChild(body);
+  messages.appendChild(article);
+  scrollMessages();
+}
+
+function removeLoadingMessage() {
+  document.querySelector("#loadingMessage")?.remove();
+}
+
 function addAssistantMessage(payload) {
   const conversation = activeConversation();
+  if (!conversation) return;
+  const statusClass = payload.status === "denied"
+    ? "denied"
+    : payload.status === "error"
+      ? "error"
+      : payload.status === "no_answer"
+        ? "no-answer"
+        : "";
   const message = {
     id: `assistant-${Date.now()}`,
     role: "assistant",
     status: payload.status || "answered",
+    status_class: statusClass,
     reason_code: payload.reason_code,
     message: payload.message || "No response was returned.",
     citations: payload.citations || [],
     sources: payload.sources || [],
     ticket: payload.ticket || null,
     missing_fields: payload.missing_fields || [],
+    allowed_alternatives: payload.allowed_alternatives || [],
     trace: payload.trace || [],
     conversation_id: payload.conversation_id || "web-chat",
     turn_id: payload.turn_id || "web-turn",
@@ -267,6 +373,7 @@ function addAssistantMessage(payload) {
   saveConversations();
   renderConversationList();
   renderActiveConversation();
+  updateResponseStatus(payload);
 }
 
 function collectSourceItems(payload) {
@@ -281,13 +388,7 @@ function renderTicketSummary(ticket) {
   const title = document.createElement("h3");
   title.textContent = "Ticket created";
   const list = document.createElement("dl");
-  [
-    ["ID", ticket.ticket_id],
-    ["Status", ticket.status],
-    ["Team", ticket.department],
-    ["Category", ticket.category],
-    ["Priority", ticket.priority],
-  ].forEach(([label, value]) => {
+  [["ID", ticket.ticket_id], ["Status", ticket.status], ["Team", ticket.department], ["Category", ticket.category], ["Priority", ticket.priority]].forEach(([label, value]) => {
     if (!value) return;
     const row = document.createElement("div");
     const term = document.createElement("dt");
@@ -307,11 +408,7 @@ function renderFeedbackControls(payload) {
   const section = document.createElement("section");
   section.className = "feedback";
   section.setAttribute("aria-label", "Answer feedback");
-  [
-    ["helpful", "Helpful"],
-    ["not_helpful", "Not helpful"],
-    ["missing_source", "Source issue"],
-  ].forEach(([rating, label]) => {
+  [["helpful", "Helpful"], ["not_helpful", "Not helpful"], ["missing_source", "Source issue"]].forEach(([rating, label]) => {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = payload.feedback === rating ? "Saved" : label;
@@ -357,12 +454,8 @@ async function sendFeedback(button, payload, rating) {
 
 function renderMessageBody(container, text, citations, beforeCitationSelect = null) {
   container.textContent = "";
-  const sourceIds = new Set(
-    citations
-      .map((citation) => Number(citation.reference_id))
-      .filter((referenceId) => Number.isInteger(referenceId))
-  );
-  const parts = text.split(/(\[\d+\])/g);
+  const sourceIds = new Set(citations.map((citation) => Number(citation.reference_id)).filter((referenceId) => Number.isInteger(referenceId)));
+  const parts = String(text).split(/(\[\d+\])/g);
   parts.forEach((part) => {
     const match = part.match(/^\[(\d+)\]$/);
     if (!match || !sourceIds.has(Number(match[1]))) {
@@ -412,30 +505,24 @@ function renderInspector() {
     inspectorContent.appendChild(empty);
     return;
   }
-
-  if (message.ticket) {
-    inspectorContent.appendChild(renderTicketSummary(message.ticket));
-  }
-
+  if (message.ticket) inspectorContent.appendChild(renderTicketSummary(message.ticket));
   const sourceItems = collectSourceItems(message);
-  if (sourceItems.length) {
-    inspectorContent.appendChild(renderSources(sourceItems));
-  }
-
+  if (sourceItems.length) inspectorContent.appendChild(renderSources(sourceItems));
   if (message.missing_fields && message.missing_fields.length) {
     const section = document.createElement("section");
     section.className = "detail-section";
-    section.innerHTML = "<h3>Missing details</h3>";
+    const heading = document.createElement("h3");
+    heading.textContent = "Missing details";
     const list = document.createElement("ul");
     message.missing_fields.forEach((field) => {
       const item = document.createElement("li");
       item.textContent = field;
       list.appendChild(item);
     });
+    section.appendChild(heading);
     section.appendChild(list);
     inspectorContent.appendChild(section);
   }
-
   const meta = document.createElement("section");
   meta.className = "detail-section";
   meta.innerHTML = `
@@ -445,13 +532,9 @@ function renderInspector() {
       <div><dt>Reason</dt><dd>${escapeHtml(message.reason_code || "-")}</dd></div>
       <div><dt>Latency</dt><dd>${message.latency_ms == null ? "-" : `${message.latency_ms}ms`}</dd></div>
       <div><dt>Feedback</dt><dd>${escapeHtml(message.feedback || "Not submitted")}</dd></div>
-    </dl>
-  `;
+    </dl>`;
   inspectorContent.appendChild(meta);
-
-  if (message.trace && message.trace.length) {
-    inspectorContent.appendChild(renderTrace(message.trace));
-  }
+  if (message.trace && message.trace.length) inspectorContent.appendChild(renderTrace(message.trace));
 }
 
 function selectedAssistantMessage() {
@@ -469,12 +552,10 @@ function renderSources(items) {
   const section = document.createElement("section");
   section.className = "sources";
   const title = document.createElement("h3");
-  title.textContent = "Sources";
+  title.textContent = "Approved sources";
   const list = document.createElement("div");
   list.className = "source-list";
-  items.forEach((item) => {
-    list.appendChild(renderSourceCard(item));
-  });
+  items.forEach((item) => list.appendChild(renderSourceCard(item)));
   section.appendChild(title);
   section.appendChild(list);
   return section;
@@ -488,7 +569,6 @@ function renderSourceCard(item) {
     card.id = `source-${referenceId}`;
     card.tabIndex = -1;
   }
-
   const header = document.createElement("div");
   header.className = "source-header";
   const label = document.createElement("span");
@@ -499,14 +579,10 @@ function renderSourceCard(item) {
   header.appendChild(label);
   header.appendChild(heading);
   card.appendChild(header);
-
   const meta = document.createElement("p");
   meta.className = "source-meta";
-  meta.textContent = item.title
-    ? `${item.source_type || "document"} - updated ${item.updated_at || "unknown"}`
-    : `${item.kind || "source"}${item.domain ? ` - ${item.domain}` : ""}`;
+  meta.textContent = sourceMeta(item);
   card.appendChild(meta);
-
   const sourceText = item.text || item.excerpt;
   if (sourceText) {
     const excerpt = document.createElement("blockquote");
@@ -514,8 +590,17 @@ function renderSourceCard(item) {
     excerpt.textContent = sourceText;
     card.appendChild(excerpt);
   }
-
   return card;
+}
+
+function sourceMeta(item) {
+  if (!item.title) return `${item.kind || "structured source"}${item.domain ? ` · ${item.domain}` : ""}`;
+  const details = [item.source_type || "document"];
+  if (item.page_number) details.push(`page ${item.page_number}`);
+  if (item.section_heading) details.push(item.section_heading);
+  if (item.updated_at) details.push(`updated ${item.updated_at}`);
+  if (item.source_path) details.push(item.source_path);
+  return details.join(" · ");
 }
 
 function renderTrace(trace) {
@@ -526,7 +611,8 @@ function renderTrace(trace) {
   const list = document.createElement("ol");
   trace.forEach((item) => {
     const li = document.createElement("li");
-    li.textContent = `${item.node}: ${item.details?.status || "running"}`;
+    const details = item.details || {};
+    li.textContent = `${item.node}: ${details.status || "running"}`;
     list.appendChild(li);
   });
   section.appendChild(title);
@@ -534,36 +620,120 @@ function renderTrace(trace) {
   return section;
 }
 
-function setSending(value) {
-  state.sending = value;
-  sendButton.disabled = value;
-  sendButton.textContent = value ? "Sending" : "Send";
+function renderDeniedNextStep(payload) {
+  const section = document.createElement("section");
+  section.className = "message-next-step";
+  const title = document.createElement("h3");
+  title.textContent = "What you can ask instead";
+  const alternatives = Array.isArray(payload.allowed_alternatives) && payload.allowed_alternatives.length
+    ? payload.allowed_alternatives
+    : ["public company policies", "your own support tickets", "general process guidance"];
+  const copy = document.createElement("p");
+  copy.textContent = alternatives.join(" · ");
+  section.appendChild(title);
+  section.appendChild(copy);
+  return section;
 }
 
-async function sendMessage(text) {
-  addUserMessage(text);
+function renderNoAnswerNextStep() {
+  const section = document.createElement("section");
+  section.className = "message-next-step";
+  const title = document.createElement("h3");
+  title.textContent = "Try making the question more specific";
+  const copy = document.createElement("p");
+  copy.textContent = "Include the policy, process, or ticket reference you want to look up.";
+  section.appendChild(title);
+  section.appendChild(copy);
+  return section;
+}
+
+function renderRetry(text) {
+  const section = document.createElement("section");
+  section.className = "message-next-step";
+  const title = document.createElement("h3");
+  title.textContent = "Connection issue";
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "retry-button";
+  retry.textContent = "Try again";
+  retry.addEventListener("click", () => sendMessage(text));
+  section.appendChild(title);
+  section.appendChild(retry);
+  return section;
+}
+
+function setSending(value) {
+  state.sending = value;
+  if (sendButton) {
+    sendButton.disabled = value || !activeProfile() || !messageInput.value.trim();
+    const label = sendButton.querySelector("span");
+    if (label) label.textContent = value ? "Checking" : "Send";
+  }
+  messageInput.disabled = value || !activeProfile();
+  if (profileSelect) profileSelect.disabled = value;
+  if (value) {
+    setConversationStatus("Checking access and approved sources…", "busy");
+    addLoadingMessage();
+  }
+}
+
+function setComposerAvailability() {
+  if (!sendButton) return;
+  sendButton.disabled = state.sending || !activeProfile() || !messageInput.value.trim();
+  messageInput.disabled = state.sending || !activeProfile();
+}
+
+async function sendMessage(text, options = {}) {
+  const cleanText = String(text || "").trim();
+  if (!cleanText || state.sending || !activeProfile()) return;
+  if (options.addUser !== false) addUserMessage(cleanText);
+  state.lastSubmittedText = cleanText;
   setSending(true);
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: state.activeUserId,
-        message: text,
-        include_trace: traceToggle.checked,
-      }),
+      body: JSON.stringify({ user_id: state.activeUserId, message: cleanText, include_trace: traceToggle.checked }),
     });
     const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || `Chat request failed: ${response.status}`);
     addAssistantMessage(payload);
   } catch (error) {
     addAssistantMessage({
       status: "error",
-      message: "The backend did not respond. Check the local server and try again.",
+      message: "The local service did not respond. Check the server, then try again.",
     });
+    setConversationStatus("The request could not be completed. You can try again.", "error");
   } finally {
+    removeLoadingMessage();
     setSending(false);
+    messageInput.value = "";
+    updateCharacterCount();
     messageInput.focus();
   }
+}
+
+function updateResponseStatus(payload) {
+  if (payload.status === "denied") {
+    setConversationStatus("This request was stopped before restricted sources were searched.");
+  } else if (payload.status === "error") {
+    setConversationStatus("The request needs attention.", "error");
+  } else if (payload.status === "no_answer") {
+    setConversationStatus("No approved source matched that question.");
+  } else {
+    setConversationStatus("Answer ready. Review the approved sources below it.");
+  }
+}
+
+function setConversationStatus(text, stateName = "") {
+  if (!conversationStatus) return;
+  conversationStatus.textContent = text;
+  conversationStatus.className = `conversation-status ${stateName ? `is-${stateName}` : ""}`.trim();
+}
+
+function updateCharacterCount() {
+  if (characterCount) characterCount.textContent = `${messageInput.value.length} / 2000`;
+  setComposerAvailability();
 }
 
 function startNewChat() {
@@ -574,6 +744,7 @@ function startNewChat() {
   saveConversations();
   renderConversationList();
   renderActiveConversation();
+  setConversationStatus("New conversation ready.");
   messageInput.focus();
 }
 
@@ -607,32 +778,44 @@ function accessSummary(role) {
   return summaries[role] || "Role-scoped company access.";
 }
 
+function formatRole(role) {
+  return String(role || "").replaceAll("_", " ");
+}
+
+function initials(name) {
+  return String(name || "N1").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("");
+}
+
 function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 accountButton.addEventListener("click", signOut);
 newChatButton.addEventListener("click", startNewChat);
 mobileInspectorButton.addEventListener("click", openInspector);
 closeInspectorButton.addEventListener("click", closeInspector);
-
+profileSelect.addEventListener("change", (event) => {
+  state.activeUserId = event.target.value;
+  if (state.activeUserId) signIn(state.activeUserId);
+});
 chatForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const text = messageInput.value.trim();
-  if (!text || state.sending) return;
-  messageInput.value = "";
-  sendMessage(text);
+  sendMessage(messageInput.value);
 });
-
+messageInput.addEventListener("input", updateCharacterCount);
+messageInput.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    chatForm.requestSubmit();
+  }
+});
 suggestions.addEventListener("click", (event) => {
   const button = event.target.closest("[data-prompt]");
-  if (!button) return;
-  messageInput.value = button.dataset.prompt;
+  if (!button || state.sending) return;
+  messageInput.value = button.dataset.prompt || "";
+  updateCharacterCount();
   messageInput.focus();
 });
 
+updateCharacterCount();
 init();

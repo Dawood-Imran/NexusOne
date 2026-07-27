@@ -3,8 +3,9 @@
 ## Current Summary
 
 - State: in-progress
-- Active phase: Phase 4 - Ticket Actions and Feedback
-- Last run: full unit suite, frontend contract checks, and Playwright MCP UI inspection passed on 2026-07-08
+- Active phase: Phase 4 - Ticket Actions and Feedback / integration validation
+- Last run: integrated full unit suite, focused frontend/action checks, compile checks, and local HTTP smoke passed; browser validation was not run because no browser harness/tooling is available
+- Integration note: `docs/requirements-coverage.md` is retained as the frontend/audit branch's durable R1-R14 evidence matrix; the integrated UI preserves the action-aware conversation inspector and adds its explicit loading, denied, no-answer, error/retry, responsive, and profile-switching states.
 - Main risks:
   - FastAPI/React production adapters are not wired yet; the app still uses a framework-independent service layer plus stdlib dev server.
   - Final answer composition is now a required graph node. It uses LangChain OpenAI when `OPENAI_API_KEY` is configured and falls back to deterministic composition on local/model errors.
@@ -28,7 +29,7 @@
 | Feedback capture | Backend/Frontend | partial | `app/actions/feedback_service.py`, `app/api/dev_server.py`, `frontend/static/app.js`, `tests/unit/actions/test_feedback_service.py`, `scripts/smoke_phase4_actions.py` | `/api/feedback` stores validated feedback through service layer; live Postgres and HTTP API smokes passed. Browser E2E remains. |
 | Audit metadata | Backend | partial | `app/actions/audit_service.py`, `app/services/chat_service.py`, `tests/unit/actions/test_audit_service.py`, `tests/unit/services/test_chat_service.py`, `scripts/smoke_phase4_actions.py` | Chat service writes safe metadata with redacted query text; live Postgres smoke passed. |
 | Evaluation tests | Testing | partial | Existing SQL unit tests | Broader role/RAG/E2E tests pending. |
-| Responsive frontend | Frontend/Testing | partial | `frontend/static/styles.css`, static frontend contract tests, Playwright MCP snapshots | UI Pro Max pass compacted auth, improved touch targets/focus states, removed feedback from non-answer welcome state, and verified desktop/mobile drawer behavior. Committed browser E2E remains. |
+| Responsive frontend | Frontend/Testing | partial | `frontend/static/styles.css`, static frontend contract tests, `docs/requirements-coverage.md` | Integrated action-aware conversation workspace retains auth, profile-scoped history, inspector, tickets, and feedback while adding the audit branch's explicit loading/denied/no-answer/error-retry states, source metadata, focus/touch treatment, and reduced-motion support. Browser E2E remains. |
 | Observability hooks | Backend | partial | `app/observability/langsmith.py`, `app/agents/orchestrator/graph.py`, graph trace response fields | Graph invocations now include LangSmith-compatible run name, tags, and safe metadata. Hosted LangSmith verification depends on env credentials. |
 
 ## Guardrail Coverage
@@ -50,10 +51,14 @@
 | `./venv/bin/python -m unittest tests.unit.agents.orchestrator.test_graph` | pass | 4 Phase 3 routing tests: RAG, SQL, denied, combined. |
 | `./venv/bin/python -m unittest tests.unit.retrieval.test_chunk_index tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service` | pass | 12 focused regression tests after FAISS hybrid retrieval and graph service handoff. |
 | `./venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 77 tests after auth/conversation frontend redesign contract coverage was added. |
+| `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 83 tests after integrating the frontend/audit branch and resolving the frontend contract merge. |
+| `.venv/bin/python -m unittest tests.unit.actions.test_ticket_service tests.unit.actions.test_feedback_service tests.unit.actions.test_audit_service tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service tests.unit.frontend.test_static_chat_ui` | pass | 36 focused action, graph/service, and frontend contract tests. |
+| `.venv/bin/python scripts/run_orchestrator.py --deterministic-composer --user-id u001 --trace "Create an IT ticket for AWS sandbox access needed for billing migration."` | pass | Ticket action returned `ticket_created`; trace showed guardrail precheck and `run_ticket_action` without RAG/SQL nodes. |
+| `.venv/bin/python scripts/run_web_app.py` + local HTTP assertions | pass | Static HTML/CSS/JS markers, 8 profiles, allowed/denied chat, and feedback API response verified. Browser automation was not run. |
 | `python3 .agents/skills/ui-ux-pro-max/scripts/search.py "internal enterprise AI knowledge assistant support desk dashboard professional" --design-system --variance 4 --motion 3 --density 8 -p "NexusOne Copilot"` | pass | Used UI Pro Max guidance for dense professional dashboard spacing, accessibility, touch targets, reduced motion, and interaction states. Palette recommendation was not copied because it was too AI-purple for this enterprise tool. |
 | `node --check frontend/static/app.js` | pass | JavaScript syntax check after frontend state rewrite. |
 | `./venv/bin/python -m unittest tests.unit.frontend.test_static_chat_ui` | pass | 9 static frontend contract tests after UI Pro Max pass, mobile inspector ARIA state, and welcome-message feedback suppression. |
-| `./venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 79 tests after UI Pro Max frontend refinement. |
+| `./venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 79 tests before this integration; final integrated run is recorded above with 83 tests. |
 | Playwright MCP desktop auth/workspace inspection on `http://127.0.0.1:8014` | pass | Verified compact auth layout, scrollable profile list, 44px controls, and welcome state without answer feedback. |
 | Playwright MCP mobile workspace inspection at `390x844` | pass | Verified stacked conversation layout, accessible details drawer, mobile touch targets, and drawer close behavior. |
 | Local static asset smoke on `http://127.0.0.1:8012` | pass | HTML/CSS/JS served with auth view, app view, conversation list, inspector, and profile-scoped conversation markers. |

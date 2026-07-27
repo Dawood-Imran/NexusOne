@@ -3,7 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>NexusOne Copilot</title>
+    <meta name="theme-color" content="#102a43" />
+    <title>NexusOne Copilot · Company knowledge desk</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -39,8 +40,8 @@
       </div>
     </section>
 
-    <div id="appView" class="app-shell hidden">
-      <aside class="conversation-rail" aria-label="Conversations">
+    <div id="appView" class="app-shell hidden" aria-label="Workspace context">
+      <aside class="conversation-rail" aria-label="Workspace navigation and conversations">
         <div class="rail-header">
           <div class="brand-mini">
             <div class="brand-mark small" aria-hidden="true">N1</div>
@@ -52,16 +53,32 @@
           <button id="accountButton" class="icon-button" type="button" aria-label="Switch profile">Account</button>
         </div>
 
-        <button id="newChatButton" class="primary-action" type="button">New chat</button>
+        <nav class="workspace-nav" aria-label="Primary navigation">
+          <a class="nav-item active" href="#pageTitle" aria-current="page">Ask Copilot <span class="nav-live">Live</span></a>
+        </nav>
 
+        <section class="workspace-identity" aria-labelledby="identityHeading">
+          <div class="section-heading">
+            <p class="eyebrow" id="identityHeading">Workspace identity</p>
+            <span class="status-dot" title="Profile switching is active" aria-label="Profile switching is active"></span>
+          </div>
+          <label class="field-label" for="profileSelect">Signed in as</label>
+          <select id="profileSelect" class="select" disabled>
+            <option value="">Loading profiles…</option>
+          </select>
+          <p class="access-note"><span aria-hidden="true">✓</span> Access is checked by the service on every request.</p>
+        </section>
+
+        <button id="newChatButton" class="primary-action" type="button">New chat</button>
         <nav id="conversationList" class="conversation-list" aria-label="Previous conversations"></nav>
       </aside>
 
-      <main class="chat-workspace">
+      <main class="chat-workspace" aria-labelledby="pageTitle">
         <header class="chat-topbar">
-          <div>
-            <p class="eyebrow">Active conversation</p>
-            <h2 id="conversationTitle">New chat</h2>
+          <div class="topbar-title">
+            <p class="eyebrow">Company knowledge desk</p>
+            <h1 id="pageTitle">How can we help today?</h1>
+            <p id="conversationTitle" class="conversation-title">New chat</p>
           </div>
           <div class="topbar-actions">
             <label class="trace-toggle">
@@ -72,20 +89,44 @@
           </div>
         </header>
 
-        <section id="messages" class="messages" aria-live="polite"></section>
-
-        <section id="suggestions" class="suggestions" aria-label="Suggested questions">
-          <button type="button" data-prompt="How do I request AWS access?">AWS access</button>
-          <button type="button" data-prompt="Create an IT ticket for AWS sandbox access needed for billing migration.">Create IT ticket</button>
-          <button type="button" data-prompt="Show my ticket status.">My tickets</button>
-          <button type="button" data-prompt="What are the Q4 revenue risks?">Restricted check</button>
+        <section class="conversation-status" id="conversationStatus" role="status" aria-live="polite">Ready when you are.</section>
+        <section id="messages" class="messages" aria-live="polite" aria-relevant="additions">
+          <div id="emptyState" class="empty-state">
+            <div class="empty-mark" aria-hidden="true">N1</div>
+            <p class="eyebrow">Start with a question</p>
+            <h2>Find the answer without hunting through folders.</h2>
+            <p>Ask in plain language. Copilot checks your profile first, then searches only the sources you can use.</p>
+            <div class="capability-list" aria-label="Available question types">
+              <div class="capability"><strong>Policies</strong><small>Leave, expenses, remote work</small></div>
+              <div class="capability"><strong>Processes</strong><small>Access, onboarding, approvals</small></div>
+              <div class="capability"><strong>Tickets</strong><small>Check your support requests</small></div>
+            </div>
+          </div>
         </section>
 
-        <form id="chatForm" class="composer">
-          <label class="sr-only" for="messageInput">Message</label>
-          <textarea id="messageInput" rows="2" placeholder="Ask about policies, tickets, or source-backed procedures"></textarea>
-          <button id="sendButton" type="submit">Send</button>
+        <section id="suggestions" class="suggestions" aria-labelledby="suggestionsHeading">
+          <div class="suggestions-heading">
+            <p class="eyebrow" id="suggestionsHeading">Try a question</p>
+            <span class="suggestions-hint">Select to edit, then send</span>
+          </div>
+          <div class="suggestion-grid">
+            <button type="button" data-prompt="How do I request AWS access?"><span class="suggestion-label">Access</span><span>Request AWS access</span><span aria-hidden="true">↗</span></button>
+            <button type="button" data-prompt="Create an IT ticket for AWS sandbox access needed for billing migration."><span class="suggestion-label">Support</span><span>Create an IT ticket</span><span aria-hidden="true">↗</span></button>
+            <button type="button" data-prompt="How do I request annual leave?"><span class="suggestion-label">Policy</span><span>Request annual leave</span><span aria-hidden="true">↗</span></button>
+            <button type="button" data-prompt="What are the Q4 revenue risks?"><span class="suggestion-label">Role-aware</span><span>Review revenue risks</span><span aria-hidden="true">↗</span></button>
+            <button type="button" data-prompt="Show my ticket status."><span class="suggestion-label">Tickets</span><span>Check my ticket status</span><span aria-hidden="true">↗</span></button>
+          </div>
+        </section>
+
+        <form id="chatForm" class="composer" aria-label="Ask NexusOne Copilot">
+          <label class="sr-only" for="messageInput">Your question</label>
+          <div class="composer-input-wrap">
+            <textarea id="messageInput" rows="2" maxlength="2000" placeholder="Ask about a policy, process, or ticket…" autocomplete="off"></textarea>
+            <div class="composer-meta"><span>Use plain language</span><span id="characterCount">0 / 2000</span></div>
+          </div>
+          <button id="sendButton" class="send-button" type="submit" disabled><span>Send</span><span class="send-icon" aria-hidden="true">↗</span></button>
         </form>
+        <p class="composer-footnote">Copilot can make mistakes. Check the linked source when the answer matters.</p>
       </main>
 
       <aside id="inspector" class="inspector" aria-label="Conversation details">
@@ -97,22 +138,19 @@
           <button id="closeInspectorButton" class="icon-button" type="button" aria-label="Close details panel">Close</button>
         </div>
 
-        <section class="profile-summary">
+        <section class="profile-summary" aria-live="polite">
           <p class="eyebrow">Signed in as</p>
-          <h3 id="profileName">Loading</h3>
+          <div class="profile-heading">
+            <div id="profileAvatar" class="avatar" aria-hidden="true">—</div>
+            <div>
+              <h3 id="profileName">Loading profile</h3>
+              <p id="profileTitle">Preparing your workspace</p>
+            </div>
+          </div>
           <dl>
-            <div>
-              <dt>Role</dt>
-              <dd id="profileRole">-</dd>
-            </div>
-            <div>
-              <dt>Department</dt>
-              <dd id="profileDepartment">-</dd>
-            </div>
-            <div>
-              <dt>Location</dt>
-              <dd id="profileLocation">-</dd>
-            </div>
+            <div><dt>Role</dt><dd id="profileRole">-</dd></div>
+            <div><dt>Department</dt><dd id="profileDepartment">-</dd></div>
+            <div><dt>Location</dt><dd id="profileLocation">-</dd></div>
           </dl>
         </section>
 
