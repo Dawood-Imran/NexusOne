@@ -1,34 +1,53 @@
 const STORAGE_PREFIX = "nexusone.conversations.";
-const SESSION_KEY = "nexusone.activeUserId";
+const AUTH_ENDPOINTS = {
+  session: "/api/auth/session",
+  login: "/api/auth/login",
+  logout: "/api/auth/logout",
+};
+const MAX_COMPOSER_HEIGHT = 168;
 
 const state = {
-  profiles: [],
-  activeUserId: null,
+  account: null,
+  sessionToken: null,
   conversations: [],
   activeConversationId: null,
   selectedAssistantMessageId: null,
   sending: false,
+  authenticating: false,
   lastSubmittedText: "",
-  messageCount: 0,
+  sessionExpiredHandled: false,
 };
 
 const authView = document.querySelector("#authView");
 const appView = document.querySelector("#appView");
-const profileCards = document.querySelector("#profileCards");
+const loginForm = document.querySelector("#loginForm");
+const usernameInput = document.querySelector("#usernameInput");
+const passwordInput = document.querySelector("#passwordInput");
+const loginButton = document.querySelector("#loginButton");
 const authError = document.querySelector("#authError");
+const authStatus = document.querySelector("#authStatus");
+const authServiceStatus = document.querySelector("#authServiceStatus");
+const authServiceIndicator = document.querySelector("#authServiceIndicator");
 const accountButton = document.querySelector("#accountButton");
-const sessionRole = document.querySelector("#sessionRole");
+const accountPopover = document.querySelector("#accountPopover");
+const logoutButton = document.querySelector("#logoutButton");
+const accountName = document.querySelector("#accountName");
+const accountRole = document.querySelector("#accountRole");
+const accountAvatarImage = document.querySelector("#accountAvatarImage");
+const accountAvatarFallback = document.querySelector("#accountAvatarFallback");
+const popoverAvatarImage = document.querySelector("#popoverAvatarImage");
+const popoverAvatarFallback = document.querySelector("#popoverAvatarFallback");
+const popoverAccountName = document.querySelector("#popoverAccountName");
+const popoverAccountTitle = document.querySelector("#popoverAccountTitle");
+const accountDetailRole = document.querySelector("#accountDetailRole");
+const accountDetailDepartment = document.querySelector("#accountDetailDepartment");
+const accountDetailLocation = document.querySelector("#accountDetailLocation");
+const accountDetailEmail = document.querySelector("#accountDetailEmail");
 const newChatButton = document.querySelector("#newChatButton");
 const conversationList = document.querySelector("#conversationList");
+const conversationEmpty = document.querySelector("#conversationEmpty");
 const conversationTitle = document.querySelector("#conversationTitle");
 const pageTitle = document.querySelector("#pageTitle");
-const profileSelect = document.querySelector("#profileSelect");
-const profileAvatar = document.querySelector("#profileAvatar");
-const profileName = document.querySelector("#profileName");
-const profileTitle = document.querySelector("#profileTitle");
-const profileRole = document.querySelector("#profileRole");
-const profileDepartment = document.querySelector("#profileDepartment");
-const profileLocation = document.querySelector("#profileLocation");
 const messages = document.querySelector("#messages");
 const chatForm = document.querySelector("#chatForm");
 const messageInput = document.querySelector("#messageInput");
@@ -41,138 +60,295 @@ const inspector = document.querySelector("#inspector");
 const inspectorContent = document.querySelector("#inspectorContent");
 const mobileInspectorButton = document.querySelector("#mobileInspectorButton");
 const closeInspectorButton = document.querySelector("#closeInspectorButton");
+const serviceStatus = document.querySelector("#serviceStatus");
+const serviceStatusIndicator = document.querySelector("#serviceStatusIndicator");
+const capabilityStatus = document.querySelector("#capabilityStatus");
+let skipNextAccountFocus = false;
 
 async function init() {
-  setConversationStatus("Loading your workspace…", "busy");
+  setAuthServiceState("Connecting to sign-in service…", "busy");
+  setAuthStatus("Checking for an existing session…");
   try {
-    const response = await fetch("/api/profiles");
-    if (!response.ok) throw new Error(`Profile request failed: ${response.status}`);
-    const payload = await response.json();
-    state.profiles = Array.isArray(payload.profiles) ? payload.profiles : [];
-    if (!state.profiles.length) throw new Error("No profiles were returned.");
-    renderProfileCards();
-    const savedUserId = window.localStorage.getItem(SESSION_KEY);
-    if (savedUserId && state.profiles.some((profile) => profile.user_id === savedUserId)) {
-      signIn(savedUserId);
-    } else {
-      setConversationStatus("Choose a demo profile to begin.");
+    const { response, payload } = await authRequest(AUTH_ENDPOINTS.session);
+    if (response.status === 401 || response.status === 403) {
+      showLogin();
+      setAuthStatus("Sign in to continue.");
+      setAuthServiceState("Sign-in service ready", "live");
+      return;
     }
+    if (!response.ok) {
+      showLogin();
+      setAuthServiceState(authServiceError(response.status), "error");
+      setAuthStatus("Sign in to continue, then try again.");
+      setAuthError(payloadMessage(payload) || "We could not verify your session. Try signing in again.");
+      return;
+    }
+    const account = normalizeAccount(payload);
+    if (!account) {
+      showLogin();
+      setAuthServiceState("Sign-in service returned an invalid session", "error");
+      setAuthStatus("Sign in to continue, then try again.");
+      setAuthError("We could not read the account returned by the sign-in service. Contact your administrator.");
+      return;
+    }
+    enterWorkspace(account, authToken(payload));
   } catch (error) {
-    if (profileSelect) profileSelect.disabled = true;
-    if (sendButton) sendButton.disabled = true;
-    authError.textContent = "Could not load demo profiles. Check that the local server is running.";
-    setConversationStatus("Workspace unavailable. Start the local server and reload.", "error");
+    showLogin();
+    setAuthServiceState("Sign-in service unavailable", "error");
+    setAuthStatus("Sign in to continue when the service is available.");
+    setAuthError("We could not reach the sign-in service. Check the server connection, then try again.");
   }
 }
 
-function renderProfileCards() {
-  profileCards.innerHTML = "";
-  if (profileSelect) {
-    profileSelect.innerHTML = '<option value="">Choose a profile…</option>';
-  }
-  state.profiles.forEach((profile) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "profile-card";
-    button.innerHTML = `
-      <span class="profile-card-name"></span>
-      <span class="profile-card-meta"></span>
-      <span class="profile-card-scope"></span>
-    `;
-    button.querySelector(".profile-card-name").textContent = profile.name;
-    button.querySelector(".profile-card-meta").textContent = `${profile.role} - ${profile.department} - ${profile.location}`;
-    button.querySelector(".profile-card-scope").textContent = accessSummary(profile.role);
-    button.addEventListener("click", () => signIn(profile.user_id));
-    profileCards.appendChild(button);
-
-    if (profileSelect) {
-      const option = document.createElement("option");
-      option.value = profile.user_id;
-      option.textContent = `${profile.name} · ${formatRole(profile.role)}`;
-      profileSelect.appendChild(option);
-    }
+async function authRequest(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    ...options,
+    headers: {
+      Accept: "application/json",
+      ...(path !== AUTH_ENDPOINTS.login ? sessionHeaders() : {}),
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
   });
-  if (profileSelect) profileSelect.disabled = !state.activeUserId;
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch (error) {
+    payload = {};
+  }
+  return { response, payload };
 }
 
-function signIn(userId) {
-  const profile = state.profiles.find((candidate) => candidate.user_id === userId);
-  if (!profile || state.sending) return;
-  state.activeUserId = userId;
-  window.localStorage.setItem(SESSION_KEY, userId);
-  state.conversations = loadConversations(userId);
+async function submitLogin(event) {
+  event.preventDefault();
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+  clearAuthMessage();
+  if (!username) {
+    setAuthError("Enter your username or work email.");
+    usernameInput.focus();
+    return;
+  }
+  if (!password) {
+    setAuthError("Enter your password.");
+    passwordInput.focus();
+    return;
+  }
+
+  setAuthenticating(true);
+  setAuthServiceState("Signing you in…", "busy");
+  setAuthStatus("Verifying credentials and account access…");
+  try {
+    const { response, payload } = await authRequest(AUTH_ENDPOINTS.login, {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    });
+    if (response.status === 401 || response.status === 403) {
+      setAuthServiceState("Sign-in service ready", "live");
+      setAuthStatus("Check your credentials and try again.");
+      setAuthError("Those credentials were not accepted. Check your username and password and try again.");
+      passwordInput.select();
+      return;
+    }
+    if (!response.ok) {
+      setAuthServiceState(authServiceError(response.status), "error");
+      setAuthStatus("Sign in again when the service is available.");
+      setAuthError(payloadMessage(payload) || "The sign-in service could not complete your request. Try again.");
+      return;
+    }
+    const account = normalizeAccount(payload);
+    if (!account) {
+      setAuthServiceState("Sign-in service returned an invalid account", "error");
+      setAuthStatus("Sign in again or contact your administrator.");
+      setAuthError("The sign-in service did not return a usable account. Contact your administrator.");
+      return;
+    }
+    passwordInput.value = "";
+    enterWorkspace(account, authToken(payload));
+  } catch (error) {
+    setAuthServiceState("Sign-in service unavailable", "error");
+    setAuthStatus("Sign in to continue when the service is available.");
+    setAuthError("We could not reach the sign-in service. Check the server connection, then try again.");
+  } finally {
+    setAuthenticating(false);
+  }
+}
+
+function authToken(payload) {
+  return payload?.access_token || payload?.token || payload?.session?.access_token || null;
+}
+
+function sessionHeaders() {
+  return state.sessionToken ? { Authorization: `Bearer ${state.sessionToken}` } : {};
+}
+
+function normalizeAccount(payload) {
+  const candidate = payload?.user || payload?.account || payload?.profile || payload?.session?.user || payload;
+  if (!candidate || typeof candidate !== "object") return null;
+  const userId = candidate.user_id || candidate.id || candidate.sub;
+  if (!userId) return null;
+  const name = candidate.name || candidate.full_name || candidate.display_name || candidate.username || "NexusOne user";
+  return {
+    user_id: String(userId),
+    name: String(name),
+    email: candidate.email || candidate.username || "Account email unavailable",
+    role: candidate.role || "authenticated user",
+    department: candidate.department || "Not provided",
+    title: candidate.title || "NexusOne team member",
+    location: candidate.location || "Not provided",
+    avatar_url: candidate.avatar_url || candidate.avatar || "",
+    status: candidate.status || "active",
+  };
+}
+
+function enterWorkspace(account, sessionToken = null) {
+  state.account = account;
+  state.sessionToken = sessionToken;
+  state.sessionExpiredHandled = false;
+  state.conversations = loadConversations(account.user_id);
   if (!state.conversations.length) {
     state.conversations.push(createConversation());
     saveConversations();
   }
   state.activeConversationId = state.conversations[0].id;
   state.selectedAssistantMessageId = latestAssistantMessage(activeConversation())?.id || null;
-  resetConversation();
   authView.classList.add("hidden");
   appView.classList.remove("hidden");
-  updateProfilePanel();
+  updateAccountControl();
   renderConversationList();
   renderActiveConversation();
-  setConversationStatus(`Workspace ready for ${profile.name}.`);
+  setConversationStatus("Ready when you are.");
+  setServiceState("Authenticated session · server permissions enabled", "live");
+  capabilityStatus.textContent = "Server-checked access";
   setComposerAvailability();
+  autoResizeComposer();
   messageInput.focus();
 }
 
-function signOut() {
-  state.activeUserId = null;
+function showLogin() {
+  state.account = null;
+  state.sessionToken = null;
+  state.sending = false;
+  appView.classList.add("hidden");
+  authView.classList.remove("hidden");
+  setAuthenticating(false);
+  accountPopover.hidden = true;
+  accountButton.setAttribute("aria-expanded", "false");
+  setComposerAvailability();
+}
+
+async function logout() {
+  if (state.authenticating) return;
+  logoutButton.disabled = true;
+  closeAccountPopover();
+  setAuthStatus("Signing you out…");
+  let logoutFailed = false;
+  try {
+    const { response } = await authRequest(AUTH_ENDPOINTS.logout, { method: "POST", body: "{}" });
+    logoutFailed = !response.ok && response.status !== 401;
+  } catch (error) {
+    logoutFailed = true;
+  } finally {
+    logoutButton.disabled = false;
+  }
+  state.account = null;
+  state.sessionToken = null;
   state.conversations = [];
   state.activeConversationId = null;
   state.selectedAssistantMessageId = null;
-  window.localStorage.removeItem(SESSION_KEY);
-  closeInspector();
-  appView.classList.add("hidden");
-  authView.classList.remove("hidden");
-  if (profileSelect) profileSelect.disabled = true;
-  setConversationStatus("Choose a demo profile to begin.");
-  const firstProfile = profileCards.querySelector("button");
-  if (firstProfile) firstProfile.focus();
+  showLogin();
+  usernameInput.value = "";
+  passwordInput.value = "";
+  setAuthServiceState(logoutFailed ? "Sign-in service did not confirm sign out" : "Signed out", logoutFailed ? "error" : "live");
+  setAuthStatus(logoutFailed ? "You were signed out on this device. The service could not confirm the server session; try again before sharing this device." : "You are signed out.");
+  if (logoutFailed) setAuthError("The server did not confirm sign out. Sign in again only when you are ready.");
+  usernameInput.focus();
 }
 
-function activeProfile() {
-  return state.profiles.find((profile) => profile.user_id === state.activeUserId);
+async function handleSessionExpired() {
+  if (state.sessionExpiredHandled) return;
+  state.sessionExpiredHandled = true;
+  state.account = null;
+  state.sessionToken = null;
+  state.sending = false;
+  showLogin();
+  setAuthServiceState("Session expired", "error");
+  setAuthError("Your session expired. Sign in again to continue your conversation.");
+  usernameInput.focus();
+}
+
+function activeAccount() {
+  return state.account;
 }
 
 function activeConversation() {
   return state.conversations.find((conversation) => conversation.id === state.activeConversationId);
 }
 
-function updateProfilePanel() {
-  const profile = activeProfile();
-  if (!profile) return;
-  sessionRole.textContent = `${profile.name} - ${formatRole(profile.role)}`;
-  profileName.textContent = profile.name;
-  profileTitle.textContent = profile.title || "NexusOne team member";
-  profileRole.textContent = formatRole(profile.role);
-  profileDepartment.textContent = profile.department || "—";
-  profileLocation.textContent = profile.location || "—";
-  if (profileAvatar) profileAvatar.textContent = initials(profile.name);
-  if (profileSelect) {
-    profileSelect.value = profile.user_id;
-    profileSelect.disabled = state.sending;
-  }
+function updateAccountControl() {
+  const account = activeAccount();
+  if (!account) return;
+  const accountInitials = initials(account.name);
+  accountName.textContent = account.name;
+  accountRole.textContent = formatRole(account.role);
+  accountButton.setAttribute("aria-label", `Open account details for ${account.name}`);
+  popoverAccountName.textContent = account.name;
+  popoverAccountTitle.textContent = account.title || "NexusOne team member";
+  accountDetailRole.textContent = formatRole(account.role);
+  accountDetailDepartment.textContent = account.department || "Not provided";
+  accountDetailLocation.textContent = account.location || "Not provided";
+  accountDetailEmail.textContent = account.email || "Account email unavailable";
+  setAvatar(accountAvatarImage, accountAvatarFallback, account, accountInitials);
+  setAvatar(popoverAvatarImage, popoverAvatarFallback, account, accountInitials);
 }
 
-function createConversation(title = "New chat") {
+function setAvatar(image, fallback, account, accountInitials) {
+  image.hidden = true;
+  image.removeAttribute("src");
+  fallback.hidden = false;
+  fallback.textContent = accountInitials || "N1";
+  if (!account.avatar_url) return;
+  image.src = account.avatar_url;
+  image.alt = `${account.name} account avatar`;
+  image.hidden = false;
+  fallback.hidden = true;
+  image.onerror = () => {
+    image.hidden = true;
+    fallback.hidden = false;
+  };
+}
+
+function toggleAccountPopover() {
+  if (!state.account) return;
+  const isOpen = !accountPopover.hidden;
+  if (isOpen) closeAccountPopover();
+  else openAccountPopover();
+}
+
+function openAccountPopover() {
+  if (!state.account) return;
+  if (skipNextAccountFocus) {
+    skipNextAccountFocus = false;
+    return;
+  }
+  accountPopover.hidden = false;
+  accountButton.setAttribute("aria-expanded", "true");
+}
+
+function closeAccountPopover() {
+  accountPopover.hidden = true;
+  accountButton.setAttribute("aria-expanded", "false");
+}
+
+function createConversation(title = "New conversation") {
   const now = new Date().toISOString();
   return {
     id: `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     title,
     createdAt: now,
     updatedAt: now,
-    messages: [
-      {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        status: "ready",
-        message:
-          "Ask a NexusOne question. I can answer from permitted sources, create IT/HR/Admin tickets, and explain when access is restricted.",
-      },
-    ],
+    messages: [],
   };
 }
 
@@ -187,20 +363,18 @@ function loadConversations(userId) {
 }
 
 function saveConversations() {
-  if (!state.activeUserId) return;
-  window.localStorage.setItem(`${STORAGE_PREFIX}${state.activeUserId}`, JSON.stringify(state.conversations.slice(0, 30)));
+  if (!state.account) return;
+  window.localStorage.setItem(`${STORAGE_PREFIX}${state.account.user_id}`, JSON.stringify(state.conversations.slice(0, 30)));
 }
 
 function renderConversationList() {
   conversationList.innerHTML = "";
+  conversationEmpty.hidden = state.conversations.length > 0;
   state.conversations.forEach((conversation) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = conversation.id === state.activeConversationId ? "conversation-item active" : "conversation-item";
-    button.innerHTML = `
-      <span class="conversation-name"></span>
-      <span class="conversation-meta"></span>
-    `;
+    button.innerHTML = '<span class="conversation-name"></span><span class="conversation-meta"></span>';
     button.querySelector(".conversation-name").textContent = conversation.title;
     button.querySelector(".conversation-meta").textContent = conversationMeta(conversation);
     button.addEventListener("click", () => {
@@ -208,6 +382,7 @@ function renderConversationList() {
       state.selectedAssistantMessageId = latestAssistantMessage(conversation)?.id || null;
       renderConversationList();
       renderActiveConversation();
+      messageInput.focus();
     });
     conversationList.appendChild(button);
   });
@@ -217,14 +392,32 @@ function renderActiveConversation() {
   const conversation = activeConversation();
   if (!conversation) return;
   conversationTitle.textContent = conversation.title;
-  if (pageTitle) pageTitle.textContent = conversation.title === "New chat" ? "How can we help today?" : conversation.title;
+  pageTitle.textContent = conversation.title === "New conversation" ? "How can we help today?" : conversation.title;
   messages.innerHTML = "";
-  conversation.messages.forEach((message) => {
-    messages.appendChild(renderMessage(message));
-  });
-  state.messageCount = conversation.messages.length;
+  if (!conversation.messages.length) {
+    messages.appendChild(renderEmptyState());
+  } else {
+    conversation.messages.forEach((message) => messages.appendChild(renderMessage(message)));
+  }
   renderInspector();
   scrollMessages();
+}
+
+function renderEmptyState() {
+  const emptyState = document.createElement("div");
+  emptyState.id = "emptyState";
+  emptyState.className = "empty-state";
+  emptyState.innerHTML = `
+    <div class="empty-mark" aria-hidden="true">N1</div>
+    <p class="eyebrow">Start with a question</p>
+    <h2>Find the answer without hunting through folders.</h2>
+    <p>Ask in plain language. Copilot checks your account first, then searches only the sources you can use.</p>
+    <div class="capability-list" aria-label="Available question types">
+      <div class="capability"><span class="capability-icon" aria-hidden="true">▤</span><span><strong>Policies</strong><small>Leave, expenses, remote work</small></span></div>
+      <div class="capability"><span class="capability-icon" aria-hidden="true">↗</span><span><strong>Processes</strong><small>Access, onboarding, approvals</small></span></div>
+      <div class="capability"><span class="capability-icon" aria-hidden="true">#</span><span><strong>Tickets</strong><small>Check your support requests</small></span></div>
+    </div>`;
+  return emptyState;
 }
 
 function renderMessage(message) {
@@ -237,8 +430,10 @@ function renderMessage(message) {
         : "";
   const article = document.createElement("article");
   article.className = `message ${message.role} ${statusClass}`.trim();
+  article.dataset.messageId = message.id;
   if (message.role === "assistant") {
     article.tabIndex = 0;
+    article.setAttribute("aria-label", `Copilot response: ${statusLabel(message.status)}`);
     article.classList.toggle("selected", message.id === state.selectedAssistantMessageId);
     article.addEventListener("click", () => selectAssistantMessage(message.id));
     article.addEventListener("focus", () => selectAssistantMessage(message.id));
@@ -264,14 +459,11 @@ function renderMessage(message) {
   });
   article.appendChild(meta);
   article.appendChild(body);
-
   if (message.ticket) article.appendChild(renderTicketSummary(message.ticket));
   if (message.status === "denied") article.appendChild(renderDeniedNextStep(message));
   if (message.status === "no_answer") article.appendChild(renderNoAnswerNextStep());
-  if (message.status === "error" && state.lastSubmittedText) article.appendChild(renderRetry(state.lastSubmittedText));
-  if (message.role === "assistant" && !["error", "ready"].includes(message.status)) {
-    article.appendChild(renderFeedbackControls(message));
-  }
+  if (message.status === "error") article.appendChild(renderRetry(message.request_text || state.lastSubmittedText));
+  if (message.role === "assistant" && !["error", "ready"].includes(message.status)) article.appendChild(renderFeedbackControls(message));
   return article;
 }
 
@@ -279,59 +471,26 @@ function selectAssistantMessage(messageId) {
   state.selectedAssistantMessageId = messageId;
   renderInspector();
   messages.querySelectorAll(".message.assistant").forEach((node) => node.classList.remove("selected"));
-  const conversation = activeConversation();
-  if (!conversation) return;
-  const index = conversation.messages.filter((message) => message.role === "assistant").findIndex((message) => message.id === messageId);
-  const selected = messages.querySelectorAll(".message.assistant")[index];
-  if (selected) selected.classList.add("selected");
-}
-
-function clearEmptyState() {
-  document.querySelector("#emptyState")?.remove();
-}
-
-function resetConversation() {
-  state.messageCount = 0;
-  if (!messages) return;
-  messages.innerHTML = `
-    <div id="emptyState" class="empty-state">
-      <div class="empty-mark" aria-hidden="true">N1</div>
-      <p class="eyebrow">Start with a question</p>
-      <h2>Find the answer without hunting through folders.</h2>
-      <p>Ask in plain language. Copilot checks your profile first, then searches only the sources you can use.</p>
-      <div class="capability-list" aria-label="Available question types">
-        <div class="capability"><span class="capability-icon" aria-hidden="true">▤</span><span><strong>Policies</strong><small>Leave, expenses, remote work</small></span></div>
-        <div class="capability"><span class="capability-icon" aria-hidden="true">↗</span><span><strong>Processes</strong><small>Access, onboarding, approvals</small></span></div>
-        <div class="capability"><span class="capability-icon" aria-hidden="true">#</span><span><strong>Tickets</strong><small>Check your support requests</small></span></div>
-      </div>
-    </div>`;
+  messages.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)?.classList.add("selected");
 }
 
 function addUserMessage(text) {
   const conversation = activeConversation();
   if (!conversation) return;
-  const message = { id: `user-${Date.now()}`, role: "user", message: text };
-  conversation.messages.push(message);
+  conversation.messages.push({ id: `user-${Date.now()}`, role: "user", message: text });
   conversation.updatedAt = new Date().toISOString();
-  if (conversation.title === "New chat") conversation.title = summarizeTitle(text);
+  if (conversation.title === "New conversation") conversation.title = summarizeTitle(text);
   saveConversations();
   renderConversationList();
   renderActiveConversation();
 }
 
 function addLoadingMessage() {
-  clearEmptyState();
+  messages.querySelector("#emptyState")?.remove();
   const article = document.createElement("article");
   article.id = "loadingMessage";
   article.className = "message assistant loading";
-  const meta = document.createElement("div");
-  meta.className = "message-meta";
-  meta.textContent = "Copilot";
-  const body = document.createElement("div");
-  body.className = "loading-body";
-  body.innerHTML = '<span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span><span>Checking access and approved sources…</span>';
-  article.appendChild(meta);
-  article.appendChild(body);
+  article.innerHTML = '<div class="message-meta"><span>Copilot</span><span class="message-status">Working</span></div><div class="loading-body"><span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span><span>Checking access and approved sources…</span></div>';
   messages.appendChild(article);
   scrollMessages();
 }
@@ -343,18 +502,10 @@ function removeLoadingMessage() {
 function addAssistantMessage(payload) {
   const conversation = activeConversation();
   if (!conversation) return;
-  const statusClass = payload.status === "denied"
-    ? "denied"
-    : payload.status === "error"
-      ? "error"
-      : payload.status === "no_answer"
-        ? "no-answer"
-        : "";
   const message = {
     id: `assistant-${Date.now()}`,
     role: "assistant",
     status: payload.status || "answered",
-    status_class: statusClass,
     reason_code: payload.reason_code,
     message: payload.message || "No response was returned.",
     citations: payload.citations || [],
@@ -373,6 +524,8 @@ function addAssistantMessage(payload) {
     conversation_id: payload.conversation_id || "web-chat",
     turn_id: payload.turn_id || "web-turn",
     latency_ms: payload.latency_ms,
+    feedback: payload.feedback,
+    request_text: payload.request_text || state.lastSubmittedText,
   };
   conversation.messages.push(message);
   conversation.updatedAt = new Date().toISOString();
@@ -381,6 +534,7 @@ function addAssistantMessage(payload) {
   renderConversationList();
   renderActiveConversation();
   updateResponseStatus(payload);
+  updateCapabilityStatus(payload);
 }
 
 function collectSourceItems(payload) {
@@ -432,27 +586,31 @@ async function sendFeedback(button, payload, rating) {
   try {
     const response = await fetch("/api/feedback", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json", ...sessionHeaders() },
       body: JSON.stringify({
         conversation_id: payload.conversation_id || "web-chat",
         turn_id: payload.turn_id || "web-turn",
-        user_id: state.activeUserId,
         rating,
       }),
     });
     const result = await response.json();
-    if (result.status === "stored") {
+    if (response.status === 401 || response.status === 403) {
+      await handleSessionExpired();
+      return;
+    }
+    if (response.ok && result.status === "stored") {
       payload.feedback = rating;
       button.textContent = "Saved";
       saveConversations();
       renderInspector();
     } else {
-      button.textContent = "Failed";
+      button.textContent = result.message || "Could not save";
     }
   } catch (error) {
-    button.textContent = "Failed";
+    button.textContent = "Could not save";
   } finally {
-    setTimeout(() => {
+    window.setTimeout(() => {
       button.textContent = payload.feedback === rating ? "Saved" : original;
       button.disabled = false;
     }, 1200);
@@ -506,10 +664,7 @@ function renderInspector() {
   const message = selectedAssistantMessage();
   inspectorContent.innerHTML = "";
   if (!message) {
-    const empty = document.createElement("p");
-    empty.className = "empty-note";
-    empty.textContent = "Select an answer to inspect sources, ticket details, feedback, and trace output.";
-    inspectorContent.appendChild(empty);
+    inspectorContent.innerHTML = '<p class="empty-note">Select an answer to inspect sources, ticket details, feedback, and trace output.</p>';
     return;
   }
   if (message.ticket) inspectorContent.appendChild(renderTicketSummary(message.ticket));
@@ -533,6 +688,10 @@ function renderInspector() {
   }
   const meta = document.createElement("section");
   meta.className = "detail-section";
+  const capabilities = message.capabilities || {};
+  const sqlCapability = capabilities.sql || {};
+  const answerCapability = capabilities.answer_composer || {};
+  const plannerCapability = capabilities.sql_planner || {};
   meta.innerHTML = `
     <h3>Answer metadata</h3>
     <dl>
@@ -540,7 +699,9 @@ function renderInspector() {
       <div><dt>Reason</dt><dd>${escapeHtml(message.reason_code || "-")}</dd></div>
       <div><dt>Latency</dt><dd>${message.latency_ms == null ? "-" : `${message.latency_ms}ms`}</dd></div>
       <div><dt>Model backend</dt><dd>${escapeHtml(message.model_backend || "-")}</dd></div>
-      <div><dt>SQL execution</dt><dd>${escapeHtml(message.sql_execution?.status || "not used")} · ${message.row_count || 0} row(s)</dd></div>
+      <div><dt>Answer mode</dt><dd>${escapeHtml(answerCapability.provider || "-")} · ${escapeHtml(answerCapability.mode || "-")} · ${escapeHtml(answerCapability.model || "-")}</dd></div>
+      <div><dt>SQL capability</dt><dd>${escapeHtml(sqlCapability.status || sqlCapability.mode || "not used")} · ${message.row_count || 0} row(s)</dd></div>
+      <div><dt>SQL planner</dt><dd>${escapeHtml(plannerCapability.provider || "-")} · ${escapeHtml(plannerCapability.mode || "-")}</dd></div>
       <div><dt>Feedback</dt><dd>${escapeHtml(message.feedback || "Not submitted")}</dd></div>
     </dl>`;
   inspectorContent.appendChild(meta);
@@ -722,15 +883,21 @@ function renderRetry(text) {
   return section;
 }
 
+function setAuthenticating(value) {
+  state.authenticating = value;
+  loginButton.disabled = value;
+  usernameInput.disabled = value;
+  passwordInput.disabled = value;
+  const label = loginButton.querySelector("span");
+  if (label) label.textContent = value ? "Signing in…" : "Sign in";
+}
+
 function setSending(value) {
   state.sending = value;
-  if (sendButton) {
-    sendButton.disabled = value || !activeProfile() || !messageInput.value.trim();
-    const label = sendButton.querySelector("span");
-    if (label) label.textContent = value ? "Checking" : "Send";
-  }
-  messageInput.disabled = value || !activeProfile();
-  if (profileSelect) profileSelect.disabled = value;
+  sendButton.disabled = value || !activeAccount() || !messageInput.value.trim();
+  const label = sendButton.querySelector("span");
+  if (label) label.textContent = value ? "Checking" : "Send";
+  messageInput.disabled = value || !activeAccount();
   if (value) {
     setConversationStatus("Checking access and approved sources…", "busy");
     addLoadingMessage();
@@ -738,30 +905,36 @@ function setSending(value) {
 }
 
 function setComposerAvailability() {
-  if (!sendButton) return;
-  sendButton.disabled = state.sending || !activeProfile() || !messageInput.value.trim();
-  messageInput.disabled = state.sending || !activeProfile();
+  if (!sendButton || !messageInput) return;
+  sendButton.disabled = state.sending || !activeAccount() || !messageInput.value.trim();
+  messageInput.disabled = state.sending || !activeAccount();
 }
 
 async function sendMessage(text, options = {}) {
   const cleanText = String(text || "").trim();
-  if (!cleanText || state.sending || !activeProfile()) return;
+  if (!cleanText || state.sending || !activeAccount()) return;
   if (options.addUser !== false) addUserMessage(cleanText);
   state.lastSubmittedText = cleanText;
   setSending(true);
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: state.activeUserId, message: cleanText, include_trace: traceToggle.checked }),
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json", ...sessionHeaders() },
+      body: JSON.stringify({ message: cleanText, include_trace: traceToggle.checked }),
     });
     const payload = await response.json();
+    if (response.status === 401 || response.status === 403) {
+      await handleSessionExpired();
+      return;
+    }
     if (!response.ok) throw new Error(payload.message || `Chat request failed: ${response.status}`);
     addAssistantMessage(payload);
   } catch (error) {
     addAssistantMessage({
       status: "error",
-      message: "The local service did not respond. Check the server, then try again.",
+      request_text: cleanText,
+      message: error.message || "The local service did not respond. Check the server, then try again.",
     });
     setConversationStatus("The request could not be completed. You can try again.", "error");
   } finally {
@@ -769,7 +942,8 @@ async function sendMessage(text, options = {}) {
     setSending(false);
     messageInput.value = "";
     updateCharacterCount();
-    messageInput.focus();
+    autoResizeComposer();
+    if (activeAccount()) messageInput.focus();
   }
 }
 
@@ -785,22 +959,45 @@ function updateResponseStatus(payload) {
   }
 }
 
+function updateCapabilityStatus(payload) {
+  const answer = payload?.capabilities?.answer_composer;
+  const sql = payload?.capabilities?.sql;
+  if (answer) {
+    const answerLabel = `${answer.provider || "Answer"} · ${answer.mode || "configured"}`;
+    const sqlLabel = sql ? ` · SQL ${sql.status || sql.mode || "not used"}` : "";
+    capabilityStatus.textContent = `${answerLabel}${sqlLabel}`;
+  } else if (payload?.model || payload?.backend) {
+    capabilityStatus.textContent = `${payload.backend || "Model"} · server permissions`;
+  } else if (payload?.status === "error") {
+    capabilityStatus.textContent = "Chat service needs attention";
+  } else {
+    capabilityStatus.textContent = "Server-checked access";
+  }
+}
+
 function setConversationStatus(text, stateName = "") {
-  if (!conversationStatus) return;
   conversationStatus.textContent = text;
   conversationStatus.className = `conversation-status ${stateName ? `is-${stateName}` : ""}`.trim();
 }
 
 function updateCharacterCount() {
-  if (characterCount) characterCount.textContent = `${messageInput.value.length} / 2000`;
+  characterCount.textContent = `${messageInput.value.length} / 2000`;
   setComposerAvailability();
+}
+
+function autoResizeComposer() {
+  if (!messageInput) return;
+  messageInput.style.height = "auto";
+  const nextHeight = Math.min(messageInput.scrollHeight, MAX_COMPOSER_HEIGHT);
+  messageInput.style.height = `${Math.max(nextHeight, 44)}px`;
+  messageInput.style.overflowY = messageInput.scrollHeight > MAX_COMPOSER_HEIGHT ? "auto" : "hidden";
 }
 
 function startNewChat() {
   const conversation = createConversation();
   state.conversations.unshift(conversation);
   state.activeConversationId = conversation.id;
-  state.selectedAssistantMessageId = latestAssistantMessage(conversation)?.id || null;
+  state.selectedAssistantMessageId = null;
   saveConversations();
   renderConversationList();
   renderActiveConversation();
@@ -814,28 +1011,52 @@ function scrollMessages() {
 
 function summarizeTitle(text) {
   const clean = text.replace(/\s+/g, " ").trim();
-  return clean.length > 44 ? `${clean.slice(0, 41)}...` : clean || "New chat";
+  return clean.length > 44 ? `${clean.slice(0, 41)}...` : clean || "New conversation";
 }
 
 function conversationMeta(conversation) {
-  const count = Math.max(0, conversation.messages.length - 1);
+  const count = conversation.messages.length;
   const date = new Date(conversation.updatedAt);
   const label = Number.isNaN(date.getTime()) ? "Saved" : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return `${count} message${count === 1 ? "" : "s"} - ${label}`;
+  return `${count} message${count === 1 ? "" : "s"} · ${label}`;
 }
 
-function accessSummary(role) {
-  const summaries = {
-    employee: "Public policies, own tickets, general process guidance.",
-    manager: "Employee access plus manager guidance and team-oriented docs.",
-    hr: "HR policies, HR queue context, and employee lifecycle docs.",
-    finance: "Finance policies, budget summaries, and vendor/payment data.",
-    it_admin: "IT support knowledge, device/security docs, and IT queues.",
-    admin_ops: "Facilities, admin requests, and office operations.",
-    executive: "Executive reports and strategy summaries except CEO-only data.",
-    ceo: "Full executive scope including CEO-only material.",
-  };
-  return summaries[role] || "Role-scoped company access.";
+function setAuthError(text) {
+  authError.textContent = text || "";
+}
+
+function setAuthStatus(text) {
+  authStatus.textContent = text || "";
+}
+
+function clearAuthMessage() {
+  setAuthError("");
+  setAuthStatus("");
+}
+
+function setAuthServiceState(text, stateName = "") {
+  authServiceStatus.textContent = text;
+  authServiceIndicator.className = `status-dot ${stateName ? `is-${stateName}` : ""}`.trim();
+}
+
+function setServiceState(text, stateName = "") {
+  serviceStatus.textContent = text;
+  serviceStatusIndicator.className = `status-dot ${stateName ? `is-${stateName}` : ""}`.trim();
+}
+
+function authServiceError(status) {
+  if (status === 404) return "Sign-in service is not configured";
+  if (status >= 500) return "Sign-in service is unavailable";
+  return `Sign-in service returned an error (${status})`;
+}
+
+function payloadMessage(payload) {
+  return typeof payload?.message === "string" ? payload.message : "";
+}
+
+function statusLabel(status) {
+  const labels = { answered: "Ready", denied: "Access limited", error: "Needs attention", no_answer: "No match", ready: "Ready" };
+  return labels[status] || "Response";
 }
 
 function formatRole(role) {
@@ -850,19 +1071,21 @@ function escapeHtml(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-accountButton.addEventListener("click", signOut);
+loginForm.addEventListener("submit", submitLogin);
+accountButton.addEventListener("click", toggleAccountPopover);
+accountButton.addEventListener("focus", openAccountPopover);
+logoutButton.addEventListener("click", logout);
 newChatButton.addEventListener("click", startNewChat);
 mobileInspectorButton.addEventListener("click", openInspector);
 closeInspectorButton.addEventListener("click", closeInspector);
-profileSelect.addEventListener("change", (event) => {
-  state.activeUserId = event.target.value;
-  if (state.activeUserId) signIn(state.activeUserId);
-});
 chatForm.addEventListener("submit", (event) => {
   event.preventDefault();
   sendMessage(messageInput.value);
 });
-messageInput.addEventListener("input", updateCharacterCount);
+messageInput.addEventListener("input", () => {
+  updateCharacterCount();
+  autoResizeComposer();
+});
 messageInput.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
     event.preventDefault();
@@ -871,11 +1094,32 @@ messageInput.addEventListener("keydown", (event) => {
 });
 suggestions.addEventListener("click", (event) => {
   const button = event.target.closest("[data-prompt]");
-  if (!button || state.sending) return;
+  if (!button || state.sending || !activeAccount()) return;
   messageInput.value = button.dataset.prompt || "";
   updateCharacterCount();
+  autoResizeComposer();
   messageInput.focus();
 });
+document.addEventListener("click", (event) => {
+  if (!accountPopover.hidden && !event.target.closest(".account-control-wrap")) closeAccountPopover();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    if (!accountPopover.hidden) {
+      closeAccountPopover();
+      if (document.activeElement !== accountButton) {
+        skipNextAccountFocus = true;
+        accountButton.focus();
+        window.setTimeout(() => { skipNextAccountFocus = false; }, 0);
+      }
+    } else if (inspector.classList.contains("open")) {
+      closeInspector();
+      mobileInspectorButton.focus();
+    }
+  }
+});
+accountPopover.addEventListener("click", (event) => event.stopPropagation());
 
 updateCharacterCount();
+autoResizeComposer();
 init();
