@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any, Mapping
 
 from app.agents.sql_subgraph.nodes import (
@@ -84,6 +84,8 @@ class SQLSubgraph:
     def __init__(self, executor: SQLExecutor | None = None, planner: SQLPlanner | None = None) -> None:
         self.executor = executor
         self.planner = planner
+        self.planner_backend = str(getattr(planner, "provider_name", "deterministic"))
+        self.planner_fallback_reason = getattr(planner, "fallback_reason", None)
 
     def invoke(self, payload: SQLSubgraphInput | Mapping[str, Any]) -> SQLSubgraphOutput:
         return self.invoke_with_trace(payload).output
@@ -98,6 +100,7 @@ class SQLSubgraph:
             requested_intent=request.requested_intent,
             user_context=request.user_context,
             execute=request.execute,
+            planner_backend=self.planner_backend,
         )
 
         traces: list[SQLNodeTrace] = []
@@ -112,7 +115,7 @@ class SQLSubgraph:
             state = node(state)
             traces.append(SQLNodeTrace(node_name=node_name, details=_trace_details(state)))
             if _has_terminal_output(state):
-                return SQLSubgraphRun(output=ensure_output(state), traces=tuple(traces))
+                return SQLSubgraphRun(output=self._output_with_provider_metadata(state), traces=tuple(traces))
 
         while True:
             state = validate_candidate_sql(state)
@@ -153,7 +156,18 @@ class SQLSubgraph:
                 traces.append(SQLNodeTrace(node_name="finalize_repair_failure", details=_trace_details(state)))
             break
 
-        return SQLSubgraphRun(output=ensure_output(state), traces=tuple(traces))
+        return SQLSubgraphRun(output=self._output_with_provider_metadata(state), traces=tuple(traces))
+
+    def _output_with_provider_metadata(self, state: SQLSubgraphState) -> SQLSubgraphOutput:
+        output = ensure_output(state)
+        fallback_reason = self.planner_fallback_reason
+        if state.planner_error:
+            fallback_reason = f"OPENAI_SQL_PLANNER_RUNTIME_ERROR_{_safe_error_name(state.planner_error)}"
+        return replace(
+            output,
+            planner_backend=self.planner_backend,
+            planner_fallback_reason=fallback_reason,
+        )
 
     def graph_definition(self) -> dict[str, tuple[str, ...] | tuple[tuple[str, str], ...]]:
         return {"nodes": GRAPH_NODES, "edges": GRAPH_EDGES}
@@ -251,4 +265,12 @@ def _trace_details(state: SQLSubgraphState) -> dict[str, Any]:
     note = state.planner_error or state.error_message
     if note:
         details["internal_note"] = note
+    details["planner_backend"] = state.planner_backend
     return details
+
+
+def _safe_error_name(note: str) -> str:
+    """Keep provider fallback metadata to a class-like safe identifier."""
+
+    match = re.search(r"failed:\s*([A-Za-z_][A-Za-z0-9_]*)", note)
+    return (match.group(1) if match else "UNKNOWN").upper()

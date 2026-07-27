@@ -34,7 +34,10 @@ def format_validated_output(
 ) -> SQLSubgraphOutput:
     return SQLSubgraphOutput(
         sql_status="validated",
-        sql_answer_summary="Validated SQL is ready to execute; no database executor was provided or execution was disabled.",
+        sql_answer_summary=(
+            "Validated SQL is ready, but this request is running in local validation-only mode; "
+            "no database executor is connected."
+        ),
         sql_sources=source_metadata(sources, used_sources),
         sql_used_tables=used_sources,
         sql_query=sql,

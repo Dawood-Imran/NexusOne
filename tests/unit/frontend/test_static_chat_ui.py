@@ -12,6 +12,12 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.app_js = APP_JS.read_text(encoding="utf-8")
         self.index_html = INDEX_HTML.read_text(encoding="utf-8")
 
+    def test_live_structured_rows_have_a_safe_inspector_table(self) -> None:
+        self.assertIn("rows: Array.isArray(payload.rows) ? payload.rows : [],", self.app_js)
+        self.assertIn("function renderStructuredRows(message)", self.app_js)
+        self.assertIn("cell.textContent = String(value);", self.app_js)
+        self.assertIn("Live structured data", self.app_js)
+
     def test_combined_responses_render_citations_and_sql_sources(self) -> None:
         self.assertIn("function collectSourceItems(payload)", self.app_js)
         self.assertIn("const citations = Array.isArray(payload.citations) ? payload.citations : [];", self.app_js)
@@ -59,6 +65,11 @@ class StaticChatUIContractTest(unittest.TestCase):
     def test_trace_control_exists_in_chat_workspace(self) -> None:
         self.assertIn("id=\"traceToggle\"", self.index_html)
         self.assertIn("<span>Trace</span>", self.index_html)
+
+    def test_trace_inspector_distinguishes_graph_and_sql_subgraph(self) -> None:
+        self.assertIn("subgraph_trace: payload.subgraph_trace || [],", self.app_js)
+        self.assertIn('subgraphTitle.textContent = "SQL subgraph trace";', self.app_js)
+        self.assertIn("item.status || details.status", self.app_js)
 
     def test_mobile_inspector_state_is_accessible(self) -> None:
         self.assertIn("aria-expanded=\"false\"", self.index_html)

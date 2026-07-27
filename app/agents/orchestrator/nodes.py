@@ -11,7 +11,11 @@ from app.agents.orchestrator.answer_composer import AnswerComposer
 from app.agents.orchestrator.routing import route_message
 from app.agents.orchestrator.state import OrchestratorState
 from app.agents.sql_subgraph import SQLSubgraph, clean_question_text
-from app.agents.sql_subgraph.presentation import format_safe_terminal_answer
+from app.agents.sql_subgraph.presentation import (
+    format_safe_terminal_answer,
+    sanitized_columns,
+    sanitized_rows,
+)
 from app.agents.sql_subgraph.state import SQLExecutor, SQLPlanner
 from app.auth.profiles import UserProfile, get_profile
 from app.guardrails.policy import check_message_access
@@ -23,7 +27,7 @@ from app.retrieval.local_kb import RetrievalResult
 
 def append_trace(state: OrchestratorState, node_name: str, details: dict[str, Any]) -> list[dict[str, Any]]:
     trace = list(state.get("trace", []))
-    trace.append({"node": node_name, "details": details})
+    trace.append({"node": node_name, "status": details.get("status"), "details": details})
     return trace
 
 
@@ -148,8 +152,10 @@ def make_run_sql_node(executor: SQLExecutor | None, planner: SQLPlanner | None) 
         if run.output.sql_status == "validated":
             answer = (
                 "I can route this to the structured-data connector and the SQL subgraph validated a safe query. "
-                "Start local Postgres execution to return live rows."
+                "Live database execution is not enabled in local validation-only mode."
             )
+        execution_status = _sql_execution_status(run.output.sql_status)
+        row_count = len(run.output.sql_rows)
         sources = [
             {
                 "name": source.get("name"),
@@ -164,12 +170,20 @@ def make_run_sql_node(executor: SQLExecutor | None, planner: SQLPlanner | None) 
             "sql_message": answer,
             "sql_sources": sources,
             "sql_traces": run.traces,
+            "sql_execution_status": execution_status,
+            "sql_row_count": row_count,
+            "sql_planner_backend": run.output.planner_backend,
+            "sql_planner_fallback_reason": run.output.planner_fallback_reason,
         }
         next_state["trace"] = append_trace(
             next_state,
             "run_sql_subgraph",
             {
                 "status": run.output.sql_status,
+                "execution_status": execution_status,
+                "row_count": row_count,
+                "planner_backend": run.output.planner_backend,
+                "planner_fallback_reason": run.output.planner_fallback_reason,
                 "sources": [source["name"] for source in sources],
                 "subgraph_nodes": [trace.node_name for trace in run.traces],
             },
@@ -276,6 +290,7 @@ def make_validate_answer_node() -> Any:
         elif route == "ticket_create" and state.get("status") not in {"ticket_created", "needs_clarification"}:
             reason = "TICKET_ACTION_NOT_COMPLETED"
         validation = {
+            "status": "safe" if safe else "unsafe",
             "safe": safe,
             "reason": reason,
             "route": route,
@@ -317,6 +332,8 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
         }
         if composition.error:
             next_state["composer_error"] = composition.error
+        if composition.fallback_reason:
+            next_state["composer_fallback_reason"] = composition.fallback_reason
         next_state["trace"] = append_trace(
             next_state,
             "compose_final_answer",
@@ -324,6 +341,7 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
                 "status": "composed",
                 "backend": composition.backend,
                 "error": composition.error,
+                "fallback_reason": composition.fallback_reason,
                 "answer_chars": len(composition.answer),
             },
         )
@@ -344,6 +362,9 @@ def make_finalize_response_node() -> Any:
             response = {
                 "status": "error",
                 "reason_code": reason_code,
+                "route": state.get("route", "error"),
+                "model_backend": None,
+                "sql_execution": {"status": "not_run", "row_count": 0},
                 "message": state.get("error_message", "The request could not be handled."),
                 "latency_ms": _elapsed_ms(started_at),
             }
@@ -353,6 +374,9 @@ def make_finalize_response_node() -> Any:
                 "status": "denied",
                 "reason_code": decision.reason_code,
                 "category": decision.category,
+                "route": "deny",
+                "model_backend": None,
+                "sql_execution": {"status": "not_run", "row_count": 0},
                 "message": decision.message,
                 "allowed_alternatives": list(decision.allowed_alternatives),
                 "profile": profile.to_public_dict(),
@@ -362,11 +386,21 @@ def make_finalize_response_node() -> Any:
         else:
             response = _successful_response(state, started_at)
 
+        if state.get("composer_fallback_reason"):
+            response["model_fallback_reason"] = state["composer_fallback_reason"]
+        if state.get("sql_output") is not None:
+            response["sql_planner_backend"] = state.get("sql_planner_backend", "deterministic")
+            response["sql_planner_fallback_reason"] = state.get("sql_planner_fallback_reason")
+
         if state.get("include_trace"):
             response["trace"] = list(state.get("trace", []))
             if state.get("sql_traces"):
                 response["subgraph_trace"] = [
-                    {"node": trace.node_name, "details": dict(trace.details)}
+                    {
+                        "node": trace.node_name,
+                        "status": trace.details.get("status"),
+                        "details": dict(trace.details),
+                    }
                     for trace in state["sql_traces"]
                 ]
         next_state: OrchestratorState = {**state, "response": response}
@@ -394,8 +428,17 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
         return {
             "status": sql_output.sql_status,
             "reason_code": "SQL_SUBGRAPH",
+            "route": route,
+            "model_backend": state.get("composer_backend"),
             "category": category,
             "message": final_answer or state.get("sql_message", sql_output.sql_answer_summary),
+            "rows": sanitized_rows(sql_output),
+            "columns": sanitized_columns(sql_output),
+            "row_count": len(sanitized_rows(sql_output)),
+            "sql_execution": {
+                "status": state.get("sql_execution_status", _sql_execution_status(sql_output.sql_status)),
+                "row_count": len(sanitized_rows(sql_output)),
+            },
             "sources": state.get("sql_sources", []),
             "profile": profile.to_public_dict(),
             "latency_ms": _elapsed_ms(started_at),
@@ -404,12 +447,21 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
 
     if route == "combined":
         status = _response_status_for_success(state)
+        safe_rows = sanitized_rows(state["sql_output"]) if state.get("sql_output") is not None else []
         return {
             "status": status,
             "reason_code": "COMBINED_GRAPH",
+            "route": route,
+            "model_backend": state.get("composer_backend"),
             "category": category,
             "message": final_answer,
             "citations": state.get("rag_citations", []),
+            "rows": safe_rows,
+            "row_count": len(safe_rows),
+            "sql_execution": {
+                "status": state.get("sql_execution_status", "not_run"),
+                "row_count": len(safe_rows),
+            },
             "sources": state.get("sql_sources", []),
             "profile": profile.to_public_dict(),
             "latency_ms": _elapsed_ms(started_at),
@@ -421,6 +473,9 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
         return {
             "status": status,
             "reason_code": state.get("reason_code"),
+            "route": route,
+            "model_backend": state.get("composer_backend"),
+            "sql_execution": {"status": "not_run", "row_count": 0},
             "category": category,
             "message": final_answer or state.get("ticket_message", ""),
             "ticket": state.get("ticket"),
@@ -434,6 +489,9 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
     return {
         "status": "answered" if has_results else "no_answer",
         "reason_code": "ANSWERED_FROM_GRAPH_RAG" if has_results else "NO_ACCESSIBLE_CONTEXT",
+        "route": route,
+        "model_backend": state.get("composer_backend"),
+        "sql_execution": {"status": "not_run", "row_count": 0},
         "category": category,
         "message": final_answer or state.get("rag_message", ""),
         "citations": state.get("rag_citations", []),
@@ -441,6 +499,16 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
         "latency_ms": _elapsed_ms(started_at),
         **_turn_context(state),
     }
+
+
+def _sql_execution_status(sql_status: str) -> str:
+    if sql_status == "answered":
+        return "executed"
+    if sql_status == "validated":
+        return "validation_only"
+    if sql_status in {"error", "refused"}:
+        return "error"
+    return "not_executed"
 
 
 def _response_status_for_success(state: OrchestratorState) -> str:

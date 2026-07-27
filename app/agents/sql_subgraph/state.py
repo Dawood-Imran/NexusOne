@@ -114,6 +114,8 @@ class SQLSubgraphOutput:
     sql_parameters: Mapping[str, Any] = field(default_factory=dict)
     sql_denied_reason: str | None = None
     sql_error: str | None = None
+    planner_backend: str = "deterministic"
+    planner_fallback_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -149,6 +151,7 @@ class SQLSubgraphState:
 
     repair_attempts: int = 0
     max_repair_attempts: int = 2
+    planner_backend: str = "deterministic"
     planner_error: str | None = None
     validation_feedback: str | None = None
     execution_feedback: str | None = None

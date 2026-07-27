@@ -35,6 +35,10 @@ class OrchestratorState(TypedDict, total=False):
     sql_message: str
     sql_sources: list[dict[str, Any]]
     sql_traces: tuple[SQLNodeTrace, ...]
+    sql_execution_status: str
+    sql_row_count: int
+    sql_planner_backend: str
+    sql_planner_fallback_reason: str | None
 
     ticket_request: Any
     ticket_result: Any
@@ -46,6 +50,7 @@ class OrchestratorState(TypedDict, total=False):
     final_answer: str
     composer_backend: str
     composer_error: str
+    composer_fallback_reason: str
     response: dict[str, Any]
     status: str
     reason_code: str

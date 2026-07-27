@@ -43,6 +43,8 @@ class SQLDraftPlan(BaseModel):
 class LangChainOpenAISQLPlanner:
     """OpenAI planner implemented through LangChain's ChatOpenAI integration."""
 
+    provider_name = "openai"
+
     def __init__(
         self,
         model_name: str | None = None,
@@ -63,6 +65,13 @@ class LangChainOpenAISQLPlanner:
     @classmethod
     def from_env(cls) -> "LangChainOpenAISQLPlanner":
         return cls()
+
+    def safe_metadata(self) -> dict[str, object]:
+        return {
+            "provider": self.provider_name,
+            "model": self.model_name,
+            "temperature": self.temperature,
+        }
 
     def classify_intent(
         self,
@@ -152,3 +161,21 @@ class LangChainOpenAISQLPlanner:
         if ":user_id" in response.sql and "user_id" not in parameters:
             parameters["user_id"] = user_id
         return response.sql, parameters
+
+
+def build_default_sql_planner() -> "LangChainOpenAISQLPlanner | None":
+    """Select the configured SQL planner without making offline startup fail.
+
+    The SQL subgraph remains deterministic when credentials are absent or the
+    optional LangChain OpenAI package is unavailable.  Only safe provider
+    metadata is exposed by callers; this function never logs the key.
+    """
+
+    from app.runtime.config import RuntimeConfig
+
+    if not RuntimeConfig.from_env().openai_api_key_configured:
+        return None
+    try:
+        return LangChainOpenAISQLPlanner.from_env()
+    except Exception:  # noqa: BLE001 - provider setup must not break local startup.
+        return None

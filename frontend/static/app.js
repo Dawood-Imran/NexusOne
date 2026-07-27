@@ -359,6 +359,13 @@ function addAssistantMessage(payload) {
     message: payload.message || "No response was returned.",
     citations: payload.citations || [],
     sources: payload.sources || [],
+    rows: Array.isArray(payload.rows) ? payload.rows : [],
+    columns: Array.isArray(payload.columns) ? payload.columns : [],
+    row_count: Number.isInteger(payload.row_count) ? payload.row_count : 0,
+    sql_execution: payload.sql_execution || null,
+    model_backend: payload.model_backend || null,
+    capabilities: payload.capabilities || null,
+    subgraph_trace: payload.subgraph_trace || [],
     ticket: payload.ticket || null,
     missing_fields: payload.missing_fields || [],
     allowed_alternatives: payload.allowed_alternatives || [],
@@ -506,6 +513,7 @@ function renderInspector() {
     return;
   }
   if (message.ticket) inspectorContent.appendChild(renderTicketSummary(message.ticket));
+  if (message.rows.length) inspectorContent.appendChild(renderStructuredRows(message));
   const sourceItems = collectSourceItems(message);
   if (sourceItems.length) inspectorContent.appendChild(renderSources(sourceItems));
   if (message.missing_fields && message.missing_fields.length) {
@@ -531,10 +539,14 @@ function renderInspector() {
       <div><dt>Status</dt><dd>${escapeHtml(message.status || "answered")}</dd></div>
       <div><dt>Reason</dt><dd>${escapeHtml(message.reason_code || "-")}</dd></div>
       <div><dt>Latency</dt><dd>${message.latency_ms == null ? "-" : `${message.latency_ms}ms`}</dd></div>
+      <div><dt>Model backend</dt><dd>${escapeHtml(message.model_backend || "-")}</dd></div>
+      <div><dt>SQL execution</dt><dd>${escapeHtml(message.sql_execution?.status || "not used")} · ${message.row_count || 0} row(s)</dd></div>
       <div><dt>Feedback</dt><dd>${escapeHtml(message.feedback || "Not submitted")}</dd></div>
     </dl>`;
   inspectorContent.appendChild(meta);
-  if (message.trace && message.trace.length) inspectorContent.appendChild(renderTrace(message.trace));
+  if ((message.trace && message.trace.length) || (message.subgraph_trace && message.subgraph_trace.length)) {
+    inspectorContent.appendChild(renderTrace(message.trace || [], message.subgraph_trace || []));
+  }
 }
 
 function selectedAssistantMessage() {
@@ -546,6 +558,44 @@ function selectedAssistantMessage() {
 function latestAssistantMessage(conversation) {
   if (!conversation) return null;
   return [...conversation.messages].reverse().find((message) => message.role === "assistant") || null;
+}
+
+function renderStructuredRows(message) {
+  const section = document.createElement("section");
+  section.className = "structured-results";
+  const title = document.createElement("h3");
+  title.textContent = `Live structured data · ${message.row_count || message.rows.length} row(s)`;
+  section.appendChild(title);
+  const wrapper = document.createElement("div");
+  wrapper.className = "structured-results-scroll";
+  const table = document.createElement("table");
+  table.className = "structured-results-table";
+  const columns = message.columns.length ? message.columns : Object.keys(message.rows[0] || {});
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  columns.forEach((column) => {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = column;
+    headRow.appendChild(cell);
+  });
+  head.appendChild(headRow);
+  table.appendChild(head);
+  const body = document.createElement("tbody");
+  message.rows.forEach((row) => {
+    const tableRow = document.createElement("tr");
+    columns.forEach((column) => {
+      const cell = document.createElement("td");
+      const value = row && row[column] != null ? row[column] : "—";
+      cell.textContent = String(value);
+      tableRow.appendChild(cell);
+    });
+    body.appendChild(tableRow);
+  });
+  table.appendChild(body);
+  wrapper.appendChild(table);
+  section.appendChild(wrapper);
+  return section;
 }
 
 function renderSources(items) {
@@ -603,21 +653,31 @@ function sourceMeta(item) {
   return details.join(" · ");
 }
 
-function renderTrace(trace) {
+function renderTrace(trace, subgraphTrace = []) {
   const section = document.createElement("section");
   section.className = "trace";
   const title = document.createElement("h3");
-  title.textContent = "Node trace";
+  title.textContent = "Graph trace";
+  section.appendChild(title);
+  section.appendChild(renderTraceList(trace));
+  if (subgraphTrace.length) {
+    const subgraphTitle = document.createElement("h3");
+    subgraphTitle.textContent = "SQL subgraph trace";
+    section.appendChild(subgraphTitle);
+    section.appendChild(renderTraceList(subgraphTrace));
+  }
+  return section;
+}
+
+function renderTraceList(trace) {
   const list = document.createElement("ol");
   trace.forEach((item) => {
     const li = document.createElement("li");
     const details = item.details || {};
-    li.textContent = `${item.node}: ${details.status || "running"}`;
+    li.textContent = `${item.node}: ${item.status || details.status || "running"}`;
     list.appendChild(li);
   });
-  section.appendChild(title);
-  section.appendChild(list);
-  return section;
+  return list;
 }
 
 function renderDeniedNextStep(payload) {
