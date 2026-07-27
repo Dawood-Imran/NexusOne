@@ -118,7 +118,7 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("![\"error\", \"ready\"].includes(message.status)", self.app_js)
 
     def test_shell_has_accessible_profile_context_and_composer_states(self) -> None:
-        self.assertIn('aria-label="Workspace context"', self.index_html)
+        self.assertIn('aria-label="NexusOne Copilot workspace"', self.index_html)
         self.assertIn('aria-labelledby="pageTitle"', self.index_html)
         self.assertIn('aria-live="polite"', self.index_html)
         self.assertIn('id="accountButton"', self.index_html)

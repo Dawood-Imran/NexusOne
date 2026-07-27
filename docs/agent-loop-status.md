@@ -4,7 +4,7 @@
 
 - State: in-progress
 - Active phase: Phase 4 - Ticket Actions and Feedback / integration validation
-- Last run: runtime connectivity and frontend contract suites, JavaScript syntax, Python compile checks, and local HTTP smoke passed; manual browser validation remains environment-dependent.
+- Last run: integrated 105-test suite, focused contracts, JavaScript syntax, Python compile checks, local HTTP smoke, and chrome-devtools-axi desktop/mobile smoke passed; repository `.env` was absent, so OpenAI/Postgres live paths were not exercised.
 - Integration note: `docs/requirements-coverage.md` is retained as the frontend/audit branch's durable R1-R14 evidence matrix; the integrated UI preserves the action-aware conversation inspector and adds loading, denied, no-answer, error/retry, responsive, auto-growing composer, and authenticated account-session states. The frontend no longer exposes a demo profile picker or post-login role switcher; it consumes `/api/auth/session`, `/api/auth/login`, and `/api/auth/logout`.
 - Main risks:
   - FastAPI/React production adapters are not wired yet; the app still uses a framework-independent service layer plus stdlib dev server.
@@ -62,6 +62,10 @@
 | `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 92 tests after runtime `.env` loading, HTTP executor injection, live/local capability contracts, provider selection, safe SQL rows, and trace metadata coverage. |
 | `node --check frontend/static/app.js` | pass | Structured-row inspector and graph/SQL subgraph trace rendering syntax check. |
 | `git diff --check` | pass | No whitespace errors in the runtime connectivity change. |
+| `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 105 integrated tests after resolving authentication/runtime/frontend conflicts. |
+| `.venv/bin/python -m compileall -q app scripts tests` + `node --check frontend/static/app.js` | pass | Final Python and JavaScript syntax checks. |
+| Local HTTP contract smoke on `http://127.0.0.1:8017` | pass | Auth/session/logout, authenticated chat identity, tampering rejection, restricted denial, citations, SQL response shape, graph/subgraph trace, feedback, deterministic answer, and validation-only SQL; no repository `.env`, OpenAI, or Postgres live path. |
+| chrome-devtools-axi smoke on `http://127.0.0.1:8020` | pass | Sign-in, authenticated workspace, immutable account popover, cited answer/source inspector, capability status, and 390x844 responsive layout. |
 | `.venv/bin/python -m unittest tests.unit.actions.test_ticket_service tests.unit.actions.test_feedback_service tests.unit.actions.test_audit_service tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service tests.unit.frontend.test_static_chat_ui` | pass | 36 focused action, graph/service, and frontend contract tests. |
 | `.venv/bin/python scripts/run_orchestrator.py --deterministic-composer --user-id u001 --trace "Create an IT ticket for AWS sandbox access needed for billing migration."` | pass | Ticket action returned `ticket_created`; trace showed guardrail precheck and `run_ticket_action` without RAG/SQL nodes. |
 | `.venv/bin/python scripts/run_web_app.py` + local HTTP assertions | pass | Static HTML/CSS/JS markers, 8 profiles, allowed/denied chat, and feedback API response verified. Browser automation was not run. |

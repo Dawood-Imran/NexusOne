@@ -118,8 +118,8 @@ The repository is a framework-independent local dev app. There is no `package.js
 
 | Source / phase | Status | Evidence | Remaining gap |
 |---|---|---|---|
-| Phase 0 — repo contract/stabilization | implemented | Source docs, SQL package, and the full 83-test suite pass in the disposable `.venv`; compileall passes. | No remaining Phase 0 gap identified. |
-| Phase 1 — service/frontend shell | partial | Profile service, guardrails, retrieval, dev API, refreshed static shell, focused tests, and local `/api/profiles`/`/api/chat` smoke. | Browser smoke/E2E and accessibility evidence remain. |
+| Phase 0 — repo contract/stabilization | implemented | Source docs, SQL package, and the integrated 105-test suite pass in the disposable `.venv`; compileall passes. | No remaining Phase 0 gap identified. |
+| Phase 1 — service/frontend shell | partial | Profile service, guardrails, retrieval, authenticated dev API, refreshed static shell, focused tests, and local auth/chat smoke. | Committed browser E2E and production hardening remain. |
 | Phase 2 — permission-aware RAG ingestion | partial | Loaders/chunking/FAISS sidecar/retrieval tests and generated index. | End-to-end model/DB permission path and full hybrid/rerank acceptance are not complete. |
 | Phase 3 — main LangGraph orchestrator | partial | `app/agents/orchestrator/`, graph tests, combined route, validation/composition nodes, trace config, and the integrated unit suite passing in `.venv`. | Live executor and browser journey remain.
 | Phase 4 — ticket actions and feedback | in-progress | Deterministic ticket actions, feedback, audit metadata, graph/API routes, static controls, focused tests, and live smoke script are present on the integrated line. | Repeatable browser E2E and production hardening remain. |
@@ -135,14 +135,14 @@ The repository is a framework-independent local dev app. There is no `package.js
 | `git diff --check` | pass | No whitespace errors in the implementation diff. |
 | Static HTTP asset smoke (`python -m http.server` + `curl`) | pass | HTML, CSS, and JavaScript assets served successfully and contained the new shell/state markers. |
 | `.venv/bin/python -m unittest tests.unit.frontend.test_static_chat_ui` | pass | 13 focused static frontend contract tests after integration. |
-| `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | The integrated 96-test suite passes in the disposable environment created from `requirements.txt`. |
+| `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | The integrated 105-test suite passes in the disposable environment created from `requirements.txt`. |
 | `python -m compileall app scripts` | pass | Python syntax/compile check. |
-| Local API smoke (`.venv/bin/python scripts/run_web_app.py` + HTTP requests) | pass | 8 profiles loaded; employee AWS answer returned citations; employee Q4-risk request was denied without the restricted title; feedback stored; static asset markers were served successfully. |
-| Browser/Playwright smoke | unverifiable | Chrome DevTools MCP is not available in this session; no Playwright config is committed. Static and API smoke ran separately. |
+| Local API smoke (`.venv/bin/python scripts/run_web_app.py` + HTTP requests) | pass | Auth/session/logout, server-owned chat, identity tampering rejection, employee AWS citations, employee Q4-risk denial, structured response/trace shape, feedback, and static assets verified; isolated worktree had no repository `.env`, so OpenAI/Postgres live paths were not exercised. |
+| chrome-devtools-axi browser smoke | pass | Authenticated desktop workspace, account popover, cited answer/source inspector, capability reporting, and 390x844 responsive layout verified; no committed Playwright config exists. |
 
 ## Priority gaps
 
-1. Add an integration/browser harness and keep its results separate from the passing unit suite; browser validation was not run for this local-only integration.
+1. Add a committed integration/browser harness and keep its results separate from the passing unit suite; the local chrome-devtools-axi smoke is manual only.
 2. Harden the production API/auth boundary and repeat the Phase 4 DB integration checks in CI.
 3. Add Playwright coverage for profile switching, allowed/denied chat, mobile layout, loading, backend error/retry, and citation focus behavior.
 4. Add a systematic evaluation matrix for role differences, indirect sensitive phrasing, prompt injection, and citation correctness.
