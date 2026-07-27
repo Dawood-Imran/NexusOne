@@ -12,7 +12,14 @@ from app.services.chat_service import ChatService
 
 class ChatServiceTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.environment = patch.dict(os.environ, {}, clear=True)
+        # ChatService intentionally loads the repository .env. Pin the provider
+        # and database knobs explicitly so this validation-only suite remains
+        # deterministic when a developer has local credentials configured.
+        self.environment = patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": "", "DATABASE_URL": ""},
+            clear=True,
+        )
         self.environment.start()
         self.feedback_repository = InMemoryFeedbackRepository()
         self.audit_repository = InMemoryAuditRepository()

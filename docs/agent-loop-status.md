@@ -4,7 +4,7 @@
 
 - State: in-progress
 - Active phase: Phase 4 - Ticket Actions and Feedback / integration validation
-- Last run: integrated 105-test suite, focused contracts, JavaScript syntax, Python compile checks, local HTTP smoke, and chrome-devtools-axi desktop/mobile smoke passed; repository `.env` was absent, so OpenAI/Postgres live paths were not exercised.
+- Last run: centered the reference-inspired split authentication card while preserving the server-owned username/password flow, then verified the `u001` demo sign-in through the browser. Focused frontend/auth/API contracts, JavaScript syntax, and the full 107-test suite pass; repository `.env` was absent, so OpenAI/Postgres live paths were not exercised.
 - Integration note: `docs/requirements-coverage.md` is retained as the frontend/audit branch's durable R1-R14 evidence matrix; the integrated UI preserves the action-aware conversation inspector and adds loading, denied, no-answer, error/retry, responsive, auto-growing composer, and authenticated account-session states. The frontend no longer exposes a demo profile picker or post-login role switcher; it consumes `/api/auth/session`, `/api/auth/login`, and `/api/auth/logout`.
 - Main risks:
   - FastAPI/React production adapters are not wired yet; the app still uses a framework-independent service layer plus stdlib dev server.

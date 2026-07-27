@@ -429,3 +429,53 @@ body {
   .empty-state { padding: 25px 20px; }
   .profile-summary dl { grid-template-columns: 1fr 1fr; }
 }
+
+/* Authentication reference alignment: keep the complete split card centered
+   while restoring the current credential form's deliberate component styles. */
+.auth-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 28px;
+  background: #eaf0f2;
+}
+
+.auth-frame {
+  width: min(1120px, calc(100vw - 56px));
+  margin: 0;
+}
+
+.login-panel {
+  width: auto;
+  align-self: stretch;
+  justify-self: stretch;
+  padding: clamp(25px, 5vw, 64px);
+}
+
+.auth-proof span {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.auth-proof .proof-mark {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 1px solid rgba(121, 211, 202, 0.35);
+  border-radius: 7px;
+  color: #79d3ca;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+@media (max-width: 720px) {
+  .auth-view { display: block; padding: 16px; }
+  .auth-frame { margin: 0; }
+}

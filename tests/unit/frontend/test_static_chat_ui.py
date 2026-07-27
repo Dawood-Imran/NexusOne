@@ -167,9 +167,18 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr)", styles)
         self.assertIn(".profile-cards .profile-card:hover", styles)
         self.assertIn(".skip-link:focus", styles)
-        self.assertIn("formatRole(profile.role)", self.app_js)
+        self.assertIn("function formatRole(role)", self.app_js)
         self.assertIn("@media (max-width: 1400px)", styles)
         self.assertIn(".inspector.open", styles)
+
+    def test_reference_auth_card_is_centered_without_overriding_form_components(self) -> None:
+        styles = (ROOT / "frontend" / "static" / "professional.css").read_text(encoding="utf-8")
+        self.assertIn("Authentication reference alignment", styles)
+        self.assertIn("justify-content: center", styles)
+        self.assertIn("width: min(1120px, calc(100vw - 56px))", styles)
+        self.assertIn(".auth-proof .proof-mark", styles)
+        self.assertIn('id="loginForm"', self.index_html)
+        self.assertNotIn('id="profileSelect"', self.index_html)
 
 
 if __name__ == "__main__":
