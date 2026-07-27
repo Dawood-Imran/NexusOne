@@ -13,7 +13,7 @@ from app.agents.orchestrator.state import OrchestratorState
 from app.agents.sql_subgraph import SQLSubgraph, clean_question_text
 from app.agents.sql_subgraph.presentation import format_safe_terminal_answer
 from app.agents.sql_subgraph.state import SQLExecutor, SQLPlanner
-from app.auth.profiles import get_profile
+from app.auth.profiles import UserProfile, get_profile
 from app.guardrails.policy import check_message_access
 from app.retrieval.chunk_index import MetadataChunkRetriever, build_answer_from_chunks
 from app.retrieval.chunk_index import ChunkSearchResult
@@ -30,7 +30,14 @@ def append_trace(state: OrchestratorState, node_name: str, details: dict[str, An
 def make_load_user_context_node() -> Any:
     def load_user_context(state: OrchestratorState) -> OrchestratorState:
         started_at = state.get("started_at", time.perf_counter())
-        profile = get_profile(str(state.get("user_id", "")))
+        # The authenticated HTTP path supplies the immutable session profile.
+        # Trusted graph/unit callers without one retain the manifest lookup.
+        provided_profile = state.get("profile")
+        profile = (
+            provided_profile
+            if isinstance(provided_profile, UserProfile)
+            else get_profile(str(state.get("user_id", "")))
+        )
         clean_message = clean_question_text(str(state.get("message", "")))
         next_state: OrchestratorState = {
             **state,

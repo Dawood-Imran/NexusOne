@@ -117,6 +117,10 @@ class NexusOneOrchestrator:
             "include_trace": bool(payload.get("include_trace", False)),
             "execute_sql": bool(payload.get("execute_sql", False)),
         }
+        # Authenticated API callers may pass the immutable server-resolved
+        # profile so the graph does not reconstruct identity from client data.
+        if payload.get("profile") is not None:
+            state["profile"] = payload["profile"]
         output = self.graph.invoke(state, config=build_langsmith_config(state))
         response = output["response"]
         trace = tuple(output.get("trace", ()))

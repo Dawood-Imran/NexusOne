@@ -21,8 +21,8 @@ NexusOne Copilot is a permission-aware internal AI assistant for the fictional c
 
 | ID | Requirement | Notes |
 |---|---|---|
-| R1 | Fake authentication/profile switching | Use sample users from the NexusOne manifests. |
-| R2 | Role-aware chat UI | The selected user profile must be visible and must affect answers. |
+| R1 | Local username/password authentication | Use synthetic users from the NexusOne manifests; the server owns the authenticated session. |
+| R2 | Role-aware chat UI | Display the authenticated server profile and derive answers from it; no client profile/role switching. |
 | R3 | Permission-aware document Q&A | Retrieve only documents/chunks allowed for the current user. |
 | R4 | Citations | Knowledge answers should include title, source type/path, and updated date where known. |
 | R5 | Structured SQL connector | Exact data questions should route to a constrained SQL subgraph. |

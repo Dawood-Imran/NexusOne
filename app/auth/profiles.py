@@ -1,8 +1,8 @@
-"""Synthetic NexusOne user profiles used for role switching."""
+"""Synthetic NexusOne profiles used by the local server-side auth service."""
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 from app.agents.sql_subgraph.state import UserContext
 
@@ -30,9 +30,22 @@ class UserProfile:
         )
 
     def to_public_dict(self) -> dict[str, object]:
-        data = asdict(self)
-        data["groups"] = list(self.groups)
-        return data
+        """Return only the fields safe for the authenticated UI contract.
+
+        Email addresses, group memberships, and account status remain server
+        concerns.  Role and profile data are selected from this immutable
+        server-owned record, never from a request body.
+        """
+
+        return {
+            "user_id": self.user_id,
+            "name": self.name,
+            "title": self.title,
+            "role": self.role,
+            "department": self.department,
+            "location": self.location,
+            "avatar": None,
+        }
 
 
 PROFILES: dict[str, UserProfile] = {

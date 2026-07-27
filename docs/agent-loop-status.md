@@ -12,13 +12,14 @@
   - `PROJECT_CONTEXT.md` previously claimed SQL modules existed while the working tree had them deleted; Phase 0 restored the modules and recorded this drift.
   - Playwright MCP is now available in this session and was used for manual desktop/mobile UI inspection. Committed Playwright E2E coverage is still pending.
   - LangSmith hosted upload can fail noisily in restricted-network shells when tracing is enabled in the environment; graph execution still succeeds and safe metadata config is covered by unit tests.
+- The local authentication contract now uses salted password verifiers, opaque server-side sessions, and cookie-authenticated chat/feedback; the static UI still needs the separate frontend worker migration from profile selection to the auth endpoints in `docs/authentication.md`.
 
 ## Requirement Coverage
 
 | Requirement | Owner | Status | Evidence | Notes |
 |---|---|---|---|---|
-| Fake role/profile switching | Frontend/Backend | partial | `app/auth/profiles.py`, `frontend/static/index.html` | Demo profiles are exposed through `/api/profiles`. |
-| Role-aware chat UI | Frontend | partial | `frontend/static/index.html`, `frontend/static/app.js`, `frontend/static/styles.css`, `tests/unit/frontend/test_static_chat_ui.py` | Static UI now has demo authentication, profile-scoped conversation history, chat workspace, and right inspector. Browser E2E remains. |
+| Local username/password authentication | Backend | complete | `app/auth/service.py`, `app/api/dev_server.py`, `docs/authentication.md`, `tests/unit/auth/test_auth_service.py`, `tests/unit/api/test_dev_server_auth.py` | Synthetic accounts use salted password verifiers and opaque HttpOnly sessions; no external IdP is involved. |
+| Role-aware chat UI | Frontend/Backend | partial | `app/api/dev_server.py`, `frontend/static/index.html`, `frontend/static/app.js`, `tests/unit/frontend/test_static_chat_ui.py` | Backend now derives identity from the session; the existing static UI still contains the legacy profile selector and needs the auth endpoint handoff. |
 | Permission-aware document Q&A | Backend | partial | `app/retrieval/chunk_index.py`, `app/retrieval/local_kb.py`, `app/ingestion/build_index.py`, ingestion/retrieval/service tests pass | FAISS hybrid retrieval is wired into the main graph with metadata lexical fallback. |
 | Citations | Backend/Frontend | partial | `app/agents/orchestrator/nodes.py`, `app/agents/orchestrator/answer_composer.py`, `frontend/static/app.js` inspector source renderer, `tests/unit/frontend/test_static_chat_ui.py` | Answers include inline `[n]` source markers; citation payloads include permitted chunk text in the right inspector. Combined answers preserve document citations and SQL source metadata. PDF page citations are metadata-level for now. |
 | Structured SQL connector | Backend | partial | `app/agents/sql_subgraph`, `app/agents/orchestrator` | Main graph routes structured questions to the independent SQL subgraph; live execution depends on configured Postgres executor. |
@@ -51,7 +52,12 @@
 | `./venv/bin/python -m unittest tests.unit.agents.orchestrator.test_graph` | pass | 4 Phase 3 routing tests: RAG, SQL, denied, combined. |
 | `./venv/bin/python -m unittest tests.unit.retrieval.test_chunk_index tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service` | pass | 12 focused regression tests after FAISS hybrid retrieval and graph service handoff. |
 | `./venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 77 tests after auth/conversation frontend redesign contract coverage was added. |
+| `python3 -m unittest tests.unit.auth.test_auth_service tests.unit.api.test_dev_server_auth` | pass | Focused local password verifier, login/session/logout, safe profile, unauthenticated endpoint, identity tampering, and immutable role contract tests. |
 | `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 83 tests after integrating the frontend/audit branch and resolving the frontend contract merge. |
+| `.venv/bin/python -m unittest tests.unit.auth.test_auth_service tests.unit.api.test_dev_server_auth` | pass | 13 focused authentication/API contract tests after installing `requirements.txt` into the isolated `.venv`. |
+| `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 96 tests after installing the project requirements into the isolated `.venv`; no test failures. |
+| `.venv/bin/python -m compileall -q app scripts tests` + `node --check frontend/static/app.js` | pass | Python and existing static JavaScript syntax validation. |
+| `.venv/bin/python scripts/run_web_app.py` + local HTTP auth/chat smoke | pass | Verified unauthenticated denial, login cookie/current-session persistence, server-owned chat profile, identity tampering rejection, and logout. |
 | `.venv/bin/python -m unittest tests.unit.actions.test_ticket_service tests.unit.actions.test_feedback_service tests.unit.actions.test_audit_service tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service tests.unit.frontend.test_static_chat_ui` | pass | 36 focused action, graph/service, and frontend contract tests. |
 | `.venv/bin/python scripts/run_orchestrator.py --deterministic-composer --user-id u001 --trace "Create an IT ticket for AWS sandbox access needed for billing migration."` | pass | Ticket action returned `ticket_created`; trace showed guardrail precheck and `run_ticket_action` without RAG/SQL nodes. |
 | `.venv/bin/python scripts/run_web_app.py` + local HTTP assertions | pass | Static HTML/CSS/JS markers, 8 profiles, allowed/denied chat, and feedback API response verified. Browser automation was not run. |
@@ -86,6 +92,7 @@
 | OI-005 | Testing | medium | No committed Playwright E2E coverage exists. | Add after local app shell stabilizes. |
 | OI-006 | Testing | medium | Browser-level committed Playwright E2E is not completed. Manual Playwright MCP inspection is available and passed for auth/workspace/mobile drawer. | Add a committed E2E harness for ticket creation, cited answer inspection, feedback, and restricted-denial journeys. |
 | OI-007 | Observability | low | LangSmith upload attempts fail in restricted-network shells if hosted tracing is enabled through environment variables. | Keep tracing config safe; verify hosted traces only when network and credentials are intentionally available. |
+| OI-008 | Frontend | high | The backend auth boundary is ready, but the current static shell still renders profile cards/selectors and sends `user_id` in chat/feedback bodies. | Migrate the UI to `POST /api/auth/login`, `GET /api/auth/session`, cookie-authenticated chat/feedback, and `POST /api/auth/logout` using `docs/authentication.md`. |
 
 ## Phase Progress
 
@@ -95,7 +102,7 @@
 | Phase 1 | partial | Profile service, guardrail policy, local KB retriever, chat service facade, stdlib HTTP API, static frontend shell, and service tests. | Final browser interaction test remains. |
 | Phase 2 | complete | Markdown/PDF-source loader, deterministic chunker, chunk metadata writer, FAISS writer, ingestion report, FAISS hybrid retriever, lexical fallback, retrieval tests. | Metadata exists at `data/faiss/nexusone_chunks_metadata.jsonl`; FAISS index exists at `data/faiss/nexusone_chunks.index`. |
 | Phase 3 | in-progress | Main LangGraph orchestrator added with load user, guardrail precheck, deterministic router, SQL subgraph route, RAG route, combined route, validation node, required final answer composition node, inline citation markers, source chunk payloads, combined citation+SQL source UI rendering, LangSmith-compatible run config, final response node, CLI runner, diagram, and tests. | Browser-level Playwright E2E coverage remains. |
-| Phase 4 | in-progress | Deterministic ticket action services, in-memory and SQLAlchemy repositories, ticket creation graph route, clarification responses, `/api/feedback`, auth-first frontend, profile-scoped conversation history, inspector-based sources/tickets/trace, feedback controls, UI Pro Max refinement, Playwright MCP desktop/mobile inspection, safe audit metadata service, live Postgres smoke, and HTTP API/static asset smoke. | Committed browser E2E remains. |
+| Phase 4 | in-progress | Deterministic ticket action services, in-memory and SQLAlchemy repositories, ticket creation graph route, clarification responses, `/api/feedback`, auth service/session contract, cookie-authenticated chat/feedback, safe display profile payloads, auth-first frontend foundation, inspector-based sources/tickets/trace, feedback controls, UI Pro Max refinement, Playwright MCP desktop/mobile inspection, safe audit metadata service, live Postgres smoke, and HTTP API/static asset smoke. | The separate frontend migration from profile selection to the auth contract and committed browser E2E remain. |
 | Phase 5 | pending | None | Requires E2E and production hardening. |
 
 ## Understanding Checklist

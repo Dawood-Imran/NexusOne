@@ -14,6 +14,7 @@ from app.agents.orchestrator import NexusOneOrchestrator
 from app.agents.orchestrator.answer_composer import AnswerComposer
 from app.agents.sql_subgraph.state import SQLExecutor
 from app.auth.profiles import list_profiles
+from app.auth.service import AuthenticatedSession
 from app.retrieval.chunk_index import MetadataChunkRetriever
 from app.retrieval.local_kb import LocalKBRetriever
 
@@ -52,20 +53,70 @@ class ChatService:
         return list_profiles()
 
     def handle_message(self, user_id: str, message: str, include_trace: bool = False) -> dict[str, Any]:
-        response = dict(
-            self.orchestrator.invoke(
-                {
-                    "conversation_id": "web-chat",
-                    "turn_id": "web-turn",
-                    "user_id": user_id,
-                    "message": message,
-                    "include_trace": include_trace,
-                    "execute_sql": self.sql_executor is not None,
-                }
-            )
+        """Handle a message for a trusted server-side identity.
+
+        The development HTTP adapter must call
+        :meth:`handle_authenticated_message`; this lower-level method remains
+        available for graph/unit callers that already resolved identity.
+        """
+
+        return self._handle_message(user_id, message, include_trace=include_trace)
+
+    def handle_authenticated_message(
+        self,
+        session: AuthenticatedSession,
+        message: str,
+        include_trace: bool = False,
+    ) -> dict[str, Any]:
+        """Handle chat using only the immutable identity resolved by auth."""
+
+        return self._handle_message(
+            session.user_id,
+            message,
+            include_trace=include_trace,
+            profile=session.profile,
         )
+
+    def _handle_message(
+        self,
+        user_id: str,
+        message: str,
+        *,
+        include_trace: bool,
+        profile: Any | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "conversation_id": "web-chat",
+            "turn_id": "web-turn",
+            "user_id": user_id,
+            "message": message,
+            "include_trace": include_trace,
+            "execute_sql": self.sql_executor is not None,
+        }
+        if profile is not None:
+            payload["profile"] = profile
+        response = dict(self.orchestrator.invoke(payload))
         self._record_audit(response)
         return response
+
+    def submit_authenticated_feedback(
+        self,
+        session: AuthenticatedSession,
+        *,
+        conversation_id: str,
+        turn_id: str,
+        rating: str,
+        comment: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist feedback under the session identity, not client input."""
+
+        return self.submit_feedback(
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            user_id=session.user_id,
+            rating=rating,
+            comment=comment,
+        )
 
     def submit_feedback(
         self,
