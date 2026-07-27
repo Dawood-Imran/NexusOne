@@ -78,9 +78,11 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertNotIn("workspace-identity", self.index_html)
         self.assertNotIn("profile-summary", self.index_html)
 
-    def test_sidebar_keeps_navigation_and_conversation_structure(self) -> None:
+    def test_sidebar_keeps_conversation_structure_without_workspace_action(self) -> None:
         self.assertIn('aria-label="Workspace navigation and conversations"', self.index_html)
-        self.assertIn('aria-label="Primary navigation"', self.index_html)
+        self.assertNotIn('aria-label="Primary navigation"', self.index_html)
+        self.assertNotIn('class="workspace-nav"', self.index_html)
+        self.assertNotIn('>Workspace<', self.index_html)
         self.assertIn('id="conversationList"', self.index_html)
         self.assertIn('id="conversationHeading">Conversations', self.index_html)
         self.assertIn('id="newChatButton"', self.index_html)
@@ -131,7 +133,9 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertNotIn("configured_with_fallback", self.index_html)
         self.assertNotIn("configured_with_fallback", self.app_js)
         self.assertNotIn("SQL capability", self.app_js)
-        self.assertIn('capabilityStatus.textContent = "Access checked"', self.app_js)
+        self.assertNotIn("Access checked", self.index_html)
+        self.assertNotIn("Access checked", self.app_js)
+        self.assertIn('capabilityStatus.textContent = "Protected session"', self.app_js)
 
     def test_ticket_cards_are_structured_and_error_states_are_concise(self) -> None:
         self.assertIn("function sanitizeTicket(ticket)", self.app_js)
@@ -141,6 +145,13 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn('ticket: sanitizeTicket(payload.ticket)', self.app_js)
         self.assertNotIn("ticket.message", self.app_js)
         self.assertNotIn("ticket.error", self.app_js)
+
+    def test_trace_is_only_rendered_in_the_inspector_for_historical_turn_selection(self) -> None:
+        message_renderer = self.app_js.split("function selectAssistantMessage", 1)[0]
+        self.assertNotIn("article.appendChild(renderTrace", message_renderer)
+        self.assertIn("inspectorContent.appendChild(renderTrace(message.trace || [], message.subgraph_trace || []", self.app_js)
+        self.assertIn("state.selectedAssistantMessageId = latestAssistantMessage(conversation)?.id || null", self.app_js)
+        self.assertIn("function selectAssistantMessage(messageId)", self.app_js)
 
     def test_each_answer_owns_a_reopenable_trace_and_new_questions_collapse_previous(self) -> None:
         self.assertIn("trace_expanded: Boolean(payload.trace?.length || payload.subgraph_trace?.length)", self.app_js)
@@ -174,11 +185,33 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("align-self: end", self.styles)
         self.assertIn("resize: none", self.styles)
 
+    def test_delete_conversation_confirms_and_rehomes_the_active_view(self) -> None:
+        self.assertIn("function deleteConversation(conversationId)", self.app_js)
+        self.assertIn("window.confirm(`Delete “${conversation.title}”?", self.app_js)
+        self.assertIn("state.conversations = state.conversations.filter((candidate) => candidate.id !== conversationId)", self.app_js)
+        self.assertIn("renderConversationList();\n  renderActiveConversation();", self.app_js)
+        self.assertIn('className = "delete-conversation-button"', self.app_js)
+        self.assertIn('aria-label", `Delete conversation ${conversation.title}`', self.app_js)
+        self.assertIn("saveConversations();", self.app_js)
+
+    def test_sidebar_controls_are_icon_only_but_keep_accessible_labels_and_tooltips(self) -> None:
+        self.assertIn('title="Collapse navigation"', self.index_html)
+        self.assertIn('class="sidebar-toggle-label sr-only"', self.index_html)
+        self.assertIn('title="Show conversation details"', self.index_html)
+        self.assertIn('title="Collapse conversation details"', self.index_html)
+        self.assertIn('function setIconControlLabel(control, label)', self.app_js)
+        self.assertIn("control.title = label", self.app_js)
+        self.assertIn('mobileInspectorButton.querySelector(".panel-toggle-icon").textContent', self.app_js)
+        self.assertIn('leftSidebarToggle.setAttribute("aria-expanded", String(expanded))', self.app_js)
+
     def test_suggestions_fill_composer_without_mocking_chat(self) -> None:
         self.assertIn('id="suggestions"', self.index_html)
         self.assertIn('data-prompt="How do I request AWS access?"', self.index_html)
         self.assertIn('data-prompt="Show my ticket status."', self.index_html)
         self.assertIn('button.dataset.prompt || ""', self.app_js)
+        self.assertIn("function updateSuggestionsVisibility()", self.app_js)
+        self.assertIn("suggestions.hidden = hasSubmittedResponse", self.app_js)
+        self.assertIn("message.role === \"assistant\"", self.app_js)
         self.assertIn("messageInput.focus();", self.app_js)
         self.assertIn('fetch("/api/chat"', self.app_js)
 
@@ -209,11 +242,11 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn(".inspector.open", styles)
 
     def test_reference_auth_card_is_centered_without_overriding_form_components(self) -> None:
-        styles = (ROOT / "frontend" / "static" / "professional.css").read_text(encoding="utf-8")
-        self.assertIn("Authentication reference alignment", styles)
-        self.assertIn("justify-content: center", styles)
-        self.assertIn("width: min(1120px, calc(100vw - 56px))", styles)
-        self.assertIn(".auth-proof .proof-mark", styles)
+        styles = (ROOT / "frontend" / "static" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn(".auth-frame", styles)
+        self.assertIn("width: min(1120px, 100%)", styles)
+        self.assertIn(".proof-mark", styles)
+        self.assertIn("margin: auto;", styles)
         self.assertIn('id="loginForm"', self.index_html)
         self.assertNotIn('id="profileSelect"', self.index_html)
 

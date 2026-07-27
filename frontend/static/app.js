@@ -222,7 +222,7 @@ function enterWorkspace(account, sessionToken = null) {
   renderActiveConversation();
   setConversationStatus("Ready when you are.");
   setServiceState("Session ready", "live");
-  capabilityStatus.textContent = "Access checked";
+  capabilityStatus.textContent = "Protected session";
   setSidebarExpanded(true);
   if (window.matchMedia("(min-width: 981px)").matches) openInspector();
   else closeInspector();
@@ -376,36 +376,82 @@ function renderConversationList() {
   conversationList.innerHTML = "";
   conversationEmpty.hidden = state.conversations.length > 0;
   state.conversations.forEach((conversation) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = conversation.id === state.activeConversationId ? "conversation-item active" : "conversation-item";
-    button.innerHTML = '<span class="conversation-name"></span><span class="conversation-meta"></span>';
-    button.querySelector(".conversation-name").textContent = conversation.title;
-    button.querySelector(".conversation-meta").textContent = conversationMeta(conversation);
-    button.addEventListener("click", () => {
+    const item = document.createElement("div");
+    item.className = conversation.id === state.activeConversationId ? "conversation-item active" : "conversation-item";
+    const selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.className = "conversation-select";
+    selectButton.setAttribute("aria-current", conversation.id === state.activeConversationId ? "page" : "false");
+    selectButton.innerHTML = '<span class="conversation-name"></span><span class="conversation-meta"></span>';
+    selectButton.querySelector(".conversation-name").textContent = conversation.title;
+    selectButton.querySelector(".conversation-meta").textContent = conversationMeta(conversation);
+    selectButton.addEventListener("click", () => {
       state.activeConversationId = conversation.id;
       state.selectedAssistantMessageId = latestAssistantMessage(conversation)?.id || null;
       renderConversationList();
       renderActiveConversation();
       messageInput.focus();
     });
-    conversationList.appendChild(button);
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "delete-conversation-button";
+    deleteButton.title = `Delete ${conversation.title}`;
+    deleteButton.setAttribute("aria-label", `Delete conversation ${conversation.title}`);
+    deleteButton.innerHTML = '<span aria-hidden="true">×</span>';
+    deleteButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteConversation(conversation.id);
+    });
+    item.appendChild(selectButton);
+    item.appendChild(deleteButton);
+    conversationList.appendChild(item);
   });
 }
 
 function renderActiveConversation() {
   const conversation = activeConversation();
-  if (!conversation) return;
+  messages.innerHTML = "";
+  if (!conversation) {
+    conversationTitle.textContent = "New conversation";
+    pageTitle.textContent = "How can we help today?";
+    messages.appendChild(renderEmptyState());
+    renderInspector();
+    updateSuggestionsVisibility();
+    scrollMessages();
+    return;
+  }
   conversationTitle.textContent = conversation.title;
   pageTitle.textContent = conversation.title === "New conversation" ? "How can we help today?" : conversation.title;
-  messages.innerHTML = "";
   if (!conversation.messages.length) {
     messages.appendChild(renderEmptyState());
   } else {
     conversation.messages.forEach((message) => messages.appendChild(renderMessage(message)));
   }
   renderInspector();
+  updateSuggestionsVisibility();
   scrollMessages();
+}
+
+function deleteConversation(conversationId) {
+  if (state.sending) return;
+  const conversation = state.conversations.find((candidate) => candidate.id === conversationId);
+  if (!conversation) return;
+  const confirmed = window.confirm(`Delete “${conversation.title}”? This conversation will be removed from this device.`);
+  if (!confirmed) return;
+  const deletedIndex = state.conversations.findIndex((candidate) => candidate.id === conversationId);
+  const wasActive = state.activeConversationId === conversationId;
+  state.conversations = state.conversations.filter((candidate) => candidate.id !== conversationId);
+  if (wasActive) {
+    const nextConversation = state.conversations[deletedIndex] || state.conversations[deletedIndex - 1] || createConversation();
+    if (!state.conversations.length) state.conversations.push(nextConversation);
+    state.activeConversationId = nextConversation.id;
+    state.selectedAssistantMessageId = latestAssistantMessage(nextConversation)?.id || null;
+  }
+  saveConversations();
+  renderConversationList();
+  renderActiveConversation();
+  setConversationStatus("Conversation deleted.");
+  messageInput.focus();
 }
 
 function renderEmptyState() {
@@ -466,12 +512,6 @@ function renderMessage(message) {
   article.appendChild(body);
   if (message.ticket) article.appendChild(renderTicketSummary(message.ticket));
   else if (message.category === "own_ticket" && ["error", "refused"].includes(message.status)) article.appendChild(renderTicketStatusState());
-  if (message.trace?.length || message.subgraph_trace?.length) {
-    article.appendChild(renderTrace(message.trace || [], message.subgraph_trace || [], message.trace_expanded !== false, (expanded) => {
-      message.trace_expanded = expanded;
-      saveConversations();
-    }));
-  }
   if (message.status === "denied") article.appendChild(renderDeniedNextStep(message));
   if (message.status === "no_answer") article.appendChild(renderNoAnswerNextStep());
   if (["error", "refused"].includes(message.status)) article.appendChild(renderRetry(message.request_text || state.lastSubmittedText, message.status === "refused" ? "Status unavailable" : "Connection issue"));
@@ -710,15 +750,22 @@ function selectSource(referenceId) {
   source.focus({ preventScroll: true });
 }
 
+function setIconControlLabel(control, label) {
+  control.setAttribute("aria-label", label);
+  control.title = label;
+  const accessibleLabel = control.querySelector(".sr-only");
+  if (accessibleLabel) accessibleLabel.textContent = label;
+}
+
 function closeInspector() {
   inspector.classList.remove("open");
   inspector.classList.add("is-collapsed");
   appView.classList.add("right-inspector-collapsed");
   mobileInspectorButton.setAttribute("aria-expanded", "false");
-  mobileInspectorButton.setAttribute("aria-label", "Show conversation details");
-  mobileInspectorButton.textContent = "Show details";
-  closeInspectorButton.setAttribute("aria-label", "Expand conversation details");
-  closeInspectorButton.textContent = "Show details";
+  setIconControlLabel(mobileInspectorButton, "Show conversation details");
+  mobileInspectorButton.querySelector(".panel-toggle-icon").textContent = "‹";
+  setIconControlLabel(closeInspectorButton, "Expand conversation details");
+  closeInspectorButton.querySelector(".panel-toggle-icon").textContent = "›";
   if (document.activeElement !== mobileInspectorButton && document.activeElement !== messageInput) mobileInspectorButton.focus();
 }
 
@@ -727,18 +774,17 @@ function openInspector() {
   inspector.classList.add("open");
   appView.classList.remove("right-inspector-collapsed");
   mobileInspectorButton.setAttribute("aria-expanded", "true");
-  mobileInspectorButton.setAttribute("aria-label", "Hide conversation details");
-  mobileInspectorButton.textContent = "Hide details";
-  closeInspectorButton.setAttribute("aria-label", "Collapse conversation details");
-  closeInspectorButton.textContent = "Hide details";
+  setIconControlLabel(mobileInspectorButton, "Hide conversation details");
+  mobileInspectorButton.querySelector(".panel-toggle-icon").textContent = "›";
+  setIconControlLabel(closeInspectorButton, "Collapse conversation details");
+  closeInspectorButton.querySelector(".panel-toggle-icon").textContent = "×";
 }
 
 function setSidebarExpanded(expanded) {
   conversationRail.classList.toggle("is-collapsed", !expanded);
   appView.classList.toggle("left-sidebar-collapsed", !expanded);
   leftSidebarToggle.setAttribute("aria-expanded", String(expanded));
-  leftSidebarToggle.setAttribute("aria-label", expanded ? "Collapse navigation" : "Expand navigation");
-  leftSidebarToggle.querySelector(".sidebar-toggle-label").textContent = expanded ? "Collapse navigation" : "Expand navigation";
+  setIconControlLabel(leftSidebarToggle, expanded ? "Collapse navigation" : "Expand navigation");
   leftSidebarToggle.querySelector(".sidebar-toggle-icon").textContent = expanded ? "‹" : "›";
 }
 
@@ -984,6 +1030,8 @@ function setSending(value) {
   const label = sendButton.querySelector("span");
   if (label) label.textContent = value ? "Checking" : "Send";
   messageInput.disabled = value || !activeAccount();
+  conversationList.querySelectorAll(".delete-conversation-button").forEach((button) => { button.disabled = value; });
+  updateSuggestionsVisibility();
   if (value) {
     setConversationStatus("Checking access and approved sources…", "busy");
     addLoadingMessage();
@@ -1020,7 +1068,7 @@ async function sendMessage(text, options = {}) {
     addAssistantMessage({
       status: "error",
       request_text: cleanText,
-      message: error.message || "The local service did not respond. Check the server, then try again.",
+      message: "We could not complete that request. Try again in a moment.",
     });
     setConversationStatus("The request could not be completed. You can try again.", "error");
   } finally {
@@ -1046,7 +1094,14 @@ function updateResponseStatus(payload) {
 }
 
 function updateCapabilityStatus() {
-  capabilityStatus.textContent = "Access checked";
+  capabilityStatus.textContent = "Protected session";
+}
+
+function updateSuggestionsVisibility() {
+  const conversation = activeConversation();
+  const hasSubmittedResponse = state.sending || Boolean(conversation?.messages.some((message) => message.role === "assistant"));
+  suggestions.hidden = hasSubmittedResponse;
+  suggestions.setAttribute("aria-hidden", String(hasSubmittedResponse));
 }
 
 function setConversationStatus(text, stateName = "") {

@@ -15,6 +15,7 @@
   - LangSmith hosted upload can fail noisily in restricted-network shells when tracing is enabled in the environment; graph execution still succeeds and safe metadata config is covered by unit tests.
 - The local authentication contract now uses salted password verifiers, opaque server-side sessions, and cookie-authenticated chat/feedback; the static UI uses that contract and omits client identity from chat/feedback requests.
 - The main graph now has first-class `CASUAL` and `GENERAL_KNOWLEDGE` routes. Casual messages use deterministic responses without composer/tool calls; general questions use the existing answer composer with curated local fallback answers and no protected retrieval.
+- Authenticated conversation history is currently browser-local (`localStorage`) because the available dev API exposes chat, feedback, and auth only—not conversation list/delete persistence. The UI deletes local conversations with confirmation and does not claim server deletion; a server conversation-delete contract is still required for shared history.
 
 ## Requirement Coverage
 
@@ -98,6 +99,9 @@
 | `./venv/bin/python scripts/run_orchestrator.py --user-id u001 --execute-sql "What holidays apply in Pakistan?"` | pass | Live Postgres smoke test passed outside sandbox; returned 3 Pakistan holiday rows. |
 | `./venv/bin/python scripts/run_orchestrator.py --user-id u001 --trace "How do I request AWS access?"` | pass | OpenAI final composer passed outside sandbox; trace showed `compose_final_answer` with `backend=openai:gpt-4.1-mini` and preserved AWS request steps. |
 | Playwright MCP initial page load at `http://127.0.0.1:8010` | partial | Page rendered and snapshot captured; console only showed missing favicon before fix. Final restart was blocked by sandbox approval timeout. |
+| `./.venv/bin/python -m unittest tests.unit.frontend.test_static_chat_ui` | pass | 24 focused contracts covering conversation deletion confirmation/re-homing, icon-only controls and labels, inspector-only trace placement, removed shell copy/workspace action, and suggestion visibility. |
+| `./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 121-test full suite after authenticated-chat UI updates. |
+| `./.venv/bin/python -m compileall -q app scripts tests` + `node --check frontend/static/app.js` + `git diff --check` | pass | Python compilation, JavaScript syntax, and diff whitespace validation. |
 
 ## Open Issues
 
@@ -111,6 +115,7 @@
 | OI-006 | Testing | medium | Browser-level committed Playwright E2E is not completed. Manual Playwright MCP inspection is available and passed for auth/workspace/mobile drawer. | Add a committed E2E harness for ticket creation, cited answer inspection, feedback, and restricted-denial journeys. |
 | OI-007 | Observability | low | LangSmith upload attempts fail in restricted-network shells if hosted tracing is enabled through environment variables. | Keep tracing config safe; verify hosted traces only when network and credentials are intentionally available. |
 | OI-008 | Frontend | closed | The frontend now uses username/password auth, immutable server-returned identity, cookie-authenticated chat/feedback, and omits client identity from request bodies. | Keep browser/E2E coverage as the remaining validation gap. |
+| OI-009 | Backend/Frontend | medium | The available authenticated dev API has no conversation list/delete endpoint; chat history remains browser-local. Individual delete therefore removes the conversation from local storage and the visible shell only, with confirmation, without faking server persistence. | Add a server-owned conversation history/delete contract before shared or cross-device history is introduced. |
 
 ## Phase Progress
 

@@ -98,9 +98,10 @@
           aria-expanded="true"
           aria-controls="conversationRail"
           aria-label="Collapse navigation"
+          title="Collapse navigation"
         >
           <span class="sidebar-toggle-icon" aria-hidden="true">‹</span>
-          <span class="sidebar-toggle-label">Collapse navigation</span>
+          <span class="sidebar-toggle-label sr-only">Collapse navigation</span>
         </button>
         <header class="rail-header">
           <a class="brand-mini" href="#pageTitle" aria-label="NexusOne Copilot home">
@@ -153,13 +154,6 @@
           </div>
         </header>
 
-        <nav class="workspace-nav" aria-label="Primary navigation">
-          <a class="nav-item active" href="#pageTitle" aria-current="page">
-            <span class="nav-icon" aria-hidden="true">＋</span>
-            <span>Workspace</span>
-          </a>
-        </nav>
-
         <section class="conversation-section" aria-labelledby="conversationHeading">
           <div class="rail-section-heading">
             <p class="eyebrow" id="conversationHeading">Conversations</p>
@@ -183,12 +177,15 @@
             <p id="conversationTitle" class="conversation-title">New conversation</p>
           </div>
           <div class="topbar-actions">
-            <span class="capability-state"><span class="status-dot is-live" aria-hidden="true"></span><span id="capabilityStatus">Server-checked access</span></span>
+            <span class="capability-state"><span class="status-dot is-live" aria-hidden="true"></span><span id="capabilityStatus">Protected session</span></span>
             <label class="trace-toggle">
               <input id="traceToggle" type="checkbox" />
               <span>Trace</span>
             </label>
-            <button id="mobileInspectorButton" class="secondary-action" type="button" aria-expanded="false" aria-controls="inspector" aria-label="Show conversation details">Show details</button>
+            <button id="mobileInspectorButton" class="secondary-action icon-control" type="button" aria-expanded="false" aria-controls="inspector" aria-label="Show conversation details" title="Show conversation details">
+              <span class="panel-toggle-icon" aria-hidden="true">‹</span>
+              <span class="sr-only">Show conversation details</span>
+            </button>
           </div>
         </header>
 
@@ -229,7 +226,10 @@
             <p class="eyebrow">Context</p>
             <h2>Conversation details</h2>
           </div>
-          <button id="closeInspectorButton" class="icon-button" type="button" aria-label="Collapse conversation details">Hide details</button>
+          <button id="closeInspectorButton" class="icon-button icon-control" type="button" aria-label="Collapse conversation details" title="Collapse conversation details">
+            <span class="panel-toggle-icon" aria-hidden="true">›</span>
+            <span class="sr-only">Collapse conversation details</span>
+          </button>
         </div>
         <section id="inspectorContent" class="inspector-content">
           <p class="empty-note">Select an answer to inspect sources, ticket details, feedback, and trace output.</p>
