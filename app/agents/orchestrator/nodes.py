@@ -128,7 +128,7 @@ def make_route_question_node(classifier: IntentClassifier) -> Any:
         result = classify_request(
             classifier,
             state.get("clean_message", ""),
-            conversation_context=state.get("conversation_context"),
+            conversation_context=_classification_context(state),
             active_ticket_draft=state.get("active_ticket_draft"),
         )
         route = route_from_intent(result)
@@ -218,17 +218,19 @@ def make_respond_feedback_node() -> Any:
 
 def make_respond_clarification_node() -> Any:
     def respond_clarification(state: OrchestratorState) -> OrchestratorState:
-        message = state.get("clarification_question") or "Could you clarify what you would like me to help with?"
+        memory_message = _memory_lookup_answer(state)
+        message = memory_message or state.get("clarification_question") or "Could you clarify what you would like me to help with?"
+        answered_from_memory = memory_message is not None
         next_state: OrchestratorState = {
             **state,
             "clarification_message": message,
-            "status": "needs_clarification",
-            "reason_code": state.get("intent_reason_code") or "INTENT_NEEDS_CLARIFICATION",
+            "status": "answered" if answered_from_memory else "needs_clarification",
+            "reason_code": "LONG_TERM_MEMORY" if answered_from_memory else state.get("intent_reason_code") or "INTENT_NEEDS_CLARIFICATION",
         }
         next_state["trace"] = append_trace(
             next_state,
             "respond_clarification",
-            {"status": "needs_clarification", "route": "clarification"},
+            {"status": next_state["status"], "route": "clarification"},
         )
         return next_state
 
@@ -238,27 +240,34 @@ def make_respond_clarification_node() -> Any:
 def make_respond_unsupported_node() -> Any:
     def respond_unsupported(state: OrchestratorState) -> OrchestratorState:
         if state.get("intent") == "history_lookup":
-            message = (
-                "Conversation history is not available through this chat route yet. "
-                "You can ask about company policies, general questions, knowledge lookups, or your ticket status."
-            )
-            reason_code = "HISTORY_LOOKUP_UNAVAILABLE"
+            history = state.get("short_term_history", [])
+            if history:
+                recent = [item.get("user_message", "")[:240] for item in history[-3:] if item.get("user_message")]
+                message = "Earlier in this conversation, you asked: " + "; ".join(f'“{item}”' for item in recent)
+                status = "answered"
+                reason_code = "SHORT_TERM_MEMORY"
+            else:
+                message = "There are no earlier turns in this conversation yet."
+                status = "unsupported"
+                reason_code = "SHORT_TERM_MEMORY_EMPTY"
         else:
             message = (
                 "I cannot help with that request here. You can ask about company policies, general questions, "
                 "knowledge lookups, ticket creation or status, or send feedback."
             )
+            status = "unsupported"
             reason_code = "UNSUPPORTED_REQUEST"
         next_state: OrchestratorState = {
             **state,
             "unsupported_message": message,
-            "status": "unsupported",
+            "history_message": message if state.get("intent") == "history_lookup" else "",
+            "status": status,
             "reason_code": reason_code,
         }
         next_state["trace"] = append_trace(
             next_state,
             "respond_unsupported",
-            {"status": "unsupported", "route": "unsupported", "reason_code": reason_code},
+            {"status": status, "route": "unsupported", "reason_code": reason_code},
         )
         return next_state
 
@@ -491,6 +500,8 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             "rag_answer": state.get("rag_message", ""),
             "action_answer": state.get("ticket_message", ""),
             "general_answer": local_answer or "",
+            "conversation_history": state.get("short_term_history", []),
+            "user_memory": state.get("user_memory", {}),
             "citations": state.get("rag_citations", []),
             "sources": state.get("sql_sources", []),
             "sql_status": sql_output.sql_status if sql_output is not None else None,
@@ -708,9 +719,13 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
             message = state.get("feedback_message", "")
             status = "answered"
             reason_code = state.get("reason_code", "FEEDBACK_GUIDANCE")
+        elif route == "unsupported" and state.get("intent") == "history_lookup":
+            message = state.get("history_message", state.get("unsupported_message", ""))
+            status = state.get("status", "no_answer")
+            reason_code = state.get("reason_code", "SHORT_TERM_MEMORY_EMPTY")
         elif route == "clarification":
             message = state.get("clarification_message", "")
-            status = "needs_clarification"
+            status = state.get("status", "needs_clarification")
             reason_code = state.get("reason_code", "INTENT_NEEDS_CLARIFICATION")
         else:
             message = state.get("unsupported_message", "")
@@ -768,6 +783,53 @@ def _intent_response_fields(state: OrchestratorState) -> dict[str, Any]:
         "intent_contract_version": getattr(result, "contract_version", "nexusone-intent-contract-v1"),
         "intent_classifier_version": state.get("classifier_version"),
     }
+
+
+def _memory_lookup_answer(state: OrchestratorState) -> str | None:
+    """Answer only exact bounded profile-memory questions from sanitized data."""
+
+    message = str(state.get("clean_message", "")).casefold()
+    memory = state.get("user_memory", {})
+    if not isinstance(memory, dict):
+        return None
+    field_labels = {
+        "preferred_name": ("preferred name", "your name"),
+        "working_timezone": ("working timezone", "timezone"),
+        "office_location": ("office location",),
+        "language": ("preferred language", "language"),
+        "response_style": ("response style",),
+        "date_format": ("date format",),
+        "communication_channel": ("communication channel",),
+    }
+    if not (message.startswith("what is my ") or message.startswith("what's my ") or message.startswith("do you remember my ")):
+        return None
+    for field, labels in field_labels.items():
+        if not any(label in message for label in labels):
+            continue
+        for group in ("facts", "preferences"):
+            values = memory.get(group)
+            if isinstance(values, dict) and isinstance(values.get(field), str) and values[field]:
+                return f"You asked me to remember that your {field.replace('_', ' ')} is {values[field]}."
+        return "I do not have that detail in your saved profile memory."
+    return None
+
+
+def _classification_context(state: OrchestratorState) -> dict[str, Any]:
+    """Pass bounded, explicitly untrusted context to classification only."""
+
+    context = state.get("conversation_context")
+    result: dict[str, Any] = dict(context) if isinstance(context, dict) else {}
+    history = state.get("short_term_history", [])
+    if history:
+        result["recent_user_messages"] = [
+            item.get("user_message", "")[:300]
+            for item in history[-3:]
+            if isinstance(item, dict) and item.get("user_message")
+        ]
+    memory = state.get("user_memory", {})
+    if isinstance(memory, dict):
+        result["user_memory"] = memory
+    return result
 
 
 def _sql_execution_status(sql_status: str) -> str:

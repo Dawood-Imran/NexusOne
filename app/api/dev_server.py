@@ -9,6 +9,7 @@ response shapes.
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import os
 from datetime import UTC, datetime
@@ -20,6 +21,14 @@ from typing import Any, Mapping
 
 from app.api.streaming import STREAM_CONTENT_TYPE, encode_sse_event
 from app.auth.service import AuthenticatedSession, LocalAuthService
+from app.memory.conversation_store import (
+    ConversationMemoryError,
+    ConversationNotFound,
+    IdempotencyConflict,
+    InvalidConversationId,
+    InvalidTurnId,
+    TurnInProgress,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,6 +62,9 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler API.
         path = self.path.split("?", 1)[0]
+        if path == "/api/conversations" or path.startswith("/api/conversations/"):
+            self._handle_conversations_get(path)
+            return
         if path == "/api/auth/session":
             session = self._current_session()
             if session is None:
@@ -93,11 +105,21 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
         if path == "/api/auth/logout":
             self._handle_logout()
             return
+        if path == "/api/conversations":
+            self._handle_conversation_create()
+            return
         if path == "/api/feedback":
             self._handle_feedback()
             return
         if path == "/api/chat":
             self._handle_chat()
+            return
+        self._send_json({"status": "error", "message": "Not found."}, HTTPStatus.NOT_FOUND)
+
+    def do_DELETE(self) -> None:  # noqa: N802 - stdlib handler API.
+        path = self.path.split("?", 1)[0]
+        if path.startswith("/api/conversations/"):
+            self._handle_conversation_delete(path)
             return
         self._send_json({"status": "error", "message": "Not found."}, HTTPStatus.NOT_FOUND)
 
@@ -148,6 +170,62 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
             },
         )
 
+    def _handle_conversations_get(self, path: str) -> None:
+        session = self._current_session()
+        if session is None:
+            self._send_auth_required()
+            return
+        try:
+            if path == "/api/conversations":
+                payload = {
+                    "status": "ok",
+                    "conversations": self._chat_service().list_authenticated_conversations(session),
+                }
+            else:
+                conversation_id = path[len("/api/conversations/") :]
+                payload = self._chat_service().get_authenticated_conversation(session, conversation_id)
+                payload["status"] = "ok"
+            self._send_json(payload, headers={"Cache-Control": "no-store"})
+        except ConversationMemoryError as error:
+            self._send_memory_error(error)
+        except Exception:
+            self._send_json(
+                {"status": "error", "reason_code": "CONVERSATION_STORE_ERROR", "message": "Conversation history is temporarily unavailable."},
+                HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+
+    def _handle_conversation_create(self) -> None:
+        session = self._current_session()
+        if session is None:
+            self._send_auth_required()
+            return
+        try:
+            conversation = self._chat_service().create_authenticated_conversation(session)
+            conversation["status"] = "created"
+            self._send_json(conversation, headers={"Cache-Control": "no-store"})
+        except Exception:
+            self._send_json(
+                {"status": "error", "reason_code": "CONVERSATION_STORE_ERROR", "message": "We could not start a conversation."},
+                HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+
+    def _handle_conversation_delete(self, path: str) -> None:
+        session = self._current_session()
+        if session is None:
+            self._send_auth_required()
+            return
+        conversation_id = path[len("/api/conversations/") :]
+        try:
+            self._chat_service().delete_authenticated_conversation(session, conversation_id)
+            self._send_json({"status": "deleted", "conversation_id": conversation_id})
+        except ConversationMemoryError as error:
+            self._send_memory_error(error)
+        except Exception:
+            self._send_json(
+                {"status": "error", "reason_code": "CONVERSATION_STORE_ERROR", "message": "We could not delete that conversation."},
+                HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+
     def _handle_chat(self) -> None:
         session = self._current_session()
         if session is None:
@@ -166,45 +244,48 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
             self._handle_chat_stream(session, body)
             return
 
-        chat_kwargs: dict[str, Any] = {
-            "message": body.get("message") if isinstance(body.get("message"), str) else "",
-            "include_trace": _as_bool(body.get("include_trace", False)),
-        }
-        conversation_context = _safe_conversation_context(body.get("conversation_context"))
-        active_ticket_draft = _safe_ticket_draft(body.get("active_ticket_draft"))
-        if conversation_context:
-            chat_kwargs["conversation_context"] = conversation_context
-        if active_ticket_draft:
-            chat_kwargs["active_ticket_draft"] = active_ticket_draft
-        response = self._chat_service().handle_authenticated_message(session, **chat_kwargs)
-        self._send_json(response)
+        chat_kwargs = _chat_request_kwargs(body)
+        try:
+            response = _call_compatible(
+                self._chat_service().handle_authenticated_message,
+                session,
+                chat_kwargs,
+            )
+            self._send_json(response)
+        except ConversationMemoryError as error:
+            self._send_memory_error(error)
+        except Exception:
+            self._send_json(
+                {"status": "error", "reason_code": "CHAT_SERVICE_ERROR", "message": "We could not complete that request. Try again in a moment."},
+                HTTPStatus.SERVICE_UNAVAILABLE,
+            )
 
     def _handle_chat_stream(self, session: AuthenticatedSession, body: Mapping[str, Any]) -> None:
         """Write a bounded SSE contract while preserving the JSON chat path."""
 
         try:
             self._send_stream_headers()
-            self._send_stream_event(
-                {
-                    "type": "response.start",
-                    "conversation_id": "web-chat",
-                    "turn_id": "web-turn",
-                }
+            started = False
+            stream_kwargs = _chat_request_kwargs(body)
+            events = _call_compatible(
+                self._chat_service().stream_authenticated_message,
+                session,
+                stream_kwargs,
             )
-            stream_kwargs: dict[str, Any] = {
-                "message": body.get("message") if isinstance(body.get("message"), str) else "",
-                "include_trace": _as_bool(body.get("include_trace", False)),
-            }
-            conversation_context = _safe_conversation_context(body.get("conversation_context"))
-            active_ticket_draft = _safe_ticket_draft(body.get("active_ticket_draft"))
-            if conversation_context:
-                stream_kwargs["conversation_context"] = conversation_context
-            if active_ticket_draft:
-                stream_kwargs["active_ticket_draft"] = active_ticket_draft
-            events = self._chat_service().stream_authenticated_message(session, **stream_kwargs)
             for event in events:
-                if isinstance(event, Mapping):
-                    self._send_stream_event(event)
+                if not isinstance(event, Mapping):
+                    continue
+                if not started:
+                    if event.get("type") != "response.start":
+                        self._send_stream_event(
+                            {
+                                "type": "response.start",
+                                "conversation_id": _optional_string(body.get("conversation_id")) or "web-chat",
+                                "turn_id": _optional_string(body.get("turn_id")) or "web-turn",
+                            }
+                        )
+                    started = True
+                self._send_stream_event(event)
         except _ClientDisconnected:
             # Stopping iteration here also closes an in-flight LangGraph/model
             # stream as far as the synchronous stdlib adapter can observe it.
@@ -301,6 +382,33 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
             return True
         return body.get("user_id") == session.user_id
 
+    def _send_memory_error(self, error: ConversationMemoryError) -> None:
+        if isinstance(error, InvalidConversationId):
+            status = HTTPStatus.BAD_REQUEST
+            reason = "MALFORMED_CONVERSATION_ID"
+            message = "The conversation identifier is malformed."
+        elif isinstance(error, InvalidTurnId):
+            status = HTTPStatus.BAD_REQUEST
+            reason = "MALFORMED_TURN_ID"
+            message = "The turn identifier is malformed."
+        elif isinstance(error, ConversationNotFound):
+            status = HTTPStatus.NOT_FOUND
+            reason = "CONVERSATION_NOT_FOUND"
+            message = "That conversation is not available."
+        elif isinstance(error, IdempotencyConflict):
+            status = HTTPStatus.CONFLICT
+            reason = "TURN_ID_REUSE"
+            message = "That turn identifier is already associated with another request."
+        elif isinstance(error, TurnInProgress):
+            status = HTTPStatus.CONFLICT
+            reason = "TURN_IN_PROGRESS"
+            message = "That turn is already being processed."
+        else:
+            status = HTTPStatus.SERVICE_UNAVAILABLE
+            reason = "CONVERSATION_STORE_ERROR"
+            message = "Conversation history is temporarily unavailable."
+        self._send_json({"status": "error", "reason_code": reason, "message": message}, status)
+
     def _send_auth_required(self) -> None:
         self._send_json(
             {
@@ -395,6 +503,37 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     return parser
+
+
+def _chat_request_kwargs(body: Mapping[str, Any]) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "message": body.get("message") if isinstance(body.get("message"), str) else "",
+        "include_trace": _as_bool(body.get("include_trace", False)),
+        "memory_opt_in": _as_bool(body.get("memory_opt_in", False)),
+    }
+    if "conversation_id" in body and body.get("conversation_id") is not None:
+        kwargs["conversation_id"] = body.get("conversation_id")
+    if "turn_id" in body and body.get("turn_id") is not None:
+        kwargs["turn_id"] = body.get("turn_id")
+    conversation_context = _safe_conversation_context(body.get("conversation_context"))
+    active_ticket_draft = _safe_ticket_draft(body.get("active_ticket_draft"))
+    if conversation_context:
+        kwargs["conversation_context"] = conversation_context
+    if active_ticket_draft:
+        kwargs["active_ticket_draft"] = active_ticket_draft
+    return kwargs
+
+
+def _call_compatible(method: Any, session: AuthenticatedSession, kwargs: Mapping[str, Any]) -> Any:
+    """Keep old injected test doubles/source-compatible adapters working."""
+
+    try:
+        parameters = inspect.signature(method).parameters
+        accepted = {name for name in parameters if name != "self"}
+        filtered = {key: value for key, value in kwargs.items() if key in accepted}
+    except (TypeError, ValueError):
+        filtered = dict(kwargs)
+    return method(session, **filtered)
 
 
 def _safe_conversation_context(value: Any) -> dict[str, list[str]]:

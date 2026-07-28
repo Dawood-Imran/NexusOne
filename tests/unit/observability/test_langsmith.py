@@ -23,6 +23,7 @@ class LangSmithConfigTest(unittest.TestCase):
         self.assertIn("nexusone", config["tags"])
         self.assertIn("sql-execute", config["tags"])
         self.assertEqual("c-1", config["metadata"]["conversation_id"])
+        self.assertEqual("c-1", config["configurable"]["thread_id"])
         self.assertEqual("u001", config["metadata"]["user_id"])
         serialized = repr(config)
         self.assertNotIn("Show me payroll data", serialized)
@@ -60,6 +61,7 @@ class LangSmithConfigTest(unittest.TestCase):
         assert fake_graph.config is not None
         self.assertEqual(RUN_NAME, fake_graph.config["run_name"])
         self.assertEqual("c-2", fake_graph.config["metadata"]["conversation_id"])
+        self.assertEqual("c-2", fake_graph.config["configurable"]["thread_id"])
         self.assertNotIn("How do I request AWS access?", repr(fake_graph.config))
 
 

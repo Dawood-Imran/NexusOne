@@ -56,8 +56,14 @@ def build_langsmith_config(payload: Mapping[str, Any]) -> dict[str, Any]:
     ]
     if route:
         tags.append(f"route:{route}")
+    # LangGraph checkpointers use this same value as their thread key. The
+    # current graph also has the repository-owned SQLite turn store, so this
+    # remains useful when a production checkpointer is introduced.
     return {
         "run_name": RUN_NAME,
         "tags": tags,
         "metadata": metadata,
+        "configurable": {
+            "thread_id": str(payload.get("conversation_id", "web-chat")),
+        },
     }

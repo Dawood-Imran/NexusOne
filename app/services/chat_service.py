@@ -22,8 +22,13 @@ from app.agents.orchestrator import NexusOneOrchestrator
 from app.agents.sql_subgraph.db import SQLAlchemyExecutor
 from app.agents.sql_subgraph.planner import build_default_sql_planner
 from app.agents.sql_subgraph.state import SQLExecutor
-from app.auth.profiles import list_profiles
+from app.auth.profiles import get_profile, list_profiles
 from app.auth.service import AuthenticatedSession
+from app.guardrails.policy import check_message_access
+from app.memory.conversation_store import ConversationStore, SQLiteConversationStore, TurnReservation
+from app.memory.extraction import extract_explicit_memory_update
+from app.memory.tools import MemoryRuntimeContext, UserMemoryTools
+from app.memory.user_memory import JSONUserMemoryStore, MemoryValidationError, UserMemoryStore
 from app.retrieval.chunk_index import MetadataChunkRetriever
 from app.retrieval.local_kb import LocalKBRetriever
 from app.runtime.config import RuntimeConfig, load_dotenv
@@ -43,12 +48,19 @@ class ChatService:
         ticket_service: TicketService | None = None,
         feedback_service: FeedbackService | None = None,
         audit_service: AuditService | None = None,
+        conversation_store: ConversationStore | None = None,
+        user_memory_store: UserMemoryStore | None = None,
     ) -> None:
         # ChatService is also used directly by tests and small local scripts.
         # Loading here makes that path follow the same repository .env contract
         # as scripts/run_web_app.py without overriding explicit shell values.
         load_dotenv()
         self.runtime_config = RuntimeConfig.from_env()
+        self.conversation_store = conversation_store or SQLiteConversationStore(
+            self.runtime_config.conversation_database_path
+        )
+        self.user_memory_store = user_memory_store or JSONUserMemoryStore(self.runtime_config.user_memory_dir)
+        self.memory_tools = UserMemoryTools(self.user_memory_store)
         self.retriever = retriever or LocalKBRetriever()
         self.chunk_retriever = chunk_retriever or MetadataChunkRetriever(config=self.runtime_config.retrieval_config)
 
@@ -94,22 +106,30 @@ class ChatService:
         message: str,
         include_trace: bool = False,
         *,
+        conversation_id: str | None = None,
+        turn_id: str | None = None,
         conversation_context: Any = None,
         active_ticket_draft: Any = None,
+        memory_opt_in: bool = False,
     ) -> dict[str, Any]:
-        """Handle a message for a trusted server-side identity.
+        """Handle a trusted graph/unit call, optionally using durable memory.
 
-        The development HTTP adapter must call
-        :meth:`handle_authenticated_message`; this lower-level method remains
-        available for graph/unit callers that already resolved identity.
+        Legacy direct callers that omit ``conversation_id`` retain the old
+        ``web-chat``/``web-turn`` shape. Authenticated HTTP callers always pass
+        through the durable conversation path.
         """
 
         return self._handle_message(
             user_id,
             message,
             include_trace=include_trace,
+            profile=None,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            persist_memory=conversation_id is not None or turn_id is not None,
             conversation_context=conversation_context,
             active_ticket_draft=active_ticket_draft,
+            memory_opt_in=memory_opt_in,
         )
 
     def handle_authenticated_message(
@@ -118,18 +138,25 @@ class ChatService:
         message: str,
         include_trace: bool = False,
         *,
+        conversation_id: str | None = None,
+        turn_id: str | None = None,
         conversation_context: Any = None,
         active_ticket_draft: Any = None,
+        memory_opt_in: bool = False,
     ) -> dict[str, Any]:
-        """Handle chat using only the immutable identity resolved by auth."""
+        """Handle chat using only the immutable session identity."""
 
         return self._handle_message(
             session.user_id,
             message,
             include_trace=include_trace,
             profile=session.profile,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            persist_memory=True,
             conversation_context=conversation_context,
             active_ticket_draft=active_ticket_draft,
+            memory_opt_in=memory_opt_in,
         )
 
     def stream_authenticated_message(
@@ -138,18 +165,25 @@ class ChatService:
         message: str,
         include_trace: bool = False,
         *,
+        conversation_id: str | None = None,
+        turn_id: str | None = None,
         conversation_context: Any = None,
         active_ticket_draft: Any = None,
+        memory_opt_in: bool = False,
     ) -> Iterator[Mapping[str, Any]]:
-        """Yield safe delta/error/completion events for an authenticated turn."""
+        """Yield safe events for a durable authenticated turn."""
 
         yield from self.stream_message(
             session.user_id,
             message,
             include_trace=include_trace,
             profile=session.profile,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            persist_memory=True,
             conversation_context=conversation_context,
             active_ticket_draft=active_ticket_draft,
+            memory_opt_in=memory_opt_in,
         )
 
     def stream_message(
@@ -159,27 +193,69 @@ class ChatService:
         *,
         include_trace: bool = False,
         profile: Any | None = None,
+        conversation_id: str | None = None,
+        turn_id: str | None = None,
+        persist_memory: bool = False,
         conversation_context: Any = None,
         active_ticket_draft: Any = None,
+        memory_opt_in: bool = False,
     ) -> Iterator[Mapping[str, Any]]:
-        payload = self._request_payload(
+        payload, reservation, memory_update = self._prepare_request(
             user_id,
             message,
-            include_trace=include_trace,
             profile=profile,
+            include_trace=include_trace,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            persist_memory=persist_memory,
             conversation_context=conversation_context,
             active_ticket_draft=active_ticket_draft,
+            memory_opt_in=memory_opt_in,
         )
-        for event in self.orchestrator.stream_with_events(payload):
-            event_type = event.get("type") if isinstance(event, Mapping) else None
-            if event_type == "response.complete":
-                raw_response = event.get("response")
-                if not isinstance(raw_response, Mapping):
-                    raise RuntimeError("stream completion did not include a response")
-                response = self._decorate_response(dict(raw_response))
-                yield {"type": "response.complete", "response": response}
-            elif event_type in {"response.delta", "response.error"}:
-                yield dict(event)
+        if reservation.is_replay:
+            yield {"type": "response.start", "conversation_id": reservation.conversation_id, "turn_id": reservation.turn_id}
+            yield {"type": "response.complete", "response": dict(reservation.replay_response or {})}
+            return
+
+        yield {"type": "response.start", "conversation_id": reservation.conversation_id, "turn_id": reservation.turn_id}
+        try:
+            for event in self.orchestrator.stream_with_events(payload):
+                event_type = event.get("type") if isinstance(event, Mapping) else None
+                if event_type == "response.complete":
+                    raw_response = event.get("response")
+                    if not isinstance(raw_response, Mapping):
+                        raise RuntimeError("stream completion did not include a response")
+                    response = self._decorate_response(dict(raw_response), memory_update=memory_update)
+                    if persist_memory:
+                        self.conversation_store.complete_turn(
+                            user_id, reservation.conversation_id, reservation.turn_id, response
+                        )
+                    yield {"type": "response.complete", "response": response}
+                elif event_type in {"response.delta", "response.error"}:
+                    yield dict(event)
+        except Exception:
+            response = self._decorate_response(
+                {
+                    "status": "error",
+                    "reason_code": "ORCHESTRATOR_ERROR",
+                    "route": "error",
+                    "message": "We could not complete that request. Try again in a moment.",
+                    "conversation_id": reservation.conversation_id,
+                    "turn_id": reservation.turn_id,
+                },
+                memory_update=memory_update,
+            )
+            if persist_memory:
+                self.conversation_store.complete_turn(
+                    user_id, reservation.conversation_id, reservation.turn_id, response
+                )
+            yield {
+                "type": "response.error",
+                "reason_code": "STREAM_ERROR",
+                "message": response["message"],
+                "recoverable": False,
+            }
+            yield {"type": "response.complete", "response": response}
 
     def _handle_message(
         self,
@@ -188,18 +264,103 @@ class ChatService:
         *,
         include_trace: bool,
         profile: Any | None = None,
+        conversation_id: str | None = None,
+        turn_id: str | None = None,
+        persist_memory: bool = False,
         conversation_context: Any = None,
         active_ticket_draft: Any = None,
+        memory_opt_in: bool = False,
     ) -> dict[str, Any]:
+        payload, reservation, memory_update = self._prepare_request(
+            user_id,
+            message,
+            profile=profile,
+            include_trace=include_trace,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            persist_memory=persist_memory,
+            conversation_context=conversation_context,
+            active_ticket_draft=active_ticket_draft,
+            memory_opt_in=memory_opt_in,
+        )
+        if reservation.is_replay:
+            return dict(reservation.replay_response or {})
+        try:
+            response = self._decorate_response(
+                dict(self.orchestrator.invoke(payload)), memory_update=memory_update
+            )
+        except Exception:
+            response = self._decorate_response(
+                {
+                    "status": "error",
+                    "reason_code": "ORCHESTRATOR_ERROR",
+                    "route": "error",
+                    "message": "We could not complete that request. Try again in a moment.",
+                    "conversation_id": reservation.conversation_id,
+                    "turn_id": reservation.turn_id,
+                },
+                memory_update=memory_update,
+            )
+        if persist_memory:
+            self.conversation_store.complete_turn(
+                user_id, reservation.conversation_id, reservation.turn_id, response
+            )
+        return response
+
+    def _prepare_request(
+        self,
+        user_id: str,
+        message: str,
+        *,
+        profile: Any | None,
+        include_trace: bool,
+        conversation_id: str | None,
+        turn_id: str | None,
+        persist_memory: bool,
+        conversation_context: Any,
+        active_ticket_draft: Any,
+        memory_opt_in: bool,
+    ) -> tuple[dict[str, Any], TurnReservation, dict[str, Any] | None]:
+        if persist_memory:
+            reservation = self.conversation_store.begin_turn(user_id, conversation_id, turn_id, message)
+        else:
+            reservation = TurnReservation(conversation_id or "web-chat", turn_id or "web-turn", ())
+        resolved_profile = profile if profile is not None else get_profile(user_id)
+        user_memory: dict[str, Any] = {"schema_version": 1, "facts": {}, "preferences": {}}
+        if resolved_profile is not None:
+            try:
+                user_memory = self.memory_tools.get_user_memory(MemoryRuntimeContext(user_id))
+            except Exception:
+                # Memory is context, never an availability or authorization boundary.
+                user_memory = {"schema_version": 1, "facts": {}, "preferences": {}}
+        memory_update = self._apply_explicit_memory_update(
+            user_id,
+            message,
+            resolved_profile,
+            memory_opt_in=memory_opt_in,
+        )
+        if memory_update and memory_update.get("status") == "updated":
+            try:
+                user_memory = self.memory_tools.get_user_memory(MemoryRuntimeContext(user_id))
+            except Exception:
+                pass
+        context = dict(conversation_context) if isinstance(conversation_context, Mapping) else {}
+        if reservation.history:
+            context["recent_user_messages"] = [item["user_message"] for item in reservation.history[-3:]]
         payload = self._request_payload(
             user_id,
             message,
             include_trace=include_trace,
-            profile=profile,
-            conversation_context=conversation_context,
+            profile=resolved_profile,
+            conversation_id=reservation.conversation_id,
+            turn_id=reservation.turn_id,
+            conversation_context=context,
             active_ticket_draft=active_ticket_draft,
+            short_term_history=list(reservation.history),
+            user_memory=user_memory,
+            memory_update=memory_update,
         )
-        return self._decorate_response(dict(self.orchestrator.invoke(payload)))
+        return payload, reservation, memory_update
 
     def _request_payload(
         self,
@@ -208,27 +369,95 @@ class ChatService:
         *,
         include_trace: bool,
         profile: Any | None,
+        conversation_id: str | None = None,
+        turn_id: str | None = None,
         conversation_context: Any = None,
         active_ticket_draft: Any = None,
+        short_term_history: list[dict[str, str]] | None = None,
+        user_memory: dict[str, Any] | None = None,
+        memory_update: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
-            "conversation_id": "web-chat",
-            "turn_id": "web-turn",
+            "conversation_id": conversation_id or "web-chat",
+            "turn_id": turn_id or "web-turn",
             "user_id": user_id,
             "message": message,
             "include_trace": include_trace,
             "execute_sql": self.sql_executor is not None,
             "conversation_context": conversation_context,
             "active_ticket_draft": active_ticket_draft,
+            "short_term_history": short_term_history or [],
+            "user_memory": user_memory or {"schema_version": 1, "facts": {}, "preferences": {}},
         }
+        if memory_update:
+            payload["memory_update"] = memory_update
         if profile is not None:
             payload["profile"] = profile
         return payload
 
-    def _decorate_response(self, response: dict[str, Any]) -> dict[str, Any]:
+    def _decorate_response(
+        self,
+        response: dict[str, Any],
+        *,
+        memory_update: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if memory_update:
+            response["memory"] = dict(memory_update)
         response["capabilities"] = self._capabilities_for_response(response)
         self._record_audit(response)
         return response
+
+    def _apply_explicit_memory_update(
+        self,
+        user_id: str,
+        message: str,
+        profile: Any | None,
+        *,
+        memory_opt_in: bool,
+    ) -> dict[str, Any] | None:
+        candidate = extract_explicit_memory_update(message, preference_opt_in=memory_opt_in)
+        if candidate is None:
+            return None
+        if profile is None:
+            return {"status": "not_updated", "reason_code": "UNKNOWN_USER", "fields": []}
+        decision = check_message_access(profile, message)
+        if not decision.allowed:
+            return {"status": "not_updated", "reason_code": "ACCESS_DENIED", "fields": []}
+        try:
+            self.memory_tools.update_user_memory(
+                MemoryRuntimeContext(
+                    user_id,
+                    preference_opt_in=candidate.preference_opt_in or memory_opt_in,
+                    explicit_user_input=True,
+                ),
+                {"facts": candidate.facts, "preferences": candidate.preferences},
+            )
+        except MemoryValidationError:
+            return {"status": "not_updated", "reason_code": "MEMORY_VALUE_REJECTED", "fields": []}
+        return {
+            "status": "updated",
+            "reason_code": "EXPLICIT_USER_MEMORY",
+            "fields": list(candidate.fields)[:8],
+        }
+
+    def create_authenticated_conversation(self, session: AuthenticatedSession) -> dict[str, Any]:
+        return self.conversation_store.create_conversation(session.user_id).to_public_dict(include_turns=False)
+
+    def list_authenticated_conversations(self, session: AuthenticatedSession) -> list[dict[str, Any]]:
+        return [
+            conversation.to_public_dict(include_turns=True)
+            for conversation in self.conversation_store.list_conversations(session.user_id)
+        ]
+
+    def get_authenticated_conversation(
+        self,
+        session: AuthenticatedSession,
+        conversation_id: str,
+    ) -> dict[str, Any]:
+        return self.conversation_store.get_conversation(session.user_id, conversation_id).to_public_dict(include_turns=True)
+
+    def delete_authenticated_conversation(self, session: AuthenticatedSession, conversation_id: str) -> None:
+        self.conversation_store.delete_conversation(session.user_id, conversation_id)
 
     def submit_authenticated_feedback(
         self,
@@ -368,6 +597,11 @@ class ChatService:
             "intent_classifier": classifier_capability,
             "sql_planner": planner_capability,
             "retrieval": self.chunk_retriever.safe_metadata(),
+            "memory": {
+                "short_term": "sqlite_local",
+                "long_term": "json_profile_local",
+                "history_turn_limit": 8,
+            },
             "tracing": {
                 "enabled": self.runtime_config.langsmith_tracing,
                 "project": self.runtime_config.langsmith_project,

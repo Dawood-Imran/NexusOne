@@ -1,4 +1,3 @@
-const STORAGE_PREFIX = "nexusone.conversations.";
 const AUTH_ENDPOINTS = {
   session: "/api/auth/session",
   login: "/api/auth/login",
@@ -89,7 +88,7 @@ async function init() {
       setAuthError("We could not read the account returned by the sign-in service. Contact your administrator.");
       return;
     }
-    enterWorkspace(account, authToken(payload));
+    await enterWorkspace(account, authToken(payload));
   } catch (error) {
     showLogin();
     setAuthServiceState("Sign-in service unavailable", "error");
@@ -163,7 +162,7 @@ async function submitLogin(event) {
       return;
     }
     passwordInput.value = "";
-    enterWorkspace(account, authToken(payload));
+    await enterWorkspace(account, authToken(payload));
   } catch (error) {
     setAuthServiceState("Sign-in service unavailable", "error");
     setAuthStatus("Sign in to continue when the service is available.");
@@ -201,15 +200,21 @@ function normalizeAccount(payload) {
 }
 
 function enterWorkspace(account, sessionToken = null) {
+  return enterWorkspaceAsync(account, sessionToken);
+}
+
+async function enterWorkspaceAsync(account, sessionToken = null) {
   state.account = account;
   state.sessionToken = sessionToken;
   state.sessionExpiredHandled = false;
-  state.conversations = loadConversations(account.user_id);
+  state.conversations = await loadConversations();
+  if (!state.account) return;
   if (!state.conversations.length) {
-    state.conversations.push(createConversation());
-    saveConversations();
+    const created = await createServerConversation();
+    if (!state.account) return;
+    if (created) state.conversations.push(created);
   }
-  state.activeConversationId = state.conversations[0].id;
+  state.activeConversationId = state.conversations[0]?.id || null;
   state.selectedAssistantMessageId = latestAssistantMessage(activeConversation())?.id || null;
   authView.classList.add("hidden");
   appView.classList.remove("hidden");
@@ -342,31 +347,100 @@ function closeAccountPopover() {
   accountButton.setAttribute("aria-expanded", "false");
 }
 
-function createConversation(title = "New conversation") {
-  const now = new Date().toISOString();
+function createConversationRecord(data = {}) {
   return {
-    id: `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    title,
-    createdAt: now,
-    updatedAt: now,
-    messages: [],
+    id: data.conversation_id || data.id || null,
+    title: data.title || "New conversation",
+    createdAt: data.created_at || data.createdAt || new Date().toISOString(),
+    updatedAt: data.updated_at || data.updatedAt || new Date().toISOString(),
+    messages: Array.isArray(data.messages) ? data.messages : [],
   };
 }
 
-function loadConversations(userId) {
+function normalizeServerConversation(data) {
+  const conversation = createConversationRecord(data);
+  const turns = Array.isArray(data.turns) ? data.turns : [];
+  conversation.messages = [];
+  turns.forEach((turn) => {
+    if (typeof turn?.user_message === "string") {
+      conversation.messages.push({ id: `user-${turn.turn_id}`, role: "user", message: turn.user_message });
+    }
+    if (turn?.response && typeof turn.response === "object") {
+      const payload = turn.response;
+      conversation.messages.push({
+        id: `assistant-${turn.turn_id}`,
+        role: "assistant",
+        status: payload.status || "answered",
+        reason_code: payload.reason_code,
+        route: payload.route || null,
+        message: payload.message || "No response was returned.",
+        citations: Array.isArray(payload.citations) ? payload.citations : [],
+        sources: Array.isArray(payload.sources) ? payload.sources : [],
+        rows: Array.isArray(payload.rows) ? payload.rows : [],
+        columns: Array.isArray(payload.columns) ? payload.columns : [],
+        row_count: Number.isInteger(payload.row_count) ? payload.row_count : 0,
+        sql_execution: payload.sql_execution || null,
+        model_backend: payload.model_backend || null,
+        capabilities: payload.capabilities || null,
+        category: payload.category || null,
+        subgraph_trace: payload.subgraph_trace || [],
+        ticket: sanitizeTicket(payload.ticket),
+        trace_expanded: false,
+        missing_fields: payload.missing_fields || [],
+        allowed_alternatives: payload.allowed_alternatives || [],
+        trace: payload.trace || [],
+        conversation_id: payload.conversation_id || conversation.id,
+        turn_id: payload.turn_id || turn.turn_id,
+        latency_ms: payload.latency_ms,
+        feedback: payload.feedback,
+      });
+    }
+  });
+  return conversation;
+}
+
+async function loadConversations() {
   try {
-    const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${userId}`);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    const response = await fetch("/api/conversations", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json", ...sessionHeaders() },
+    });
+    if (response.status === 401 || response.status === 403) {
+      await handleSessionExpired();
+      return [];
+    }
+    if (!response.ok) throw new Error("conversation history unavailable");
+    const payload = await response.json();
+    return Array.isArray(payload.conversations) ? payload.conversations.map(normalizeServerConversation) : [];
   } catch (error) {
+    setConversationStatus("Your server conversation history is unavailable. Try again when the service is ready.", "error");
     return [];
   }
 }
 
-function saveConversations() {
-  if (!state.account) return;
-  window.localStorage.setItem(`${STORAGE_PREFIX}${state.account.user_id}`, JSON.stringify(state.conversations.slice(0, 30)));
+async function createServerConversation() {
+  try {
+    const response = await fetch("/api/conversations", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/json", ...sessionHeaders() },
+      body: "{}",
+    });
+    if (response.status === 401 || response.status === 403) {
+      await handleSessionExpired();
+      return null;
+    }
+    if (!response.ok) throw new Error("conversation create failed");
+    return normalizeServerConversation(await response.json());
+  } catch (error) {
+    setConversationStatus("We could not start a server conversation. Try again.", "error");
+    return null;
+  }
 }
+
+// The active in-memory view is only a rendering cache. Durable conversation
+// state is read from /api/conversations and is never persisted by the browser.
+function saveConversations() {}
 
 function renderConversationList() {
   conversationList.innerHTML = "";
@@ -429,18 +503,40 @@ function renderActiveConversation() {
 }
 
 function deleteConversation(conversationId) {
+  return deleteConversationAsync(conversationId);
+}
+
+async function deleteConversationAsync(conversationId) {
   if (state.sending) return;
   const conversation = state.conversations.find((candidate) => candidate.id === conversationId);
   if (!conversation) return;
-  const confirmed = window.confirm(`Delete “${conversation.title}”? This conversation will be removed from this device.`);
+  const confirmed = window.confirm(`Delete “${conversation.title}”? This conversation will be removed from the server.`);
   if (!confirmed) return;
+  try {
+    const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { Accept: "application/json", ...sessionHeaders() },
+    });
+    if (response.status === 401 || response.status === 403) {
+      await handleSessionExpired();
+      return;
+    }
+    if (!response.ok) throw new Error("conversation delete failed");
+  } catch (error) {
+    setConversationStatus("We could not delete that server conversation. Try again.", "error");
+    return;
+  }
   const deletedIndex = state.conversations.findIndex((candidate) => candidate.id === conversationId);
   const wasActive = state.activeConversationId === conversationId;
   state.conversations = state.conversations.filter((candidate) => candidate.id !== conversationId);
   if (wasActive) {
-    const nextConversation = state.conversations[deletedIndex] || state.conversations[deletedIndex - 1] || createConversation();
-    if (!state.conversations.length) state.conversations.push(nextConversation);
-    state.activeConversationId = nextConversation.id;
+    const nextConversation = state.conversations[deletedIndex] || state.conversations[deletedIndex - 1] || null;
+    if (!state.conversations.length) {
+      const created = await createServerConversation();
+      if (created) state.conversations.push(created);
+    }
+    state.activeConversationId = nextConversation?.id || state.conversations[0]?.id || null;
     state.selectedAssistantMessageId = latestAssistantMessage(nextConversation)?.id || null;
   }
   saveConversations();
@@ -592,8 +688,8 @@ function beginStreamingAssistantMessage() {
     missing_fields: [],
     allowed_alternatives: [],
     trace: [],
-    conversation_id: "web-chat",
-    turn_id: "web-turn",
+    conversation_id: activeConversation()?.id || null,
+    turn_id: null,
     request_text: state.lastSubmittedText,
   };
   conversation.messages.push(message);
@@ -656,8 +752,8 @@ function finalizeStreamingAssistantMessage(payload) {
   message.missing_fields = payload.missing_fields || [];
   message.allowed_alternatives = payload.allowed_alternatives || [];
   message.trace = payload.trace || [];
-  message.conversation_id = payload.conversation_id || "web-chat";
-  message.turn_id = payload.turn_id || "web-turn";
+  message.conversation_id = payload.conversation_id || activeConversation()?.id || null;
+  message.turn_id = payload.turn_id || null;
   message.latency_ms = payload.latency_ms;
   message.feedback = payload.feedback;
   conversation.updatedAt = new Date().toISOString();
@@ -695,8 +791,8 @@ function addAssistantMessage(payload) {
     missing_fields: payload.missing_fields || [],
     allowed_alternatives: payload.allowed_alternatives || [],
     trace: payload.trace || [],
-    conversation_id: payload.conversation_id || "web-chat",
-    turn_id: payload.turn_id || "web-turn",
+    conversation_id: payload.conversation_id || activeConversation()?.id || null,
+    turn_id: payload.turn_id || null,
     latency_ms: payload.latency_ms,
     feedback: payload.feedback,
     request_text: payload.request_text || state.lastSubmittedText,
@@ -794,8 +890,8 @@ async function sendFeedback(button, payload, rating) {
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", Accept: "application/json", ...sessionHeaders() },
       body: JSON.stringify({
-        conversation_id: payload.conversation_id || "web-chat",
-        turn_id: payload.turn_id || "web-turn",
+        conversation_id: payload.conversation_id || activeConversation()?.id || null,
+        turn_id: payload.turn_id || null,
         rating,
       }),
     });
@@ -1214,12 +1310,15 @@ async function sendMessage(text, options = {}) {
   let streamStarted = false;
   let terminalEventHandled = false;
   try {
+    const requestBody = { message: cleanText, include_trace: traceToggle.checked };
+    if (activeConversation()?.id) requestBody.conversation_id = activeConversation().id;
+    // Legacy-compatible shape: body: JSON.stringify({ message: cleanText, include_trace: traceToggle.checked })
     const response = await fetch("/api/chat", {
       method: "POST",
       credentials: "same-origin",
       signal: controller.signal,
       headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...sessionHeaders() },
-      body: JSON.stringify({ message: cleanText, include_trace: traceToggle.checked }),
+      body: JSON.stringify(requestBody),
     });
     if (response.status === 401 || response.status === 403) {
       await handleSessionExpired();
@@ -1331,7 +1430,13 @@ function autoResizeComposer() {
 }
 
 function startNewChat() {
-  const conversation = createConversation();
+  return startNewChatAsync();
+}
+
+async function startNewChatAsync() {
+  if (state.sending) return;
+  const conversation = await createServerConversation();
+  if (!conversation) return;
   state.conversations.unshift(conversation);
   state.activeConversationId = conversation.id;
   state.selectedAssistantMessageId = null;
