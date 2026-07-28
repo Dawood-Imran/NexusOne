@@ -8,6 +8,16 @@ from dataclasses import dataclass
 from typing import Mapping
 
 
+# Public similarity scores use a stable 0-100 scale. This is a product
+# relevance policy, not an authorization control; authorization is enforced
+# before scoring in MetadataChunkRetriever.
+SOURCE_SIMILARITY_THRESHOLD = 50.0
+NO_REFERENCE_MESSAGE = (
+    "No sufficiently relevant reference found. "
+    "Try rephrasing the question or ask for a general explanation."
+)
+
+
 @dataclass(frozen=True)
 class HybridRetrievalConfig:
     """Weights and candidate bounds for lexical + semantic retrieval.
@@ -22,6 +32,7 @@ class HybridRetrievalConfig:
     lexical_candidate_count: int = 32
     semantic_candidate_count: int = 32
     max_results: int = 20
+    source_similarity_threshold: float = SOURCE_SIMILARITY_THRESHOLD
 
     def __post_init__(self) -> None:
         weights = (self.lexical_weight, self.semantic_weight)
@@ -29,6 +40,11 @@ class HybridRetrievalConfig:
             raise ValueError("retrieval weights must be finite and non-negative")
         if sum(weights) <= 0:
             raise ValueError("at least one retrieval weight must be greater than zero")
+        if (
+            not math.isfinite(self.source_similarity_threshold)
+            or not 0.0 <= self.source_similarity_threshold <= 100.0
+        ):
+            raise ValueError("source_similarity_threshold must be between 0 and 100")
         for name, value in (
             ("lexical_candidate_count", self.lexical_candidate_count),
             ("semantic_candidate_count", self.semantic_candidate_count),
@@ -50,6 +66,11 @@ class HybridRetrievalConfig:
             lexical_candidate_count=_int_value(values, "NEXUSONE_RETRIEVAL_LEXICAL_CANDIDATES", 32),
             semantic_candidate_count=_int_value(values, "NEXUSONE_RETRIEVAL_SEMANTIC_CANDIDATES", 32),
             max_results=_int_value(values, "NEXUSONE_RETRIEVAL_MAX_RESULTS", 20),
+            source_similarity_threshold=_float_value(
+                values,
+                "NEXUSONE_RETRIEVAL_SOURCE_SIMILARITY_THRESHOLD",
+                SOURCE_SIMILARITY_THRESHOLD,
+            ),
         )
 
     def safe_metadata(self) -> dict[str, object]:
@@ -61,8 +82,12 @@ class HybridRetrievalConfig:
             "lexical_candidate_count": self.lexical_candidate_count,
             "semantic_candidate_count": self.semantic_candidate_count,
             "max_results": self.max_results,
-            "score_normalization": "lexical_max_and_positive_cosine",
-            "tie_breaking": "score_then_lexical_then_semantic_then_doc_id_then_chunk_index",
+            "source_similarity_threshold": self.source_similarity_threshold,
+            "score_scale": "0-100",
+            "score_normalization": "100 * weighted(normalized_lexical_max, positive_cosine)",
+            "threshold_semantics": "retain scores greater than or equal to the threshold",
+            "threshold_is_authorization": False,
+            "tie_breaking": "score_then_lexical_then_semantic_then_doc_id_then_chunk_index_then_chunk_id",
         }
 
 

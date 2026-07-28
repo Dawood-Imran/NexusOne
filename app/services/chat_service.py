@@ -61,7 +61,9 @@ class ChatService:
         )
         self.user_memory_store = user_memory_store or JSONUserMemoryStore(self.runtime_config.user_memory_dir)
         self.memory_tools = UserMemoryTools(self.user_memory_store)
-        self.retriever = retriever or LocalKBRetriever()
+        self.retriever = retriever or LocalKBRetriever(
+            similarity_threshold=self.runtime_config.retrieval_config.source_similarity_threshold
+        )
         self.chunk_retriever = chunk_retriever or MetadataChunkRetriever(config=self.runtime_config.retrieval_config)
 
         self._database_init_error: str | None = None

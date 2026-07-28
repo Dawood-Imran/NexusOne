@@ -61,6 +61,43 @@ class AnswerComposerStreamingTest(unittest.TestCase):
         self.assertNotIn("token", errors[0].lower())
         self.assertIn("after_llm_error", result.backend)
 
+    def test_no_reference_context_is_safe_and_does_not_invent_a_citation(self) -> None:
+        composer = DeterministicAnswerComposer()
+
+        result = composer.compose(
+            {
+                "route": "rag",
+                "status": "no_answer",
+                "reference_status": "none_reached_threshold",
+                "rag_answer": "Below-threshold source must not be used.",
+                "citations": [],
+            }
+        )
+
+        self.assertEqual("deterministic", result.backend)
+        self.assertIn("No sufficiently relevant reference found", result.answer)
+        self.assertNotIn("Below-threshold", result.answer)
+        self.assertNotRegex(result.answer, r"\[\d+\]")
+
+    def test_invalid_provider_citation_is_removed_and_retained_source_is_used(self) -> None:
+        composer = object.__new__(LangChainOpenAIAnswerComposer)
+        composer.model = type(
+            "Model",
+            (),
+            {"invoke": lambda _self, _messages: _Chunk("A grounded answer [2].")},
+        )()
+        composer.model_name = "fixture-model"
+
+        result = composer.compose(
+            {
+                "route": "rag",
+                "citations": [{"reference_id": 1}],
+            }
+        )
+
+        self.assertEqual("A grounded answer. [1]", result.answer)
+        self.assertNotIn("[2]", result.answer)
+
     def test_deterministic_stream_matches_non_streaming_contract(self) -> None:
         composer = DeterministicAnswerComposer()
         context = {"route": "rag", "rag_answer": "One\nTwo"}

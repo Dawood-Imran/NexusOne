@@ -11,13 +11,28 @@ from typing import Iterable
 from app.auth.profiles import UserProfile
 from app.ingestion.build_index import DEFAULT_FAISS_PATH, DEFAULT_METADATA_PATH
 from app.retrieval.access import can_access_metadata
-from app.retrieval.config import HybridRetrievalConfig
+from app.retrieval.config import (
+    NO_REFERENCE_MESSAGE,
+    SOURCE_SIMILARITY_THRESHOLD,
+    HybridRetrievalConfig,
+)
 from app.retrieval.embeddings import (
     EmbeddingProvider,
     LocalSemanticEmbeddingProvider,
     cosine_similarity,
 )
 from app.retrieval.local_kb import Citation, _tokenize
+
+
+__all__ = [
+    "SOURCE_SIMILARITY_THRESHOLD",
+    "Chunk",
+    "ChunkSearchResult",
+    "MetadataChunkRetriever",
+    "build_answer_from_chunks",
+    "can_access_chunk",
+    "load_chunks",
+]
 
 
 @dataclass(frozen=True)
@@ -50,7 +65,12 @@ class Chunk:
 
 @dataclass(frozen=True)
 class ChunkSearchResult:
-    """A public retrieval result with backward-compatible ``score`` metadata."""
+    """A retained source with scores on the public 0-100 similarity scale.
+
+    ``lexical_score`` and ``semantic_score`` are the normalized component
+    scores, also on the 0-100 scale. The final ``score`` is their configured
+    weighted combination and is the value used for thresholding and ranking.
+    """
 
     chunk: Chunk
     score: float
@@ -172,8 +192,9 @@ class MetadataChunkRetriever:
         for index in candidate_indexes:
             lexical_score = lexical_normalized.get(index, 0.0)
             semantic_score = semantic_raw.get(index, 0.0)
-            score = lexical_weight * lexical_score + semantic_weight * semantic_score
-            if score <= 0.0:
+            normalized_score = lexical_weight * lexical_score + semantic_weight * semantic_score
+            score = 100.0 * normalized_score
+            if score < self.config.source_similarity_threshold:
                 continue
             chunk = accessible_by_index[index]
             results.append(
@@ -181,8 +202,8 @@ class MetadataChunkRetriever:
                     chunk=chunk,
                     score=float(score),
                     snippet=_snippet(chunk.text, terms),
-                    lexical_score=float(lexical_score),
-                    semantic_score=float(semantic_score),
+                    lexical_score=float(100.0 * lexical_score),
+                    semantic_score=float(100.0 * semantic_score),
                 )
             )
 
@@ -331,17 +352,22 @@ def _topic_phrases(query: str, terms: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(phrases)
 
 
-def build_answer_from_chunks(query: str, results: tuple[ChunkSearchResult, ...]) -> str:
-    if not results:
-        return (
-            "I do not have enough accessible source context to answer that confidently. "
-            "Try asking about a public policy, an internal process, or your own support tickets."
-        )
-    top = results[0]
+def build_answer_from_chunks(
+    query: str,
+    results: tuple[ChunkSearchResult, ...],
+    *,
+    threshold: float = SOURCE_SIMILARITY_THRESHOLD,
+) -> str:
+    retained = tuple(result for result in results if result.score >= threshold)
+    if not retained:
+        return NO_REFERENCE_MESSAGE
+    top = retained[0]
     lines = [f"From {top.chunk.title} [1]:"]
     lines.append(top.snippet)
-    if len(results) > 1:
-        related = ", ".join(f"{result.chunk.title} [{index}]" for index, result in enumerate(results[1:], start=2))
+    if len(retained) > 1:
+        related = ", ".join(
+            f"{result.chunk.title} [{index}]" for index, result in enumerate(retained[1:], start=2)
+        )
         lines.append(f"Related accessible sources: {related}.")
     return "\n\n".join(lines)
 
@@ -357,8 +383,24 @@ def _dedupe_by_doc(results: Iterable[ChunkSearchResult]) -> list[ChunkSearchResu
     return deduped
 
 
+_SOURCE_INSTRUCTION_PATTERN = re.compile(
+    r"(?:ignore|disregard|override|bypass)\s+(?:all\s+|previous\s+|the\s+)?"
+    r"(?:instructions?|rules?|guardrails?)|"
+    r"(?:reveal|dump|expose)\s+(?:the\s+)?(?:hidden|secret|system|private)",
+    re.IGNORECASE,
+)
+
+
+def _safe_source_paragraphs(text: str) -> list[str]:
+    return [
+        paragraph.strip()
+        for paragraph in re.split(r"\n\s*\n", text)
+        if paragraph.strip() and not _SOURCE_INSTRUCTION_PATTERN.search(paragraph)
+    ]
+
+
 def _snippet(text: str, terms: tuple[str, ...]) -> str:
-    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text) if part.strip()]
+    paragraphs = _safe_source_paragraphs(text)
     if not paragraphs:
         return ""
     scored = sorted(
