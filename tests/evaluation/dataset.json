@@ -553,7 +553,7 @@
         "status": "unsupported",
         "intent": "history_lookup",
         "required_facts": [
-          "Conversation history is not available"
+          "There are no earlier turns in this conversation yet"
         ],
         "citation_expectations": {
           "required": false,

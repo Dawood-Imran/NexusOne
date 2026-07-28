@@ -27,14 +27,14 @@ The server maps these labels as follows:
 - feedback -> direct feedback guidance (the explicit feedback endpoint remains the write path)
 - clarification -> clarifying response with no tool call
 - unsupported -> supported-options explanation with no tool call
-- history_lookup -> unsupported response because conversation persistence is intentionally out of scope
+- history_lookup -> bounded server-owned short-term history response; an empty conversation returns a safe unsupported response
 
 A ticket-status label is never treated as ticket creation. A ticket-create label may
 carry missing context; the existing ticket service then asks for department,
-category, or description without writing a partial ticket. A bounded recent
-user-message context or active ticket draft may help a provider distinguish a
-follow-up such as “what information do you need to create?”; this branch does not
-persist either object.
+category, or description without writing a partial ticket. The authenticated
+conversation store supplies at most the bounded recent user-message context used
+for history lookup and follow-up classification; it does not grant authorization,
+retrieval, SQL, or action authority.
 
 ## Public response additions
 
@@ -52,9 +52,10 @@ Safe classifier failures use `status=needs_clarification`, `route=clarification`
 and a reason such as `INTENT_CLASSIFIER_UNAVAILABLE`,
 `INTENT_PROVIDER_UNAVAILABLE`, `INTENT_CLASSIFIER_ERROR_<TYPE>`,
 `INTENT_CONFIDENCE_TOO_LOW`, or `INTENT_INPUT_TOO_LARGE`. They do not fall back to
-keyword routing and do not call retrieval, SQL, or actions. Unsupported/history
-responses use `UNSUPPORTED_REQUEST` or `HISTORY_LOOKUP_UNAVAILABLE`; feedback uses
-`FEEDBACK_GUIDANCE`.
+keyword routing and do not call retrieval, SQL, or actions. Unsupported responses
+use `UNSUPPORTED_REQUEST`; history responses use `SHORT_TERM_MEMORY` when bounded
+prior turns are available or `SHORT_TERM_MEMORY_EMPTY` when the authenticated
+conversation has no completed prior turns. Feedback uses `FEEDBACK_GUIDANCE`.
 
 The provider call is a dedicated low-temperature LangChain/OpenAI structured
 schema call with no application tools, bounded untrusted input/context, finite
