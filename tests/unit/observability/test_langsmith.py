@@ -32,10 +32,12 @@ class LangSmithConfigTest(unittest.TestCase):
     def test_route_metadata_accepts_only_safe_route_names(self) -> None:
         casual = build_langsmith_config({"route": "CASUAL"})
         general = build_langsmith_config({"route": "GENERAL_KNOWLEDGE"})
+        clarification = build_langsmith_config({"route": "clarification"})
         unsafe = build_langsmith_config({"route": "select * from secrets"})
 
         self.assertEqual("CASUAL", casual["metadata"]["route"])
         self.assertIn("route:GENERAL_KNOWLEDGE", general["tags"])
+        self.assertEqual("clarification", clarification["metadata"]["route"])
         self.assertNotIn("route", unsafe["metadata"])
         self.assertNotIn("select * from secrets", repr(unsafe))
 

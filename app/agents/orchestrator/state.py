@@ -16,6 +16,9 @@ RouteName = Literal[
     "ticket_create",
     "CASUAL",
     "GENERAL_KNOWLEDGE",
+    "feedback",
+    "clarification",
+    "unsupported",
     "deny",
     "error",
 ]
@@ -28,12 +31,22 @@ class OrchestratorState(TypedDict, total=False):
     message: str
     include_trace: bool
     execute_sql: bool
+    conversation_context: Any
+    active_ticket_draft: Any
 
     profile: Any
     clean_message: str
     access_decision: AccessDecision
     route: RouteName
     category: str
+    intent_result: Any
+    intent: str
+    intent_confidence: float
+    needs_clarification: bool
+    clarification_question: str
+    missing_context: list[str]
+    intent_reason_code: str
+    classifier_version: str
 
     rag_message: str
     rag_citations: list[dict[str, Any]]
@@ -41,6 +54,9 @@ class OrchestratorState(TypedDict, total=False):
     rag_backend: str
 
     casual_message: str
+    feedback_message: str
+    clarification_message: str
+    unsupported_message: str
     general_answer: str
     general_answer_available: bool
 

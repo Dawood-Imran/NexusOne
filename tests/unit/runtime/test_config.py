@@ -20,6 +20,8 @@ class RuntimeConfigTest(unittest.TestCase):
                         "OPENAI_SQL_TEMPERATURE=0.2",
                         "OPENAI_ANSWER_MODEL=fixture-answer-model",
                         "OPENAI_ANSWER_TEMPERATURE=0.4",
+                        "OPENAI_INTENT_MODEL=fixture-intent-model",
+                        "OPENAI_INTENT_TEMPERATURE=0.1",
                         "LANGSMITH_TRACING=true",
                         "LANGSMITH_API_KEY=fixture-trace-key",
                         "LANGSMITH_PROJECT=fixture-project",
@@ -36,6 +38,8 @@ class RuntimeConfigTest(unittest.TestCase):
             self.assertEqual("fixture-sql-model", config.openai_sql_model)
             self.assertEqual(0.2, config.openai_sql_temperature)
             self.assertEqual(0.4, config.openai_answer_temperature)
+            self.assertEqual("fixture-intent-model", config.openai_intent_model)
+            self.assertEqual(0.1, config.openai_intent_temperature)
             self.assertTrue(config.openai_api_key_configured)
             self.assertTrue(config.langsmith_tracing)
             self.assertTrue(config.langsmith_api_key_configured)
@@ -62,6 +66,8 @@ class RuntimeConfigTest(unittest.TestCase):
         self.assertFalse(config.openai_api_key_configured)
         self.assertEqual("gpt-4.1-mini", config.openai_sql_model)
         self.assertEqual("gpt-4.1-mini", config.openai_answer_model)
+        self.assertEqual("gpt-4.1-mini", config.openai_intent_model)
+        self.assertEqual(0.0, config.openai_intent_temperature)
         self.assertFalse(config.langsmith_tracing)
 
 

@@ -1,27 +1,57 @@
 import unittest
 
-from app.agents.orchestrator.action_routing import extract_ticket_request, wants_ticket_creation
-from app.agents.orchestrator.routing import route_message
+from app.agents.orchestrator.action_routing import extract_ticket_request
+from app.agents.orchestrator.intent_classifier import IntentClassificationResult
+from app.agents.orchestrator.routing import route_from_intent
 
 
 class OrchestratorRoutingContractTest(unittest.TestCase):
-    def test_all_reachable_routes_have_stable_deterministic_examples(self) -> None:
-        examples = {
-            "ticket_create": "Please open an IT ticket for a laptop replacement.",
-            "CASUAL": "Thanks so much!",
-            "sql": "What holidays apply in Pakistan?",
-            "combined": "What holidays apply in Pakistan and how do I request AWS access?",
-            "GENERAL_KNOWLEDGE": "How does TCP work?",
-            "rag": "How do I request AWS access?",
+    def test_finite_intent_labels_map_to_stable_routes(self) -> None:
+        routes = {
+            "casual": "CASUAL",
+            "general_question": "GENERAL_KNOWLEDGE",
+            "knowledge_lookup": "rag",
+            "structured_lookup": "sql",
+            "combined_lookup": "combined",
+            "ticket_create": "ticket_create",
+            "ticket_status": "sql",
+            "history_lookup": "unsupported",
+            "feedback": "feedback",
+            "clarification": "clarification",
+            "unsupported": "unsupported",
         }
-        for route, message in examples.items():
-            with self.subTest(route=route):
-                self.assertEqual(route, route_message(message))
+        for intent, route in routes.items():
+            with self.subTest(intent=intent):
+                result = IntentClassificationResult(
+                    intent=intent,  # type: ignore[arg-type]
+                    confidence=0.99,
+                    needs_clarification=False,
+                    clarification_question=None,
+                    missing_context=(),
+                )
+                self.assertEqual(route, route_from_intent(result))
 
-    def test_internal_reference_beats_general_knowledge_and_exact_structured_question(self) -> None:
-        self.assertEqual("rag", route_message("What is our company's vacation policy?"))
-        self.assertEqual("sql", route_message("How many employees are in Engineering?"))
-        self.assertEqual("rag", route_message("How does NexusOne's ticket system work?"))
+    def test_clarification_flag_prevents_guessing_protected_routes(self) -> None:
+        result = IntentClassificationResult(
+            intent="structured_lookup",
+            confidence=0.8,
+            needs_clarification=True,
+            clarification_question="Which lookup do you mean?",
+            missing_context=("dataset",),
+        )
+        self.assertEqual("clarification", route_from_intent(result))
+
+    def test_ticket_creation_and_status_are_distinct_contract_labels(self) -> None:
+        create = IntentClassificationResult(
+            intent="ticket_create", confidence=0.99, needs_clarification=False,
+            clarification_question=None, missing_context=(),
+        )
+        status = IntentClassificationResult(
+            intent="ticket_status", confidence=0.99, needs_clarification=False,
+            clarification_question=None, missing_context=(),
+        )
+        self.assertEqual("ticket_create", route_from_intent(create))
+        self.assertEqual("sql", route_from_intent(status))
 
     def test_ticket_extraction_normalizes_fields_without_accepting_short_description(self) -> None:
         request = extract_ticket_request(
@@ -32,8 +62,6 @@ class OrchestratorRoutingContractTest(unittest.TestCase):
         self.assertEqual("cloud_access", request.category)
         self.assertEqual("high", request.priority)
         self.assertIn("billing migration", request.description or "")
-        self.assertTrue(wants_ticket_creation("raise a case for my VPN"))
-        self.assertFalse(wants_ticket_creation("show my ticket status"))
 
     def test_ticket_description_does_not_preserve_command_prefix(self) -> None:
         request = extract_ticket_request("Open an HR ticket for a payroll correction needed this month.")

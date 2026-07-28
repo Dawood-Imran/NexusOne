@@ -4,7 +4,7 @@ import unittest
 from app.actions.ticket_service import InMemoryTicketRepository, TicketService
 from app.agents.orchestrator import NexusOneOrchestrator
 from app.agents.orchestrator.answer_composer import AnswerComposition, DeterministicAnswerComposer
-from app.agents.orchestrator.routing import route_message
+from tests.unit.agents.orchestrator.intent_fixtures import fixture_classifier
 
 
 class NexusOneOrchestratorTest(unittest.TestCase):
@@ -12,12 +12,17 @@ class NexusOneOrchestratorTest(unittest.TestCase):
         self.ticket_repository = InMemoryTicketRepository()
         self.orchestrator = NexusOneOrchestrator(
             answer_composer=DeterministicAnswerComposer(),
+            intent_classifier=fixture_classifier(),
             ticket_service=TicketService(self.ticket_repository),
         )
 
     def test_casual_greeting_uses_deterministic_route_without_composer(self) -> None:
         composer = _SpyComposer()
-        orchestrator = NexusOneOrchestrator(answer_composer=composer, ticket_service=TicketService(self.ticket_repository))
+        orchestrator = NexusOneOrchestrator(
+            answer_composer=composer,
+            intent_classifier=fixture_classifier(),
+            ticket_service=TicketService(self.ticket_repository),
+        )
 
         response = orchestrator.invoke(
             {"user_id": "u001", "message": "  HELLO!  ", "include_trace": True}
@@ -42,6 +47,22 @@ class NexusOneOrchestratorTest(unittest.TestCase):
             self.assertEqual("CASUAL", response["route"])
             self.assertIn(expected, response["message"])
 
+    def test_feedback_history_and_unsupported_routes_are_direct_and_tool_free(self) -> None:
+        for message, expected_route, expected_status in (
+            ("That answer was wrong.", "feedback", "answered"),
+            ("What did I ask earlier?", "unsupported", "unsupported"),
+        ):
+            with self.subTest(message=message):
+                response = self.orchestrator.invoke(
+                    {"user_id": "u001", "message": message, "include_trace": True}
+                )
+                self.assertEqual(expected_route, response["route"])
+                self.assertEqual(expected_status, response["status"])
+                nodes = {step["node"] for step in response["trace"]}
+                self.assertNotIn("retrieve_rag_context", nodes)
+                self.assertNotIn("run_sql_subgraph", nodes)
+                self.assertNotIn("run_ticket_action", nodes)
+
     def test_general_knowledge_uses_composer_without_protected_paths(self) -> None:
         for message in (
             "What is machine learning?",
@@ -62,7 +83,7 @@ class NexusOneOrchestratorTest(unittest.TestCase):
 
     def test_general_knowledge_reuses_injected_answer_composer(self) -> None:
         composer = _RecordingComposer()
-        orchestrator = NexusOneOrchestrator(answer_composer=composer)
+        orchestrator = NexusOneOrchestrator(answer_composer=composer, intent_classifier=fixture_classifier())
 
         response = orchestrator.invoke({"user_id": "u001", "message": "What is machine learning?"})
 
@@ -71,13 +92,18 @@ class NexusOneOrchestratorTest(unittest.TestCase):
         self.assertEqual("GENERAL_KNOWLEDGE", composer.context["route"])
         self.assertIn("Machine learning is", composer.context["general_answer"])
 
-    def test_route_classifier_preserves_internal_and_structured_protections(self) -> None:
-        self.assertEqual("CASUAL", route_message("Good morning"))
-        self.assertEqual("GENERAL_KNOWLEDGE", route_message("How does TCP work?"))
-        self.assertEqual("rag", route_message("What is our company's vacation policy?"))
-        self.assertEqual("GENERAL_KNOWLEDGE", route_message("What is a typical vacation policy?"))
-        self.assertEqual("sql", route_message("How many employees are in Engineering?"))
-        self.assertEqual("rag", route_message("How does NexusOne's ticket system work?"))
+    def test_classifier_contract_preserves_internal_and_structured_routes(self) -> None:
+        expected = {
+            "Good morning": "CASUAL",
+            "How does TCP work?": "GENERAL_KNOWLEDGE",
+            "What is our company's vacation policy?": "rag",
+            "What is a typical vacation policy?": "GENERAL_KNOWLEDGE",
+            "How many employees are in Engineering?": "sql",
+            "How does NexusOne's ticket system work?": "rag",
+        }
+        for message, route in expected.items():
+            response = self.orchestrator.invoke({"user_id": "u001", "message": message})
+            self.assertEqual(route, response["route"], message)
 
     def test_streaming_deltas_aggregate_to_the_final_response_and_keep_trace(self) -> None:
         events = list(
@@ -98,6 +124,7 @@ class NexusOneOrchestratorTest(unittest.TestCase):
     def test_streaming_provider_error_uses_safe_recoverable_event_and_offline_fallback(self) -> None:
         orchestrator = NexusOneOrchestrator(
             answer_composer=_ExplodingComposer(),
+            intent_classifier=fixture_classifier(),
             ticket_service=TicketService(self.ticket_repository),
         )
 
@@ -114,6 +141,7 @@ class NexusOneOrchestratorTest(unittest.TestCase):
     def test_streaming_empty_composer_response_does_not_leave_the_graph_pending(self) -> None:
         orchestrator = NexusOneOrchestrator(
             answer_composer=_EmptyComposer(),
+            intent_classifier=fixture_classifier(),
             ticket_service=TicketService(self.ticket_repository),
         )
 
@@ -144,7 +172,7 @@ class NexusOneOrchestratorTest(unittest.TestCase):
         self.assertEqual("[1]", response["citations"][0]["label"])
         self.assertIn("Create an IT access ticket", response["citations"][0]["text"])
         self.assertIn("Create an IT access ticket", response["citations"][0]["excerpt"])
-        self.assertEqual("retrieve_rag_context", response["trace"][3]["node"])
+        self.assertIn("retrieve_rag_context", [step["node"] for step in response["trace"]])
         self.assertIn("compose_final_answer", [step["node"] for step in response["trace"]])
 
     def test_denied_question_stops_before_retrieval_or_sql(self) -> None:
@@ -178,7 +206,8 @@ class NexusOneOrchestratorTest(unittest.TestCase):
         self.assertEqual("deterministic", response["model_backend"])
         self.assertEqual("validation_only", response["sql_execution"]["status"])
         self.assertIn("SQL subgraph validated", response["message"])
-        self.assertEqual("validated", response["trace"][3]["status"])
+        sql_trace = next(step for step in response["trace"] if step["node"] == "run_sql_subgraph")
+        self.assertEqual("validated", sql_trace["status"])
         self.assertEqual("validated", response["subgraph_trace"][-1]["status"])
         self.assertEqual("validated", response["trace"][-1]["status"])
         nodes = [step["node"] for step in response["trace"]]

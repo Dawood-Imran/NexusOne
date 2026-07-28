@@ -5,6 +5,7 @@ from unittest.mock import patch
 from app.actions.audit_service import AuditService, InMemoryAuditRepository
 from app.actions.feedback_service import FeedbackService, InMemoryFeedbackRepository
 from app.agents.orchestrator.answer_composer import DeterministicAnswerComposer
+from tests.unit.agents.orchestrator.intent_fixtures import fixture_classifier
 from app.agents.sql_subgraph.db import SQLAlchemyExecutor
 from app.agents.sql_subgraph.state import SQLExecutionResult
 from app.services.chat_service import ChatService
@@ -25,6 +26,7 @@ class ChatServiceTest(unittest.TestCase):
         self.audit_repository = InMemoryAuditRepository()
         self.service = ChatService(
             answer_composer=DeterministicAnswerComposer(),
+            intent_classifier=fixture_classifier(),
             feedback_service=FeedbackService(self.feedback_repository),
             audit_service=AuditService(self.audit_repository),
         )
@@ -93,12 +95,16 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual("OPENAI_API_KEY_NOT_CONFIGURED", response["capabilities"]["answer_composer"]["fallback_reason"])
         self.assertEqual("OPENAI_API_KEY_NOT_CONFIGURED", response["capabilities"]["sql_planner"]["fallback_reason"])
         self.assertTrue(response["trace"])
-        self.assertEqual("validation_only", response["trace"][3]["details"]["execution_status"])
+        sql_trace = next(step for step in response["trace"] if step["node"] == "run_sql_subgraph")
+        self.assertEqual("validation_only", sql_trace["details"]["execution_status"])
 
     def test_database_url_builds_the_http_sql_executor(self) -> None:
         with patch.dict(os.environ, {"DATABASE_URL": "sqlite+pysqlite:///:memory:"}, clear=True):
             with patch("app.services.chat_service.create_engine", return_value=object()) as create_engine:
-                service = ChatService(answer_composer=DeterministicAnswerComposer())
+                service = ChatService(
+                    answer_composer=DeterministicAnswerComposer(),
+                    intent_classifier=fixture_classifier(),
+                )
 
         self.assertIsInstance(service.sql_executor, SQLAlchemyExecutor)
         create_engine.assert_called_once_with("sqlite+pysqlite:///:memory:")
@@ -108,6 +114,7 @@ class ChatServiceTest(unittest.TestCase):
         service = ChatService(
             sql_executor=_FakeExecutor(),
             answer_composer=DeterministicAnswerComposer(),
+            intent_classifier=fixture_classifier(),
             feedback_service=FeedbackService(InMemoryFeedbackRepository()),
             audit_service=AuditService(InMemoryAuditRepository()),
         )
@@ -123,12 +130,14 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual("executed", response["sql_execution"]["status"])
         self.assertEqual(1, response["sql_execution"]["row_count"])
         self.assertNotIn("requester_id", str(response["rows"]))
-        self.assertEqual("executed", response["trace"][3]["details"]["execution_status"])
+        sql_trace = next(step for step in response["trace"] if step["node"] == "run_sql_subgraph")
+        self.assertEqual("executed", sql_trace["details"]["execution_status"])
 
     def test_executor_error_is_safe_and_not_reported_as_connected_success(self) -> None:
         service = ChatService(
             sql_executor=_FailingExecutor(),
             answer_composer=DeterministicAnswerComposer(),
+            intent_classifier=fixture_classifier(),
             feedback_service=FeedbackService(InMemoryFeedbackRepository()),
             audit_service=AuditService(InMemoryAuditRepository()),
         )
@@ -157,6 +166,7 @@ class ChatServiceTest(unittest.TestCase):
                 return_value=FakeOpenAIPlanner(),
             ):
                 service = ChatService(
+                    intent_classifier=fixture_classifier(),
                     feedback_service=FeedbackService(InMemoryFeedbackRepository()),
                     audit_service=AuditService(InMemoryAuditRepository()),
                 )

@@ -13,6 +13,7 @@ from app.agents.orchestrator.answer_composer import (
     FallbackAnswerComposer,
     build_default_answer_composer,
 )
+from app.agents.orchestrator.intent_classifier import IntentClassifier, build_default_intent_classifier
 
 from app.actions.audit_service import AuditEvent, AuditService, SQLAlchemyAuditRepository
 from app.actions.feedback_service import FeedbackService, SQLAlchemyFeedbackRepository
@@ -38,6 +39,7 @@ class ChatService:
         sql_executor: SQLExecutor | None = None,
         sql_planner: Any | None = None,
         answer_composer: AnswerComposer | None = None,
+        intent_classifier: IntentClassifier | None = None,
         ticket_service: TicketService | None = None,
         feedback_service: FeedbackService | None = None,
         audit_service: AuditService | None = None,
@@ -72,19 +74,29 @@ class ChatService:
         self.audit_service = audit_service or defaults["audit_service"]
         self.sql_planner = sql_planner if sql_planner is not None else build_default_sql_planner()
         self.answer_composer = answer_composer if answer_composer is not None else build_default_answer_composer()
+        self.intent_classifier = intent_classifier if intent_classifier is not None else build_default_intent_classifier()
         self.orchestrator = NexusOneOrchestrator(
             chunk_retriever=self.chunk_retriever,
             local_retriever=self.retriever,
             sql_executor=self.sql_executor,
             sql_planner=self.sql_planner,
             answer_composer=self.answer_composer,
+            intent_classifier=self.intent_classifier,
             ticket_service=self.ticket_service,
         )
 
     def profiles(self) -> list[dict[str, object]]:
         return list_profiles()
 
-    def handle_message(self, user_id: str, message: str, include_trace: bool = False) -> dict[str, Any]:
+    def handle_message(
+        self,
+        user_id: str,
+        message: str,
+        include_trace: bool = False,
+        *,
+        conversation_context: Any = None,
+        active_ticket_draft: Any = None,
+    ) -> dict[str, Any]:
         """Handle a message for a trusted server-side identity.
 
         The development HTTP adapter must call
@@ -92,13 +104,22 @@ class ChatService:
         available for graph/unit callers that already resolved identity.
         """
 
-        return self._handle_message(user_id, message, include_trace=include_trace)
+        return self._handle_message(
+            user_id,
+            message,
+            include_trace=include_trace,
+            conversation_context=conversation_context,
+            active_ticket_draft=active_ticket_draft,
+        )
 
     def handle_authenticated_message(
         self,
         session: AuthenticatedSession,
         message: str,
         include_trace: bool = False,
+        *,
+        conversation_context: Any = None,
+        active_ticket_draft: Any = None,
     ) -> dict[str, Any]:
         """Handle chat using only the immutable identity resolved by auth."""
 
@@ -107,6 +128,8 @@ class ChatService:
             message,
             include_trace=include_trace,
             profile=session.profile,
+            conversation_context=conversation_context,
+            active_ticket_draft=active_ticket_draft,
         )
 
     def stream_authenticated_message(
@@ -114,6 +137,9 @@ class ChatService:
         session: AuthenticatedSession,
         message: str,
         include_trace: bool = False,
+        *,
+        conversation_context: Any = None,
+        active_ticket_draft: Any = None,
     ) -> Iterator[Mapping[str, Any]]:
         """Yield safe delta/error/completion events for an authenticated turn."""
 
@@ -122,6 +148,8 @@ class ChatService:
             message,
             include_trace=include_trace,
             profile=session.profile,
+            conversation_context=conversation_context,
+            active_ticket_draft=active_ticket_draft,
         )
 
     def stream_message(
@@ -131,8 +159,17 @@ class ChatService:
         *,
         include_trace: bool = False,
         profile: Any | None = None,
+        conversation_context: Any = None,
+        active_ticket_draft: Any = None,
     ) -> Iterator[Mapping[str, Any]]:
-        payload = self._request_payload(user_id, message, include_trace=include_trace, profile=profile)
+        payload = self._request_payload(
+            user_id,
+            message,
+            include_trace=include_trace,
+            profile=profile,
+            conversation_context=conversation_context,
+            active_ticket_draft=active_ticket_draft,
+        )
         for event in self.orchestrator.stream_with_events(payload):
             event_type = event.get("type") if isinstance(event, Mapping) else None
             if event_type == "response.complete":
@@ -151,8 +188,17 @@ class ChatService:
         *,
         include_trace: bool,
         profile: Any | None = None,
+        conversation_context: Any = None,
+        active_ticket_draft: Any = None,
     ) -> dict[str, Any]:
-        payload = self._request_payload(user_id, message, include_trace=include_trace, profile=profile)
+        payload = self._request_payload(
+            user_id,
+            message,
+            include_trace=include_trace,
+            profile=profile,
+            conversation_context=conversation_context,
+            active_ticket_draft=active_ticket_draft,
+        )
         return self._decorate_response(dict(self.orchestrator.invoke(payload)))
 
     def _request_payload(
@@ -162,6 +208,8 @@ class ChatService:
         *,
         include_trace: bool,
         profile: Any | None,
+        conversation_context: Any = None,
+        active_ticket_draft: Any = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "conversation_id": "web-chat",
@@ -170,6 +218,8 @@ class ChatService:
             "message": message,
             "include_trace": include_trace,
             "execute_sql": self.sql_executor is not None,
+            "conversation_context": conversation_context,
+            "active_ticket_draft": active_ticket_draft,
         }
         if profile is not None:
             payload["profile"] = profile
@@ -291,6 +341,7 @@ class ChatService:
                     "fallback_reason": str(response["model_fallback_reason"]),
                 }
             )
+        classifier_capability = _classifier_metadata(self.intent_classifier)
         planner_capability = _provider_metadata(
             self.sql_planner,
             configured=self.runtime_config.openai_api_key_configured,
@@ -314,6 +365,7 @@ class ChatService:
                 "row_count": _safe_nonnegative_int(sql_execution.get("row_count", 0)),
             },
             "answer_composer": answer_capability,
+            "intent_classifier": classifier_capability,
             "sql_planner": planner_capability,
             "tracing": {
                 "enabled": self.runtime_config.langsmith_tracing,
@@ -346,6 +398,28 @@ def build_default_action_services(*, database_url: str | None = None, engine: An
         "ticket_service": TicketService(SQLAlchemyTicketRepository(engine)),
         "feedback_service": FeedbackService(SQLAlchemyFeedbackRepository(engine)),
         "audit_service": AuditService(SQLAlchemyAuditRepository(engine)),
+    }
+
+
+def _classifier_metadata(component: Any | None) -> dict[str, Any]:
+    """Return classifier capability metadata without prompt or secret values."""
+
+    if component is None:
+        return {
+            "provider": "unavailable",
+            "model": "none",
+            "mode": "safe_failure",
+            "reason_code": "INTENT_CLASSIFIER_UNAVAILABLE",
+        }
+    safe_metadata = getattr(component, "safe_metadata", None)
+    if callable(safe_metadata):
+        metadata = safe_metadata()
+        if isinstance(metadata, Mapping):
+            return {str(key): value for key, value in metadata.items()}
+    return {
+        "provider": str(getattr(component, "provider_name", "custom")),
+        "model": str(getattr(component, "model_name", "unknown")),
+        "mode": "injected",
     }
 
 

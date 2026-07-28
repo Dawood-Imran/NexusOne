@@ -9,13 +9,18 @@ from langgraph.graph import END, START, StateGraph
 
 from app.actions.ticket_service import TicketService
 from app.agents.orchestrator.answer_composer import AnswerComposer, build_default_answer_composer
+from app.agents.orchestrator.intent_classifier import IntentClassifier, build_default_intent_classifier
 from app.agents.orchestrator.nodes import (
     make_compose_final_answer_node,
     make_finalize_response_node,
     make_load_user_context_node,
     make_precheck_guardrails_node,
+    make_recheck_guardrails_node,
     make_retrieve_rag_node,
     make_respond_casual_node,
+    make_respond_clarification_node,
+    make_respond_feedback_node,
+    make_respond_unsupported_node,
     make_route_question_node,
     make_run_ticket_action_node,
     make_run_sql_node,
@@ -36,6 +41,7 @@ def build_orchestrator_graph(
     sql_executor: SQLExecutor | None = None,
     sql_planner: SQLPlanner | None = None,
     answer_composer: AnswerComposer | None = None,
+    intent_classifier: IntentClassifier | None = None,
     ticket_service: TicketService | None = None,
 ) -> Any:
     """Build the main graph.
@@ -47,8 +53,15 @@ def build_orchestrator_graph(
     graph = StateGraph(OrchestratorState)
     graph.add_node("load_user_context", make_load_user_context_node())
     graph.add_node("precheck_guardrails", make_precheck_guardrails_node())
-    graph.add_node("route_question", make_route_question_node())
+    graph.add_node(
+        "route_question",
+        make_route_question_node(intent_classifier or build_default_intent_classifier()),
+    )
+    graph.add_node("recheck_guardrails", make_recheck_guardrails_node())
     graph.add_node("respond_casual", make_respond_casual_node())
+    graph.add_node("respond_feedback", make_respond_feedback_node())
+    graph.add_node("respond_clarification", make_respond_clarification_node())
+    graph.add_node("respond_unsupported", make_respond_unsupported_node())
     graph.add_node("run_ticket_action", make_run_ticket_action_node(ticket_service))
     graph.add_node(
         "run_sql_subgraph",
@@ -64,8 +77,9 @@ def build_orchestrator_graph(
     graph.add_edge(START, "load_user_context")
     graph.add_edge("load_user_context", "precheck_guardrails")
     graph.add_edge("precheck_guardrails", "route_question")
+    graph.add_edge("route_question", "recheck_guardrails")
     graph.add_conditional_edges(
-        "route_question",
+        "recheck_guardrails",
         _route_after_question,
         {
             "deny": "finalize_response",
@@ -76,6 +90,9 @@ def build_orchestrator_graph(
             "ticket_create": "run_ticket_action",
             "CASUAL": "respond_casual",
             "GENERAL_KNOWLEDGE": "compose_general_knowledge",
+            "feedback": "respond_feedback",
+            "clarification": "respond_clarification",
+            "unsupported": "respond_unsupported",
         },
     )
     graph.add_conditional_edges(
@@ -88,6 +105,9 @@ def build_orchestrator_graph(
     )
     graph.add_edge("run_ticket_action", "validate_answer")
     graph.add_edge("respond_casual", "validate_answer")
+    graph.add_edge("respond_feedback", "validate_answer")
+    graph.add_edge("respond_clarification", "validate_answer")
+    graph.add_edge("respond_unsupported", "validate_answer")
     graph.add_edge("retrieve_rag_context", "validate_answer")
     graph.add_conditional_edges(
         "validate_answer",
@@ -95,6 +115,7 @@ def build_orchestrator_graph(
         {
             "casual": "finalize_response",
             "general_knowledge": "finalize_response",
+            "direct": "finalize_response",
             "compose": "compose_final_answer",
         },
     )
@@ -115,6 +136,7 @@ class NexusOneOrchestrator:
         sql_executor: SQLExecutor | None = None,
         sql_planner: SQLPlanner | None = None,
         answer_composer: AnswerComposer | None = None,
+        intent_classifier: IntentClassifier | None = None,
         ticket_service: TicketService | None = None,
     ) -> None:
         self.graph = build_orchestrator_graph(
@@ -123,6 +145,7 @@ class NexusOneOrchestrator:
             sql_executor=sql_executor,
             sql_planner=sql_planner,
             answer_composer=answer_composer,
+            intent_classifier=intent_classifier,
             ticket_service=ticket_service,
         )
 
@@ -180,9 +203,11 @@ def _state_from_payload(payload: Mapping[str, Any]) -> OrchestratorState:
         "conversation_id": str(payload.get("conversation_id", "web-chat")),
         "turn_id": str(payload.get("turn_id", "web-turn")),
         "user_id": str(payload.get("user_id", "")),
-        "message": str(payload.get("message", "")),
+        "message": payload.get("message") if isinstance(payload.get("message"), str) else "",
         "include_trace": bool(payload.get("include_trace", False)),
         "execute_sql": bool(payload.get("execute_sql", False)),
+        "conversation_context": payload.get("conversation_context"),
+        "active_ticket_draft": payload.get("active_ticket_draft"),
     }
     # Authenticated API callers may pass the immutable server-resolved profile
     # so the graph does not reconstruct identity from client data.
@@ -205,4 +230,6 @@ def _route_after_validation(state: OrchestratorState) -> str:
         return "casual"
     if route == "GENERAL_KNOWLEDGE":
         return "general_knowledge"
+    if route in {"feedback", "clarification", "unsupported"}:
+        return "direct"
     return "compose"

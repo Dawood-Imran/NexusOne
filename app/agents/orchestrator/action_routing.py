@@ -1,31 +1,10 @@
-"""Deterministic action routing and field extraction."""
+"""Ticket field extraction after the guarded intent route has been chosen."""
 
 from __future__ import annotations
 
 import re
 
 from app.actions.ticket_service import TicketRequest
-
-
-TICKET_CREATE_PATTERNS = (
-    "create a ticket",
-    "create ticket",
-    "raise a ticket",
-    "open a ticket",
-    "open an it ticket",
-    "open hr ticket",
-    "open admin ticket",
-    "i need help with",
-    "request access card",
-    "payroll issue",
-)
-
-
-def wants_ticket_creation(message: str) -> bool:
-    lowered = message.lower()
-    if any(pattern in lowered for pattern in TICKET_CREATE_PATTERNS):
-        return True
-    return bool(re.search(r"\b(create|raise|open)\b.*\b(ticket|case)\b", lowered))
 
 
 def extract_ticket_request(message: str) -> TicketRequest:
@@ -91,5 +70,5 @@ def _extract_priority(lowered: str) -> str:
 
 def _extract_description(message: str) -> str | None:
     cleaned = re.sub(r"\s+", " ", message.strip())
-    cleaned = re.sub(r"^(please\s+)?(create|raise|open)\s+(an?\s+)?(\w+\s+)?(ticket|case)\s*(for|about|because|:)?\s*", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^(please\s+)?(create|raise|open|generate)\s+(an?\s+)?(\w+\s+)?(ticket|case)\s*(for|about|because|:)?\s*", "", cleaned, flags=re.IGNORECASE)
     return cleaned or None

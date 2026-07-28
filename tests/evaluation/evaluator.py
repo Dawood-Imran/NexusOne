@@ -19,6 +19,11 @@ from unittest.mock import patch
 from app.actions.ticket_service import InMemoryTicketRepository, TicketService
 from app.agents.orchestrator import NexusOneOrchestrator
 from app.agents.orchestrator.answer_composer import DeterministicAnswerComposer
+from app.agents.orchestrator.intent_classifier import (
+    FakeIntentClassifier,
+    IntentClassificationResult,
+    safe_intent_result,
+)
 from app.auth.profiles import get_profile
 
 
@@ -102,6 +107,10 @@ def load_dataset(path: Path | str = DEFAULT_DATASET_PATH) -> dict[str, Any]:
 def validate_dataset(payload: Mapping[str, Any]) -> None:
     if not isinstance(payload, Mapping) or payload.get("version") != 1:
         raise ValueError("evaluation dataset must declare version 1")
+    if payload.get("intent_contract_version") != "nexusone-intent-contract-v1":
+        raise ValueError("evaluation dataset must declare the intent contract version")
+    if payload.get("classifier_version") != "nexusone-intent-classifier-v1":
+        raise ValueError("evaluation dataset must declare the classifier version")
     cases = payload.get("cases")
     if not isinstance(cases, list) or not cases:
         raise ValueError("evaluation dataset must contain cases")
@@ -122,6 +131,8 @@ def validate_dataset(payload: Mapping[str, Any]) -> None:
         if not isinstance(expected, Mapping):
             raise ValueError(f"{case_id} must declare expected outcomes")
         required_keys = {"access", "category", "route", "status", "required_facts", "citation_expectations", "forbidden", "dimensions"}
+        if "intent" not in expected:
+            raise ValueError(f"{case_id} must declare expected intent")
         missing = required_keys.difference(expected)
         if missing:
             raise ValueError(f"{case_id} is missing expected keys: {', '.join(sorted(missing))}")
@@ -149,10 +160,46 @@ def run_deterministic_evaluation(path: Path | str = DEFAULT_DATASET_PATH) -> Eva
         ticket_repository = InMemoryTicketRepository()
         orchestrator = NexusOneOrchestrator(
             answer_composer=DeterministicAnswerComposer(fallback_reason="OFFLINE_EVALUATION"),
+            intent_classifier=_dataset_classifier(cases),
             ticket_service=TicketService(ticket_repository),
         )
         results = tuple(_evaluate_case(orchestrator, case) for case in cases)
     return EvaluationReport(dataset=str(dataset.get("name", "unnamed")), cases=results)
+
+
+def _dataset_classifier(cases: Sequence[Mapping[str, Any]]) -> FakeIntentClassifier:
+    route_to_intent = {
+        "CASUAL": "casual",
+        "GENERAL_KNOWLEDGE": "general_question",
+        "rag": "knowledge_lookup",
+        "sql": "structured_lookup",
+        "combined": "combined_lookup",
+        "ticket_create": "ticket_create",
+        "feedback": "feedback",
+        "clarification": "clarification",
+        "unsupported": "unsupported",
+    }
+    mapping: dict[str, IntentClassificationResult] = {}
+    for case in cases:
+        expected = case["expected"]
+        route = expected.get("route")
+        intent = expected.get("intent") or route_to_intent.get(route)
+        if intent is None:
+            continue
+        clarification = expected.get("status") == "needs_clarification"
+        ticket_clarification = clarification and intent == "ticket_create"
+        mapping[case["input"]] = IntentClassificationResult(
+            intent=intent,
+            confidence=0.99,
+            needs_clarification=clarification,
+            clarification_question=(
+                "Which team, category, and description should I use?"
+                if ticket_clarification
+                else "Could you clarify what you need?"
+            ) if clarification else None,
+            missing_context=("department", "category", "description") if ticket_clarification else (),
+        )
+    return FakeIntentClassifier(mapping, default=safe_intent_result("FAKE_DATASET_MISSING"))
 
 
 def _evaluate_case(orchestrator: NexusOneOrchestrator, case: Mapping[str, Any]) -> CaseResult:
@@ -251,6 +298,9 @@ def _check_response_shape(expected: Mapping[str, Any], response: Mapping[str, An
         return DimensionResult("response_shape", False, "required response fields are missing")
     if response.get("status") != expected.get("status"):
         return DimensionResult("response_shape", False, "status does not match expected contract")
+    expected_intent = expected.get("intent")
+    if expected_intent is not None and response.get("intent") != expected_intent:
+        return DimensionResult("response_shape", False, "intent does not match expected contract")
     if not isinstance(response.get("message"), str):
         return DimensionResult("response_shape", False, "message is not a string")
     if expected.get("status") not in {"error", "denied"} and not isinstance(response.get("profile"), Mapping):

@@ -10,8 +10,9 @@ from langgraph.config import get_stream_writer
 from app.actions.ticket_service import TicketService
 from app.agents.orchestrator.action_routing import extract_ticket_request
 from app.agents.orchestrator.answer_composer import AnswerComposer, compose_with_streaming
+from app.agents.orchestrator.intent_classifier import IntentClassifier, classify_request
 from app.agents.orchestrator.knowledge import build_local_general_answer, casual_response
-from app.agents.orchestrator.routing import route_message
+from app.agents.orchestrator.routing import route_from_intent
 from app.agents.orchestrator.state import OrchestratorState
 from app.agents.sql_subgraph import SQLSubgraph, clean_question_text
 from app.agents.sql_subgraph.presentation import (
@@ -112,7 +113,7 @@ def make_precheck_guardrails_node() -> Any:
     return precheck_guardrails
 
 
-def make_route_question_node() -> Any:
+def make_route_question_node(classifier: IntentClassifier) -> Any:
     def route_question(state: OrchestratorState) -> OrchestratorState:
         if state.get("status") in {"error", "denied"}:
             next_state = dict(state)
@@ -124,16 +125,144 @@ def make_route_question_node() -> Any:
             )
             return next_state
 
-        route = route_message(state["clean_message"])
-        next_state: OrchestratorState = {**state, "route": route}
+        result = classify_request(
+            classifier,
+            state.get("clean_message", ""),
+            conversation_context=state.get("conversation_context"),
+            active_ticket_draft=state.get("active_ticket_draft"),
+        )
+        route = route_from_intent(result)
+        next_state: OrchestratorState = {
+            **state,
+            "route": route,
+            "intent_result": result,
+            "intent": result.intent,
+            "intent_confidence": result.confidence,
+            "needs_clarification": result.needs_clarification,
+            "clarification_question": result.clarification_question or "",
+            "missing_context": list(result.missing_context),
+            "intent_reason_code": result.reason_code,
+            "classifier_version": result.classifier_version,
+        }
         next_state["trace"] = append_trace(
             next_state,
             "route_question",
-            {"status": "routed", "route": route, "category": state.get("category")},
+            {
+                "status": "routed" if result.reason_code == "INTENT_CLASSIFIED" else "safe_failure",
+                "route": route,
+                "intent": result.intent,
+                "confidence": result.confidence,
+                "needs_clarification": result.needs_clarification,
+                "reason_code": result.reason_code,
+                "classifier_version": result.classifier_version,
+            },
         )
         return next_state
 
     return route_question
+
+
+def make_recheck_guardrails_node() -> Any:
+    """Re-run policy after classification, before any protected route."""
+
+    def recheck_guardrails(state: OrchestratorState) -> OrchestratorState:
+        if state.get("status") in {"error", "denied"}:
+            next_state = dict(state)
+            next_state["trace"] = append_trace(
+                state,
+                "recheck_guardrails",
+                {"status": "skipped", "reason": state.get("reason_code")},
+            )
+            return next_state
+
+        profile = state["profile"]
+        decision = check_message_access(profile, state["clean_message"])
+        next_state: OrchestratorState = {**state, "access_decision": decision, "category": decision.category}
+        if not decision.allowed:
+            next_state["status"] = "denied"
+            next_state["reason_code"] = decision.reason_code
+            next_state["route"] = "deny"
+        next_state["trace"] = append_trace(
+            next_state,
+            "recheck_guardrails",
+            {
+                "status": "allowed" if decision.allowed else "denied",
+                "allowed": decision.allowed,
+                "category": decision.category,
+                "reason_code": decision.reason_code,
+            },
+        )
+        return next_state
+
+    return recheck_guardrails
+
+
+def make_respond_feedback_node() -> Any:
+    def respond_feedback(state: OrchestratorState) -> OrchestratorState:
+        message = "Thanks for the feedback. Use the helpful or not helpful control on the answer so it can be recorded safely."
+        next_state: OrchestratorState = {
+            **state,
+            "feedback_message": message,
+            "status": "answered",
+            "reason_code": "FEEDBACK_GUIDANCE",
+        }
+        next_state["trace"] = append_trace(
+            next_state,
+            "respond_feedback",
+            {"status": "answered", "route": "feedback"},
+        )
+        return next_state
+
+    return respond_feedback
+
+
+def make_respond_clarification_node() -> Any:
+    def respond_clarification(state: OrchestratorState) -> OrchestratorState:
+        message = state.get("clarification_question") or "Could you clarify what you would like me to help with?"
+        next_state: OrchestratorState = {
+            **state,
+            "clarification_message": message,
+            "status": "needs_clarification",
+            "reason_code": state.get("intent_reason_code") or "INTENT_NEEDS_CLARIFICATION",
+        }
+        next_state["trace"] = append_trace(
+            next_state,
+            "respond_clarification",
+            {"status": "needs_clarification", "route": "clarification"},
+        )
+        return next_state
+
+    return respond_clarification
+
+
+def make_respond_unsupported_node() -> Any:
+    def respond_unsupported(state: OrchestratorState) -> OrchestratorState:
+        if state.get("intent") == "history_lookup":
+            message = (
+                "Conversation history is not available through this chat route yet. "
+                "You can ask about company policies, general questions, knowledge lookups, or your ticket status."
+            )
+            reason_code = "HISTORY_LOOKUP_UNAVAILABLE"
+        else:
+            message = (
+                "I cannot help with that request here. You can ask about company policies, general questions, "
+                "knowledge lookups, ticket creation or status, or send feedback."
+            )
+            reason_code = "UNSUPPORTED_REQUEST"
+        next_state: OrchestratorState = {
+            **state,
+            "unsupported_message": message,
+            "status": "unsupported",
+            "reason_code": reason_code,
+        }
+        next_state["trace"] = append_trace(
+            next_state,
+            "respond_unsupported",
+            {"status": "unsupported", "route": "unsupported", "reason_code": reason_code},
+        )
+        return next_state
+
+    return respond_unsupported
 
 
 def make_respond_casual_node() -> Any:
@@ -313,6 +442,12 @@ def make_validate_answer_node() -> Any:
             reason = "TICKET_ACTION_NOT_COMPLETED"
         elif route == "CASUAL" and not state.get("casual_message"):
             reason = "CASUAL_RESPONSE_NOT_COMPLETED"
+        elif route == "feedback" and not state.get("feedback_message"):
+            reason = "FEEDBACK_RESPONSE_NOT_COMPLETED"
+        elif route == "clarification" and not state.get("clarification_message"):
+            reason = "CLARIFICATION_RESPONSE_NOT_COMPLETED"
+        elif route == "unsupported" and not state.get("unsupported_message"):
+            reason = "UNSUPPORTED_RESPONSE_NOT_COMPLETED"
         elif route == "GENERAL_KNOWLEDGE" and not state.get("final_answer"):
             reason = "GENERAL_KNOWLEDGE_NOT_COMPOSED"
         validation = {
@@ -323,6 +458,9 @@ def make_validate_answer_node() -> Any:
             "has_sql_answer": has_sql_answer,
             "has_rag_answer": has_rag_answer,
             "has_casual_answer": bool(state.get("casual_message")),
+            "has_feedback_answer": bool(state.get("feedback_message")),
+            "has_clarification_answer": bool(state.get("clarification_message")),
+            "has_unsupported_answer": bool(state.get("unsupported_message")),
             "has_general_answer": bool(state.get("final_answer")),
         }
         next_state: OrchestratorState = {**state, "validation": validation}
@@ -436,6 +574,7 @@ def make_finalize_response_node() -> Any:
         else:
             response = _successful_response(state, started_at)
 
+        response.update(_intent_response_fields(state))
         if state.get("composer_fallback_reason"):
             response["model_fallback_reason"] = state["composer_fallback_reason"]
         if state.get("sql_output") is not None:
@@ -564,6 +703,32 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
             **_turn_context(state),
         }
 
+    if route in {"feedback", "clarification", "unsupported"}:
+        if route == "feedback":
+            message = state.get("feedback_message", "")
+            status = "answered"
+            reason_code = state.get("reason_code", "FEEDBACK_GUIDANCE")
+        elif route == "clarification":
+            message = state.get("clarification_message", "")
+            status = "needs_clarification"
+            reason_code = state.get("reason_code", "INTENT_NEEDS_CLARIFICATION")
+        else:
+            message = state.get("unsupported_message", "")
+            status = "unsupported"
+            reason_code = state.get("reason_code", "UNSUPPORTED_REQUEST")
+        return {
+            "status": status,
+            "reason_code": reason_code,
+            "route": route,
+            "model_backend": "none",
+            "category": category,
+            "message": message,
+            "sql_execution": {"status": "not_run", "row_count": 0},
+            "profile": profile.to_public_dict(),
+            "latency_ms": _elapsed_ms(started_at),
+            **_turn_context(state),
+        }
+
     has_results = int(state.get("rag_result_count", 0)) > 0
     return {
         "status": "answered" if has_results else "no_answer",
@@ -577,6 +742,31 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
         "profile": profile.to_public_dict(),
         "latency_ms": _elapsed_ms(started_at),
         **_turn_context(state),
+    }
+
+
+def _intent_response_fields(state: OrchestratorState) -> dict[str, Any]:
+    """Add the public versioned classifier contract without raw model data."""
+
+    result = state.get("intent_result")
+    if result is None:
+        return {
+            "intent": None,
+            "intent_confidence": None,
+            "needs_clarification": False,
+            "clarification_question": None,
+            "missing_context": [],
+            "intent_contract_version": "nexusone-intent-contract-v1",
+            "intent_classifier_version": None,
+        }
+    return {
+        "intent": state.get("intent"),
+        "intent_confidence": state.get("intent_confidence"),
+        "needs_clarification": bool(state.get("needs_clarification", False)),
+        "clarification_question": state.get("clarification_question") or None,
+        "missing_context": list(state.get("missing_context", [])),
+        "intent_contract_version": getattr(result, "contract_version", "nexusone-intent-contract-v1"),
+        "intent_classifier_version": state.get("classifier_version"),
     }
 
 

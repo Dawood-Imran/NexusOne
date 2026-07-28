@@ -15,6 +15,7 @@
   - LangSmith hosted upload can fail noisily in restricted-network shells when tracing is enabled in the environment; graph execution still succeeds and safe metadata config is covered by unit tests.
 - The local authentication contract now uses salted password verifiers, opaque server-side sessions, and cookie-authenticated chat/feedback; the static UI uses that contract and omits client identity from chat/feedback requests.
 - The main graph now has first-class `CASUAL` and `GENERAL_KNOWLEDGE` routes. Casual messages use deterministic responses without composer/tool calls; general questions use the existing answer composer with curated local fallback answers and no protected retrieval.
+- Intent routing now uses the bounded LangChain/OpenAI classifier and versioned route contract documented in `docs/intent-routing.md`; the former top-level keyword router is no longer active. No provider or invalid/low-confidence output fails closed to clarification without retrieval, SQL, or actions. Offline tests inject explicit mapping fakes.
 - Authenticated conversation history is currently browser-local (`localStorage`) because the available dev API exposes chat, feedback, and auth only—not conversation list/delete persistence. The UI deletes local conversations with confirmation and does not claim server deletion; a server conversation-delete contract is still required for shared history.
 
 ## Requirement Coverage
@@ -106,6 +107,12 @@
 | `./.venv/bin/python scripts/run_evaluation.py` | pass | 14 offline cases; authorization, route, grounding/facts, citations, safety/no-leakage, and response-shape dimensions all passed. |
 | `./.venv/bin/python scripts/run_live_evaluation.py` | expected refusal | Refused because explicit `NEXUSONE_ENABLE_LIVE_EVAL=1` and configured credentials were absent; no provider was contacted. |
 | `./.venv/bin/python -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` | pass | Syntax/compile and whitespace checks after coverage additions. |
+| `.venv/bin/python -m unittest tests.unit.agents.orchestrator.test_intent_classifier tests.unit.agents.orchestrator.test_routing_contract tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service tests.unit.api.test_local_http_surface` | pass | Guarded classifier contract, fake-provider failures, casing/punctuation, context/draft bounds, ticket create/status distinction, direct feedback/history/unsupported routes, and guardrail recheck. |
+| `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 173 tests after replacing the active deterministic top-level router with the versioned classifier route contract. |
+| `.venv/bin/python scripts/run_evaluation.py` | pass | 20 versioned offline intent/authorization/route/grounding/citation/safety cases; no provider, database, or network required. |
+| `OPENAI_API_KEY='' DATABASE_URL='' .venv/bin/python -m unittest tests.unit.agents.orchestrator.test_intent_classifier` | pass | Default no-provider behavior returns `INTENT_CLASSIFIER_UNAVAILABLE` clarification and no protected graph node. |
+| `OPENAI_API_KEY='' DATABASE_URL='' .venv/bin/python scripts/run_web_app.py` + authenticated local HTTP request | pass | Local HTTP smoke returned `INTENT_CLASSIFIER_UNAVAILABLE` clarification; no RAG, SQL, or ticket node was reached. |
+| `.venv/bin/python scripts/run_live_evaluation.py` | expected refusal | Refused without explicit `NEXUSONE_ENABLE_LIVE_EVAL=1`; no provider was contacted. |
 
 ## Test coverage evaluation update
 

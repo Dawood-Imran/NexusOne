@@ -28,9 +28,9 @@ class OfflineEvaluationTest(unittest.TestCase):
         report = run_deterministic_evaluation()
 
         self.assertTrue(report.passed)
-        self.assertEqual(14, len(report.cases))
-        self.assertEqual(14, report.dimension_totals()["authorization"]["passed"])
-        self.assertEqual(14, report.dimension_totals()["safety_no_leakage"]["passed"])
+        self.assertEqual(20, len(report.cases))
+        self.assertEqual(20, report.dimension_totals()["authorization"]["passed"])
+        self.assertEqual(20, report.dimension_totals()["safety_no_leakage"]["passed"])
         self.assertNotIn("message", report.to_dict()["cases"][0])
 
     def test_dataset_validator_rejects_role_drift(self) -> None:

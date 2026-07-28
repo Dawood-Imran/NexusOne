@@ -166,11 +166,17 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
             self._handle_chat_stream(session, body)
             return
 
-        response = self._chat_service().handle_authenticated_message(
-            session,
-            message=str(body.get("message", "")),
-            include_trace=_as_bool(body.get("include_trace", False)),
-        )
+        chat_kwargs: dict[str, Any] = {
+            "message": body.get("message") if isinstance(body.get("message"), str) else "",
+            "include_trace": _as_bool(body.get("include_trace", False)),
+        }
+        conversation_context = _safe_conversation_context(body.get("conversation_context"))
+        active_ticket_draft = _safe_ticket_draft(body.get("active_ticket_draft"))
+        if conversation_context:
+            chat_kwargs["conversation_context"] = conversation_context
+        if active_ticket_draft:
+            chat_kwargs["active_ticket_draft"] = active_ticket_draft
+        response = self._chat_service().handle_authenticated_message(session, **chat_kwargs)
         self._send_json(response)
 
     def _handle_chat_stream(self, session: AuthenticatedSession, body: Mapping[str, Any]) -> None:
@@ -185,11 +191,17 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
                     "turn_id": "web-turn",
                 }
             )
-            events = self._chat_service().stream_authenticated_message(
-                session,
-                message=str(body.get("message", "")),
-                include_trace=_as_bool(body.get("include_trace", False)),
-            )
+            stream_kwargs: dict[str, Any] = {
+                "message": body.get("message") if isinstance(body.get("message"), str) else "",
+                "include_trace": _as_bool(body.get("include_trace", False)),
+            }
+            conversation_context = _safe_conversation_context(body.get("conversation_context"))
+            active_ticket_draft = _safe_ticket_draft(body.get("active_ticket_draft"))
+            if conversation_context:
+                stream_kwargs["conversation_context"] = conversation_context
+            if active_ticket_draft:
+                stream_kwargs["active_ticket_draft"] = active_ticket_draft
+            events = self._chat_service().stream_authenticated_message(session, **stream_kwargs)
             for event in events:
                 if isinstance(event, Mapping):
                     self._send_stream_event(event)
@@ -383,6 +395,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     return parser
+
+
+def _safe_conversation_context(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, Mapping):
+        return {}
+    recent = value.get("recent_user_messages")
+    if not isinstance(recent, list | tuple):
+        return {}
+    return {
+        "recent_user_messages": [item.strip()[:300] for item in recent if isinstance(item, str) and item.strip()][:3]
+    }
+
+
+def _safe_ticket_draft(value: Any) -> dict[str, str]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        key: item.strip()[:240]
+        for key in ("department", "category", "priority", "description")
+        if isinstance(item := value.get(key), str) and item.strip()
+    }
 
 
 def _optional_string(value: Any) -> str | None:

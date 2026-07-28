@@ -14,6 +14,7 @@ from unittest.mock import patch
 from app.actions.audit_service import AuditService, InMemoryAuditRepository
 from app.actions.feedback_service import FeedbackService, InMemoryFeedbackRepository
 from app.agents.orchestrator.answer_composer import DeterministicAnswerComposer
+from tests.unit.agents.orchestrator.intent_fixtures import fixture_classifier
 from app.api.dev_server import NexusOneRequestHandler
 from app.services.chat_service import ChatService
 
@@ -43,6 +44,7 @@ class LocalHTTPProductSurfaceTest(unittest.TestCase):
         NexusOneRequestHandler.auth_service = cls.auth_service
         NexusOneRequestHandler.service = ChatService(
             answer_composer=DeterministicAnswerComposer(fallback_reason="OFFLINE_HTTP_TEST"),
+            intent_classifier=fixture_classifier(),
             feedback_service=FeedbackService(cls.feedback_repository),
             audit_service=AuditService(cls.audit_repository),
         )
@@ -172,6 +174,7 @@ class LocalHTTPProductSurfaceTest(unittest.TestCase):
         original_service = NexusOneRequestHandler.service
         NexusOneRequestHandler.service = ChatService(
             answer_composer=_ExplodingComposer(),
+            intent_classifier=fixture_classifier(),
             feedback_service=FeedbackService(self.feedback_repository),
             audit_service=AuditService(self.audit_repository),
         )

@@ -7,7 +7,19 @@ from typing import Any, Mapping
 
 RUN_NAME = "nexusone_main_orchestrator"
 SAFE_ROUTE_NAMES = frozenset(
-    {"rag", "sql", "combined", "ticket_create", "CASUAL", "GENERAL_KNOWLEDGE", "deny", "error"}
+    {
+        "rag",
+        "sql",
+        "combined",
+        "ticket_create",
+        "CASUAL",
+        "GENERAL_KNOWLEDGE",
+        "feedback",
+        "clarification",
+        "unsupported",
+        "deny",
+        "error",
+    }
 )
 
 
