@@ -40,6 +40,17 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual("not_used", response["capabilities"]["answer_composer"]["mode"])
         self.assertEqual("deterministic", response["model_backend"])
 
+    def test_streaming_response_accumulates_to_existing_contract_and_records_audit(self) -> None:
+        events = list(self.service.stream_message("u001", "How do I request AWS access?", include_trace=True))
+
+        self.assertEqual("response.complete", events[-1]["type"])
+        deltas = "".join(event["delta"] for event in events if event["type"] == "response.delta")
+        response = events[-1]["response"]
+        self.assertEqual(deltas, response["message"])
+        self.assertTrue(response["citations"])
+        self.assertIn("capabilities", response)
+        self.assertEqual(1, len(self.audit_repository.rows))
+
     def test_allowed_public_kb_question_returns_citation(self) -> None:
         response = self.service.handle_message("u001", "How do I request AWS access?")
 

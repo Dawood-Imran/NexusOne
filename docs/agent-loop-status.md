@@ -146,3 +146,14 @@
 - [ ] UI/UX review pass
 - [ ] Build passes
 - [ ] No known critical issues
+
+## Streaming launch validation
+
+- Transport choice: `POST /api/chat` remains JSON by default; browser callers opt in with `Accept: text/event-stream`. The stdlib adapter frames explicit SSE `response.start`, `response.delta`, `response.error`, and `response.complete` events. See `docs/streaming.md`.
+- Graph path: existing LangGraph `stream_mode=["updates", "custom"]` execution is retained. Only sanitized composer deltas and the final public response cross the HTTP boundary; deterministic/offline composition emits bounded deltas.
+- `./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` — pass, 134 tests.
+- `./.venv/bin/python -m unittest tests.unit.agents.orchestrator.test_answer_composer tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service tests.unit.api.test_streaming tests.unit.frontend.test_static_chat_ui` — pass, 61 focused streaming/orchestration/frontend tests.
+- `./.venv/bin/python -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` — pass.
+- Local HTTP SSE smoke — pass: authenticated browser-shaped request received start, 16 deltas, and completion; accumulated deltas exactly matched the final message and citations were preserved.
+- `chrome-devtools-axi` smoke on desktop — pass: sign-in, streaming “Writing…” state, final cited answer, source inspector, trace metadata, and composer recovery were verified against the local server.
+- Repository validation note: no `package.json`, npm scripts, Python lint/type-check configuration, or committed browser E2E harness exists in this worktree, so `npm run lint`, `npm run typecheck`, `npm run build`, and `npm run test:e2e` are not available commands; Python compilation, Node syntax, unit tests, and manual chrome-devtools smoke were run instead.

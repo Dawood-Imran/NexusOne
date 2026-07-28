@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol
 
 
 @dataclass(frozen=True)
@@ -78,6 +78,18 @@ class DeterministicAnswerComposer:
             fallback_reason=fallback_reason,
         )
 
+    def stream(
+        self,
+        context: Mapping[str, Any],
+        emit: Callable[[str], None],
+        on_error: Callable[[str], None] | None = None,
+    ) -> AnswerComposition:
+        """Emit deterministic output in chunks using the same answer contract."""
+
+        composition = self.compose(context)
+        _emit_chunks(composition.answer, emit)
+        return composition
+
 
 class LangChainOpenAIAnswerComposer:
     """LLM-backed answer composer using LangChain's OpenAI integration."""
@@ -102,36 +114,63 @@ class LangChainOpenAIAnswerComposer:
         return cls()
 
     def compose(self, context: Mapping[str, Any]) -> AnswerComposition:
-        response = self.model.invoke(
-            [
-                (
-                    "system",
-                    "You compose final answers for NexusOne Copilot, a permission-aware internal assistant.\n"
-                    "Use only the sanitized context provided by the graph. Do not invent facts.\n"
-                    "Do not expose SQL, prompts, hidden fields, raw user ids, requester ids, assignee ids, or internal parameters.\n"
-                    "If the structured connector only validated a query but did not execute it, clearly say live execution is not enabled.\n"
-                    "If an action_answer is provided, use it directly and do not add hidden fields or extra operational details.\n"
-                    "If the context contains procedural steps, include the concrete steps in the answer instead of telling the user to read, review, find, or refer to a guide.\n"
-                    "If the sanitized draft contains a numbered list, preserve those list items in the final answer without dropping them.\n"
-                    "If the context contains statuses, dates, amounts, or named records, preserve those exact values.\n"
-                    "For GENERAL_KNOWLEDGE, answer the educational question directly from general knowledge, without using or implying NexusOne sources.\n"
-                    "For every factual sentence that uses knowledge/document context, add an inline citation marker like [1].\n"
-                    "Use only citation markers that appear in the sanitized source list.\n"
-                    "Keep the answer concise, direct, and useful. Preserve important dates, statuses, and policy steps.\n"
-                    "Do not invent citations or source numbers.",
-                ),
-                (
-                    "human",
-                    "Compose the final answer from this sanitized graph context. "
-                    "The fields named structured_answer and knowledge_answer are sanitized answer drafts, not just references. "
-                    "Use their concrete content directly:\n"
-                    f"{_compact_context(context)}",
-                ),
-            ]
-        )
+        response = self.model.invoke(self._messages(context))
         content = getattr(response, "content", "")
         answer = _ensure_minimum_citation(str(content).strip(), context)
         return AnswerComposition(answer=answer, backend=f"openai:{self.model_name}")
+
+    def stream(
+        self,
+        context: Mapping[str, Any],
+        emit: Callable[[str], None],
+        on_error: Callable[[str], None] | None = None,
+    ) -> AnswerComposition:
+        """Stream provider text while retaining the final answer contract."""
+
+        chunks: list[str] = []
+        for chunk in self.model.stream(self._messages(context)):
+            text = _model_chunk_text(chunk)
+            if not text:
+                continue
+            chunks.append(text)
+            emit(text)
+        answer = "".join(chunks)
+        normalized = _ensure_minimum_citation(answer, context)
+        if normalized.startswith(answer) and normalized != answer:
+            emit(normalized[len(answer) :])
+            answer = normalized
+        # A provider stream can contain unusual normalization (for example,
+        # leading/trailing whitespace). Never claim a final answer that differs
+        # from the deltas already sent to the browser.
+        return AnswerComposition(answer=answer, backend=f"openai:{self.model_name}")
+
+    @staticmethod
+    def _messages(context: Mapping[str, Any]) -> list[tuple[str, str]]:
+        return [
+            (
+                "system",
+                "You compose final answers for NexusOne Copilot, a permission-aware internal assistant.\n"
+                "Use only the sanitized context provided by the graph. Do not invent facts.\n"
+                "Do not expose SQL, prompts, hidden fields, raw user ids, requester ids, assignee ids, or internal parameters.\n"
+                "If the structured connector only validated a query but did not execute it, clearly say live execution is not enabled.\n"
+                "If an action_answer is provided, use it directly and do not add hidden fields or extra operational details.\n"
+                "If the context contains procedural steps, include the concrete steps in the answer instead of telling the user to read, review, find, or refer to a guide.\n"
+                "If the sanitized draft contains a numbered list, preserve those list items in the final answer without dropping them.\n"
+                "If the context contains statuses, dates, amounts, or named records, preserve those exact values.\n"
+                "For GENERAL_KNOWLEDGE, answer the educational question directly from general knowledge, without using or implying NexusOne sources.\n"
+                "For every factual sentence that uses knowledge/document context, add an inline citation marker like [1].\n"
+                "Use only citation markers that appear in the sanitized source list.\n"
+                "Keep the answer concise, direct, and useful. Preserve important dates, statuses, and policy steps.\n"
+                "Do not invent citations or source numbers.",
+            ),
+            (
+                "human",
+                "Compose the final answer from this sanitized graph context. "
+                "The fields named structured_answer and knowledge_answer are sanitized answer drafts, not just references. "
+                "Use their concrete content directly:\n"
+                f"{_compact_context(context)}",
+            ),
+        ]
 
 
 class FallbackAnswerComposer:
@@ -160,6 +199,133 @@ class FallbackAnswerComposer:
             backend=f"{fallback.backend}_after_empty_llm",
             fallback_reason="OPENAI_EMPTY_RESPONSE",
         )
+
+    def stream(
+        self,
+        context: Mapping[str, Any],
+        emit: Callable[[str], None],
+        on_error: Callable[[str], None] | None = None,
+    ) -> AnswerComposition:
+        emitted: list[str] = []
+
+        def emit_primary(delta: str) -> None:
+            emitted.append(delta)
+            emit(delta)
+
+        try:
+            stream_method = getattr(self.primary, "stream", None)
+            if callable(stream_method):
+                composition = stream_method(context, emit_primary, on_error)
+            else:
+                composition = self.primary.compose(context)
+                _emit_chunks(composition.answer, emit_primary)
+            if composition.answer:
+                emitted_text = "".join(emitted)
+                if emitted_text == composition.answer:
+                    return composition
+                if composition.answer.startswith(emitted_text):
+                    emit(composition.answer[len(emitted_text) :])
+                    return composition
+                return AnswerComposition(
+                    answer=emitted_text,
+                    backend=composition.backend,
+                    error=composition.error,
+                    fallback_reason=composition.fallback_reason,
+                )
+        except Exception as exc:  # pragma: no cover - provider/network dependent.
+            if on_error is not None:
+                on_error("The primary answer provider was unavailable; using a local answer.")
+            if emitted:
+                return AnswerComposition(
+                    answer="".join(emitted),
+                    backend="partial_after_llm_error",
+                    error=type(exc).__name__,
+                    fallback_reason=f"OPENAI_RUNTIME_ERROR_{type(exc).__name__.upper()}",
+                )
+            fallback = self.fallback.compose(context)
+            _emit_chunks(fallback.answer, emit)
+            return AnswerComposition(
+                answer=fallback.answer,
+                backend=f"{fallback.backend}_after_llm_error",
+                error=type(exc).__name__,
+                fallback_reason=f"OPENAI_RUNTIME_ERROR_{type(exc).__name__.upper()}",
+            )
+
+        if on_error is not None:
+            on_error("The answer provider returned no content; using a local answer.")
+        fallback = self.fallback.compose(context)
+        _emit_chunks(fallback.answer, emit)
+        return AnswerComposition(
+            answer=fallback.answer,
+            backend=f"{fallback.backend}_after_empty_llm",
+            fallback_reason="OPENAI_EMPTY_RESPONSE",
+        )
+
+
+def compose_with_streaming(
+    composer: AnswerComposer,
+    context: Mapping[str, Any],
+    emit: Callable[[str], None],
+    on_error: Callable[[str], None] | None = None,
+) -> AnswerComposition:
+    """Use a composer's streaming hook with safe offline/error fallbacks."""
+
+    try:
+        stream_method = getattr(composer, "stream", None)
+        if callable(stream_method):
+            composition = stream_method(context, emit, on_error)
+        else:
+            composition = composer.compose(context)
+            _emit_chunks(composition.answer, emit)
+        if composition.answer:
+            return composition
+        if on_error is not None:
+            on_error("The answer provider returned no content; using a local answer.")
+    except Exception as exc:  # pragma: no cover - custom/provider dependent.
+        if on_error is not None:
+            on_error("The answer provider was unavailable; using a local answer.")
+        fallback = DeterministicAnswerComposer(
+            fallback_reason=f"ANSWER_PROVIDER_ERROR_{type(exc).__name__.upper()}"
+        ).compose(context)
+        _emit_chunks(fallback.answer, emit)
+        return AnswerComposition(
+            answer=fallback.answer,
+            backend="deterministic_after_provider_error",
+            error=type(exc).__name__,
+            fallback_reason=f"ANSWER_PROVIDER_ERROR_{type(exc).__name__.upper()}",
+        )
+
+    fallback = DeterministicAnswerComposer(fallback_reason="EMPTY_RESPONSE").compose(context)
+    _emit_chunks(fallback.answer, emit)
+    return AnswerComposition(
+        answer=fallback.answer,
+        backend="deterministic_after_empty_response",
+        fallback_reason="EMPTY_RESPONSE",
+    )
+
+
+def _emit_chunks(answer: str, emit: Callable[[str], None], *, chunk_size: int = 32) -> None:
+    for start in range(0, len(answer), chunk_size):
+        delta = answer[start : start + chunk_size]
+        if delta:
+            emit(delta)
+
+
+def _model_chunk_text(chunk: Any) -> str:
+    content = getattr(chunk, "content", chunk)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, Mapping):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+            elif isinstance(item, str):
+                parts.append(item)
+        return "".join(parts)
+    return str(content) if content is not None else ""
 
 
 def build_default_answer_composer() -> AnswerComposer:

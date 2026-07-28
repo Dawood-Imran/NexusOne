@@ -1114,6 +1114,26 @@ textarea:disabled {
   background: #fffaf1;
 }
 
+.message.streaming {
+  border-color: #abd5cf;
+  background: #fbfefd;
+}
+
+.message.streaming .message-status {
+  color: var(--teal-deep);
+}
+
+.message.streaming .message-body::after {
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 3px;
+  vertical-align: -0.15em;
+  background: var(--teal);
+  content: "";
+  animation: stream-caret 900ms ease-in-out infinite;
+}
+
 .message.loading {
   width: fit-content;
   min-width: 245px;
@@ -1234,6 +1254,11 @@ textarea:disabled {
 
 .loading-dots span:nth-child(3) {
   animation-delay: 0.3s;
+}
+
+@keyframes stream-caret {
+  0%, 45% { opacity: 1; }
+  46%, 100% { opacity: 0.2; }
 }
 
 @keyframes pulse {

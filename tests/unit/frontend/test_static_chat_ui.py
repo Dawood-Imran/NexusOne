@@ -28,6 +28,31 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn('body: JSON.stringify({ username, password })', self.app_js)
         self.assertIn("Those credentials were not accepted.", self.app_js)
 
+    def test_streaming_chat_uses_explicit_sse_events_and_progressive_message_state(self) -> None:
+        self.assertIn('Accept: "text/event-stream"', self.app_js)
+        self.assertIn("async function consumeStream(response, onEvent)", self.app_js)
+        self.assertIn("function parseStreamEvent(frame)", self.app_js)
+        self.assertIn('event.type === "response.delta"', self.app_js)
+        self.assertIn('event.type === "response.complete"', self.app_js)
+        self.assertIn('event.type === "response.error"', self.app_js)
+        self.assertIn("function beginStreamingAssistantMessage()", self.app_js)
+        self.assertIn("function updateStreamingAssistantMessage(delta)", self.app_js)
+        self.assertIn("function finalizeStreamingAssistantMessage(payload)", self.app_js)
+        self.assertIn("message.message += String(delta)", self.app_js)
+        self.assertIn("message.message = payload.message || message.message ||", self.app_js)
+        self.assertIn('status: "streaming"', self.app_js)
+        self.assertIn('message.status !== "streaming"', self.app_js)
+
+    def test_streaming_handles_malformed_frames_and_client_abort_without_stuck_loading(self) -> None:
+        self.assertIn("A response event was malformed; continuing safely.", self.app_js)
+        self.assertIn("new AbortController()", self.app_js)
+        self.assertIn("signal: controller.signal", self.app_js)
+        self.assertIn('error?.name === "AbortError"', self.app_js)
+        self.assertIn("function removeStreamingAssistantMessage()", self.app_js)
+        self.assertIn('setConversationStatus("Request stopped.")', self.app_js)
+        self.assertIn("reader.releaseLock()", self.app_js)
+        self.assertIn('window.addEventListener("pagehide"', self.app_js)
+
     def test_live_structured_rows_have_a_safe_inspector_table(self) -> None:
         self.assertIn("rows: Array.isArray(payload.rows) ? payload.rows : [],", self.app_js)
         self.assertIn("function renderStructuredRows(message)", self.app_js)

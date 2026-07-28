@@ -5,9 +5,11 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from langgraph.config import get_stream_writer
+
 from app.actions.ticket_service import TicketService
 from app.agents.orchestrator.action_routing import extract_ticket_request
-from app.agents.orchestrator.answer_composer import AnswerComposer
+from app.agents.orchestrator.answer_composer import AnswerComposer, compose_with_streaming
 from app.agents.orchestrator.knowledge import build_local_general_answer, casual_response
 from app.agents.orchestrator.routing import route_message
 from app.agents.orchestrator.state import OrchestratorState
@@ -355,7 +357,20 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             "sources": state.get("sql_sources", []),
             "sql_status": sql_output.sql_status if sql_output is not None else None,
         }
-        composition = composer.compose(context)
+        writer = _safe_stream_writer()
+        composition = compose_with_streaming(
+            composer,
+            context,
+            lambda delta: writer({"type": "response.delta", "delta": delta}),
+            lambda message: writer(
+                {
+                    "type": "response.error",
+                    "reason_code": "ANSWER_PROVIDER_FALLBACK",
+                    "message": message,
+                    "recoverable": True,
+                }
+            ),
+        )
         next_state: OrchestratorState = {
             **state,
             "final_answer": composition.answer,
@@ -601,6 +616,13 @@ def _turn_context(state: OrchestratorState) -> dict[str, str]:
 
 def _elapsed_ms(started: float) -> int:
     return int((time.perf_counter() - started) * 1000)
+
+
+def _safe_stream_writer() -> Any:
+    try:
+        return get_stream_writer()
+    except RuntimeError:
+        return lambda _event: None
 
 
 def _chunk_source_refs(results: tuple[ChunkSearchResult, ...]) -> list[dict[str, Any]]:

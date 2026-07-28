@@ -15,6 +15,8 @@ const state = {
   sending: false,
   authenticating: false,
   lastSubmittedText: "",
+  activeStreamController: null,
+  streamingMessageId: null,
   sessionExpiredHandled: false,
 };
 
@@ -232,6 +234,9 @@ function enterWorkspace(account, sessionToken = null) {
 }
 
 function showLogin() {
+  state.activeStreamController?.abort();
+  state.activeStreamController = null;
+  state.streamingMessageId = null;
   state.account = null;
   state.sessionToken = null;
   state.sending = false;
@@ -478,7 +483,9 @@ function renderMessage(message) {
       ? "error"
       : message.status === "no_answer"
         ? "no-answer"
-        : "";
+        : message.status === "streaming"
+          ? "streaming"
+          : "";
   const article = document.createElement("article");
   article.className = `message ${message.role} ${statusClass}`.trim();
   article.dataset.messageId = message.id;
@@ -505,9 +512,11 @@ function renderMessage(message) {
   }
   const body = document.createElement("div");
   body.className = "message-body";
-  renderMessageBody(body, message.message || "No response was returned.", message.citations || [], () => {
+  const displayMessage = message.status === "streaming" ? message.message : (message.message || "No response was returned.");
+  renderMessageBody(body, displayMessage, message.citations || [], () => {
     if (message.role === "assistant") selectAssistantMessage(message.id);
   });
+  if (message.status === "streaming") article.setAttribute("aria-busy", "true");
   article.appendChild(meta);
   article.appendChild(body);
   if (message.ticket) article.appendChild(renderTicketSummary(message.ticket));
@@ -515,7 +524,7 @@ function renderMessage(message) {
   if (message.status === "denied") article.appendChild(renderDeniedNextStep(message));
   if (message.status === "no_answer") article.appendChild(renderNoAnswerNextStep());
   if (["error", "refused"].includes(message.status)) article.appendChild(renderRetry(message.request_text || state.lastSubmittedText, message.status === "refused" ? "Status unavailable" : "Connection issue"));
-  if (message.role === "assistant" && !["error", "refused", "ready"].includes(message.status)) article.appendChild(renderFeedbackControls(message));
+  if (message.role === "assistant" && !["error", "refused", "ready"].includes(message.status) && message.status !== "streaming") article.appendChild(renderFeedbackControls(message));
   return article;
 }
 
@@ -561,6 +570,109 @@ function addLoadingMessage() {
 
 function removeLoadingMessage() {
   document.querySelector("#loadingMessage")?.remove();
+}
+
+function beginStreamingAssistantMessage() {
+  const conversation = activeConversation();
+  if (!conversation) return null;
+  removeLoadingMessage();
+  const message = {
+    id: `assistant-${Date.now()}`,
+    role: "assistant",
+    status: "streaming",
+    message: "",
+    citations: [],
+    sources: [],
+    rows: [],
+    columns: [],
+    row_count: 0,
+    sql_execution: null,
+    model_backend: null,
+    capabilities: null,
+    route: null,
+    category: null,
+    subgraph_trace: [],
+    ticket: null,
+    trace_expanded: false,
+    missing_fields: [],
+    allowed_alternatives: [],
+    trace: [],
+    conversation_id: "web-chat",
+    turn_id: "web-turn",
+    request_text: state.lastSubmittedText,
+  };
+  conversation.messages.push(message);
+  conversation.updatedAt = new Date().toISOString();
+  state.streamingMessageId = message.id;
+  state.selectedAssistantMessageId = message.id;
+  saveConversations();
+  renderConversationList();
+  renderActiveConversation();
+  return message;
+}
+
+function streamingAssistantMessage() {
+  const conversation = activeConversation();
+  if (!conversation || !state.streamingMessageId) return null;
+  return conversation.messages.find((message) => message.id === state.streamingMessageId) || null;
+}
+
+function updateStreamingAssistantMessage(delta) {
+  const message = streamingAssistantMessage();
+  if (!message || !delta) return;
+  message.message += String(delta);
+  const article = messages.querySelector(`[data-message-id="${CSS.escape(message.id)}"]`);
+  const body = article?.querySelector(".message-body");
+  if (body) body.textContent = message.message;
+  scrollMessages();
+}
+
+function removeStreamingAssistantMessage() {
+  const conversation = activeConversation();
+  if (!conversation || !state.streamingMessageId) return;
+  conversation.messages = conversation.messages.filter((message) => message.id !== state.streamingMessageId);
+  state.streamingMessageId = null;
+  state.selectedAssistantMessageId = latestAssistantMessage(conversation)?.id || null;
+  saveConversations();
+  renderConversationList();
+  renderActiveConversation();
+}
+
+function finalizeStreamingAssistantMessage(payload) {
+  const message = streamingAssistantMessage();
+  const conversation = activeConversation();
+  if (!message || !conversation) return;
+  message.status = payload.status || "answered";
+  message.reason_code = payload.reason_code;
+  message.route = payload.route || null;
+  message.message = payload.message || message.message || "No response was returned.";
+  message.citations = payload.citations || [];
+  message.sources = payload.sources || [];
+  message.rows = Array.isArray(payload.rows) ? payload.rows : [];
+  message.columns = Array.isArray(payload.columns) ? payload.columns : [];
+  message.row_count = Number.isInteger(payload.row_count) ? payload.row_count : 0;
+  message.sql_execution = payload.sql_execution || null;
+  message.model_backend = payload.model_backend || null;
+  message.capabilities = payload.capabilities || null;
+  message.category = payload.category || null;
+  message.subgraph_trace = payload.subgraph_trace || [];
+  message.ticket = sanitizeTicket(payload.ticket);
+  message.trace_expanded = Boolean(payload.trace?.length || payload.subgraph_trace?.length);
+  message.missing_fields = payload.missing_fields || [];
+  message.allowed_alternatives = payload.allowed_alternatives || [];
+  message.trace = payload.trace || [];
+  message.conversation_id = payload.conversation_id || "web-chat";
+  message.turn_id = payload.turn_id || "web-turn";
+  message.latency_ms = payload.latency_ms;
+  message.feedback = payload.feedback;
+  conversation.updatedAt = new Date().toISOString();
+  state.streamingMessageId = null;
+  state.selectedAssistantMessageId = message.id;
+  saveConversations();
+  renderConversationList();
+  renderActiveConversation();
+  updateResponseStatus(payload);
+  updateCapabilityStatus(payload);
 }
 
 function addAssistantMessage(payload) {
@@ -1044,34 +1156,157 @@ function setComposerAvailability() {
   messageInput.disabled = state.sending || !activeAccount();
 }
 
+function parseStreamEvent(frame) {
+  const lines = frame.split(/\r?\n/);
+  let eventName = "";
+  const dataLines = [];
+  lines.forEach((line) => {
+    if (line.startsWith("event:")) eventName = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+  });
+  if (!eventName || !dataLines.length) throw new Error("Malformed response event");
+  const payload = JSON.parse(dataLines.join("\n"));
+  if (!payload || payload.type !== eventName) throw new Error("Mismatched response event type");
+  return payload;
+}
+
+async function consumeStream(response, onEvent) {
+  if (!response.body || typeof response.body.getReader !== "function") throw new Error("Streaming is not supported by this browser.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let malformedCount = 0;
+  let completion = null;
+  let terminalError = null;
+  try {
+    while (true) {
+      const result = await reader.read();
+      buffer += decoder.decode(result.value || new Uint8Array(), { stream: !result.done });
+      let separator;
+      while ((separator = buffer.indexOf("\n\n")) >= 0) {
+        const frame = buffer.slice(0, separator);
+        buffer = buffer.slice(separator + 2);
+        if (!frame.trim()) continue;
+        try {
+          const event = parseStreamEvent(frame);
+          if (event.type === "response.complete") completion = event;
+          if (event.type === "response.error" && !event.recoverable) terminalError = event;
+          onEvent(event);
+        } catch (error) {
+          malformedCount += 1;
+          setConversationStatus("A response event was malformed; continuing safely.", "error");
+        }
+      }
+      if (result.done) break;
+    }
+    const remainder = buffer.trim();
+    if (remainder) {
+      try {
+        const event = parseStreamEvent(remainder);
+        if (event.type === "response.complete") completion = event;
+        if (event.type === "response.error" && !event.recoverable) terminalError = event;
+        onEvent(event);
+      } catch (error) {
+        malformedCount += 1;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (completion) return completion;
+  if (terminalError) return terminalError;
+  throw new Error(malformedCount ? "The response stream contained malformed events." : "The response stream ended before completion.");
+}
+
 async function sendMessage(text, options = {}) {
   const cleanText = String(text || "").trim();
   if (!cleanText || state.sending || !activeAccount()) return;
   if (options.addUser !== false) addUserMessage(cleanText);
   state.lastSubmittedText = cleanText;
   setSending(true);
+  const controller = new AbortController();
+  state.activeStreamController = controller;
+  let streamStarted = false;
+  let terminalEventHandled = false;
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
       credentials: "same-origin",
-      headers: { "Content-Type": "application/json", Accept: "application/json", ...sessionHeaders() },
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...sessionHeaders() },
       body: JSON.stringify({ message: cleanText, include_trace: traceToggle.checked }),
     });
-    const payload = await response.json();
     if (response.status === 401 || response.status === 403) {
       await handleSessionExpired();
       return;
     }
-    if (!response.ok) throw new Error(payload.message || `Chat request failed: ${response.status}`);
-    addAssistantMessage(payload);
-  } catch (error) {
-    addAssistantMessage({
-      status: "error",
-      request_text: cleanText,
-      message: "We could not complete that request. Try again in a moment.",
+    if (!response.ok) {
+      let payload = {};
+      try { payload = await response.json(); } catch (error) { /* use generic copy */ }
+      throw new Error(payload.message || `Chat request failed: ${response.status}`);
+    }
+    const result = await consumeStream(response, (event) => {
+      if (event.type === "response.start") {
+        if (!streamStarted) {
+          beginStreamingAssistantMessage();
+          streamStarted = true;
+        }
+        setConversationStatus("Copilot is writing…", "busy");
+      } else if (event.type === "response.delta") {
+        if (!streamStarted) {
+          beginStreamingAssistantMessage();
+          streamStarted = true;
+        }
+        updateStreamingAssistantMessage(event.delta || "");
+      } else if (event.type === "response.error") {
+        if (event.recoverable) {
+          setConversationStatus(event.message || "The primary provider is unavailable; finishing locally.", "busy");
+        } else {
+          terminalEventHandled = true;
+          finalizeStreamingAssistantMessage({
+            status: "error",
+            reason_code: event.reason_code || "STREAM_ERROR",
+            message: event.message || "We could not complete that request. Try again in a moment.",
+          });
+          setConversationStatus("The request could not be completed. You can try again.", "error");
+        }
+      } else if (event.type === "response.complete") {
+        finalizeStreamingAssistantMessage(event.response || {});
+      }
     });
-    setConversationStatus("The request could not be completed. You can try again.", "error");
+    if (result.type === "response.complete") {
+      if (!terminalEventHandled) finalizeStreamingAssistantMessage(result.response || {});
+    } else if (result.type === "response.error" && !terminalEventHandled) {
+      terminalEventHandled = true;
+      finalizeStreamingAssistantMessage({
+        status: "error",
+        reason_code: result.reason_code || "STREAM_ERROR",
+        message: result.message || "We could not complete that request. Try again in a moment.",
+      });
+      setConversationStatus("The request could not be completed. You can try again.", "error");
+    }
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      removeStreamingAssistantMessage();
+      setConversationStatus("Request stopped.");
+    } else {
+      if (streamStarted && !terminalEventHandled) {
+        finalizeStreamingAssistantMessage({
+          status: "error",
+          request_text: cleanText,
+          message: "We could not complete that request. Try again in a moment.",
+        });
+      } else {
+        addAssistantMessage({
+          status: "error",
+          request_text: cleanText,
+          message: "We could not complete that request. Try again in a moment.",
+        });
+      }
+      setConversationStatus("The request could not be completed. You can try again.", "error");
+    }
   } finally {
+    if (state.activeStreamController === controller) state.activeStreamController = null;
     removeLoadingMessage();
     setSending(false);
     messageInput.value = "";
@@ -1184,7 +1419,7 @@ function payloadMessage(payload) {
 }
 
 function statusLabel(status) {
-  const labels = { answered: "Ready", denied: "Access limited", error: "Needs attention", refused: "Needs attention", no_answer: "No match", ready: "Ready" };
+  const labels = { answered: "Ready", denied: "Access limited", error: "Needs attention", refused: "Needs attention", no_answer: "No match", streaming: "Writing…", ready: "Ready" };
   return labels[status] || "Response";
 }
 
@@ -1247,6 +1482,7 @@ suggestions.addEventListener("click", (event) => {
 document.addEventListener("click", (event) => {
   if (!accountPopover.hidden && !event.target.closest(".account-control-wrap")) closeAccountPopover();
 });
+window.addEventListener("pagehide", () => state.activeStreamController?.abort());
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if (!accountPopover.hidden) {

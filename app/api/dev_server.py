@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Mapping
 
+from app.api.streaming import STREAM_CONTENT_TYPE, encode_sse_event
 from app.auth.service import AuthenticatedSession, LocalAuthService
 
 
@@ -25,6 +26,10 @@ ROOT = Path(__file__).resolve().parents[2]
 STATIC_ROOT = ROOT / "frontend" / "static"
 SESSION_COOKIE_NAME = "nexusone_session"
 DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60
+
+
+class _ClientDisconnected(Exception):
+    """The browser closed an HTTP stream before the final event."""
 
 
 def _session_ttl_seconds() -> int:
@@ -157,12 +162,77 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
             self._send_identity_mismatch()
             return
 
+        if self._wants_event_stream():
+            self._handle_chat_stream(session, body)
+            return
+
         response = self._chat_service().handle_authenticated_message(
             session,
             message=str(body.get("message", "")),
             include_trace=_as_bool(body.get("include_trace", False)),
         )
         self._send_json(response)
+
+    def _handle_chat_stream(self, session: AuthenticatedSession, body: Mapping[str, Any]) -> None:
+        """Write a bounded SSE contract while preserving the JSON chat path."""
+
+        try:
+            self._send_stream_headers()
+            self._send_stream_event(
+                {
+                    "type": "response.start",
+                    "conversation_id": "web-chat",
+                    "turn_id": "web-turn",
+                }
+            )
+            events = self._chat_service().stream_authenticated_message(
+                session,
+                message=str(body.get("message", "")),
+                include_trace=_as_bool(body.get("include_trace", False)),
+            )
+            for event in events:
+                if isinstance(event, Mapping):
+                    self._send_stream_event(event)
+        except _ClientDisconnected:
+            # Stopping iteration here also closes an in-flight LangGraph/model
+            # stream as far as the synchronous stdlib adapter can observe it.
+            return
+        except Exception:
+            try:
+                self._send_stream_event(
+                    {
+                        "type": "response.error",
+                        "reason_code": "STREAM_ERROR",
+                        "message": "We could not complete that request. Try again in a moment.",
+                        "recoverable": False,
+                    }
+                )
+            except _ClientDisconnected:
+                return
+
+    def _wants_event_stream(self) -> bool:
+        accepted = self.headers.get("Accept", "")
+        return "text/event-stream" in accepted.lower()
+
+    def _send_stream_headers(self) -> None:
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", STREAM_CONTENT_TYPE)
+        self.send_header("Cache-Control", "no-cache, no-store")
+        self.send_header("Connection", "close")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        self.wfile.flush()
+
+    def _send_stream_event(self, event: Mapping[str, Any]) -> None:
+        event_type = event.get("type")
+        if not isinstance(event_type, str):
+            raise ValueError("stream event is missing its type")
+        payload = {key: value for key, value in event.items() if key != "type"}
+        try:
+            self.wfile.write(encode_sse_event(event_type, payload))
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError) as error:
+            raise _ClientDisconnected from error
 
     def _handle_feedback(self) -> None:
         session = self._current_session()

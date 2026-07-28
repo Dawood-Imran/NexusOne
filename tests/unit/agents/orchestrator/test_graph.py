@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from app.actions.ticket_service import InMemoryTicketRepository, TicketService
@@ -77,6 +78,51 @@ class NexusOneOrchestratorTest(unittest.TestCase):
         self.assertEqual("GENERAL_KNOWLEDGE", route_message("What is a typical vacation policy?"))
         self.assertEqual("sql", route_message("How many employees are in Engineering?"))
         self.assertEqual("rag", route_message("How does NexusOne's ticket system work?"))
+
+    def test_streaming_deltas_aggregate_to_the_final_response_and_keep_trace(self) -> None:
+        events = list(
+            self.orchestrator.stream_with_events(
+                {"user_id": "u001", "message": "How do I request AWS access?", "include_trace": True}
+            )
+        )
+
+        self.assertEqual("response.complete", events[-1]["type"])
+        deltas = "".join(event["delta"] for event in events if event["type"] == "response.delta")
+        response = events[-1]["response"]
+        self.assertTrue(deltas)
+        self.assertEqual(deltas, response["message"])
+        self.assertTrue(response["citations"])
+        self.assertTrue(response["trace"])
+        self.assertNotIn("profile", json.dumps([event for event in events if event["type"] != "response.complete"]))
+
+    def test_streaming_provider_error_uses_safe_recoverable_event_and_offline_fallback(self) -> None:
+        orchestrator = NexusOneOrchestrator(
+            answer_composer=_ExplodingComposer(),
+            ticket_service=TicketService(self.ticket_repository),
+        )
+
+        events = list(orchestrator.stream_with_events({"user_id": "u001", "message": "How do I request AWS access?"}))
+
+        errors = [event for event in events if event["type"] == "response.error"]
+        self.assertEqual(1, len(errors))
+        self.assertTrue(errors[0]["recoverable"])
+        self.assertNotIn("secret", json.dumps(errors).lower())
+        deltas = "".join(event["delta"] for event in events if event["type"] == "response.delta")
+        self.assertEqual(deltas, events[-1]["response"]["message"])
+        self.assertTrue(deltas)
+
+    def test_streaming_empty_composer_response_does_not_leave_the_graph_pending(self) -> None:
+        orchestrator = NexusOneOrchestrator(
+            answer_composer=_EmptyComposer(),
+            ticket_service=TicketService(self.ticket_repository),
+        )
+
+        events = list(orchestrator.stream_with_events({"user_id": "u001", "message": "What is a REST API?"}))
+
+        self.assertEqual("response.complete", events[-1]["type"])
+        self.assertTrue(events[-1]["response"]["message"])
+        deltas = "".join(event["delta"] for event in events if event["type"] == "response.delta")
+        self.assertEqual(deltas, events[-1]["response"]["message"])
 
     def test_rag_question_uses_permission_filtered_context(self) -> None:
         response = self.orchestrator.invoke(
@@ -233,6 +279,16 @@ class NexusOneOrchestratorTest(unittest.TestCase):
         nodes = [step["node"] for step in response["trace"]]
         self.assertNotIn("run_ticket_action", nodes)
         self.assertEqual([], self.ticket_repository.tickets)
+
+
+class _ExplodingComposer:
+    def compose(self, context):
+        raise RuntimeError("secret prompt content")
+
+
+class _EmptyComposer:
+    def compose(self, context):
+        return AnswerComposition(answer="", backend="empty")
 
 
 class _SpyComposer:

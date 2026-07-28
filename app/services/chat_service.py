@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any, Mapping
 
 from sqlalchemy import create_engine
@@ -108,6 +109,41 @@ class ChatService:
             profile=session.profile,
         )
 
+    def stream_authenticated_message(
+        self,
+        session: AuthenticatedSession,
+        message: str,
+        include_trace: bool = False,
+    ) -> Iterator[Mapping[str, Any]]:
+        """Yield safe delta/error/completion events for an authenticated turn."""
+
+        yield from self.stream_message(
+            session.user_id,
+            message,
+            include_trace=include_trace,
+            profile=session.profile,
+        )
+
+    def stream_message(
+        self,
+        user_id: str,
+        message: str,
+        *,
+        include_trace: bool = False,
+        profile: Any | None = None,
+    ) -> Iterator[Mapping[str, Any]]:
+        payload = self._request_payload(user_id, message, include_trace=include_trace, profile=profile)
+        for event in self.orchestrator.stream_with_events(payload):
+            event_type = event.get("type") if isinstance(event, Mapping) else None
+            if event_type == "response.complete":
+                raw_response = event.get("response")
+                if not isinstance(raw_response, Mapping):
+                    raise RuntimeError("stream completion did not include a response")
+                response = self._decorate_response(dict(raw_response))
+                yield {"type": "response.complete", "response": response}
+            elif event_type in {"response.delta", "response.error"}:
+                yield dict(event)
+
     def _handle_message(
         self,
         user_id: str,
@@ -115,6 +151,17 @@ class ChatService:
         *,
         include_trace: bool,
         profile: Any | None = None,
+    ) -> dict[str, Any]:
+        payload = self._request_payload(user_id, message, include_trace=include_trace, profile=profile)
+        return self._decorate_response(dict(self.orchestrator.invoke(payload)))
+
+    def _request_payload(
+        self,
+        user_id: str,
+        message: str,
+        *,
+        include_trace: bool,
+        profile: Any | None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "conversation_id": "web-chat",
@@ -126,7 +173,9 @@ class ChatService:
         }
         if profile is not None:
             payload["profile"] = profile
-        response = dict(self.orchestrator.invoke(payload))
+        return payload
+
+    def _decorate_response(self, response: dict[str, Any]) -> dict[str, Any]:
         response["capabilities"] = self._capabilities_for_response(response)
         self._record_audit(response)
         return response

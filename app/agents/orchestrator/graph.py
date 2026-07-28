@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any, Mapping
 
 from langgraph.graph import END, START, StateGraph
@@ -129,22 +130,65 @@ class NexusOneOrchestrator:
         return self.invoke_with_trace(payload).response
 
     def invoke_with_trace(self, payload: Mapping[str, Any]) -> OrchestratorRun:
-        state: OrchestratorState = {
-            "conversation_id": str(payload.get("conversation_id", "web-chat")),
-            "turn_id": str(payload.get("turn_id", "web-turn")),
-            "user_id": str(payload.get("user_id", "")),
-            "message": str(payload.get("message", "")),
-            "include_trace": bool(payload.get("include_trace", False)),
-            "execute_sql": bool(payload.get("execute_sql", False)),
-        }
-        # Authenticated API callers may pass the immutable server-resolved
-        # profile so the graph does not reconstruct identity from client data.
-        if payload.get("profile") is not None:
-            state["profile"] = payload["profile"]
+        state = _state_from_payload(payload)
         output = self.graph.invoke(state, config=build_langsmith_config(state))
         response = output["response"]
         trace = tuple(output.get("trace", ()))
         return OrchestratorRun(response=response, trace=trace)
+
+    def stream_with_events(self, payload: Mapping[str, Any]) -> Iterator[Mapping[str, Any]]:
+        """Stream safe answer events from the existing graph execution.
+
+        LangGraph remains the source of orchestration truth.  Only the
+        composer emits custom delta events; graph state and prompts are never
+        forwarded to the HTTP client.  The final event carries the same
+        response mapping returned by :meth:`invoke`.
+        """
+
+        state = _state_from_payload(payload)
+        final_response: Mapping[str, Any] | None = None
+        for event in self.graph.stream(
+            state,
+            config=build_langsmith_config(state),
+            stream_mode=["updates", "custom"],
+            version="v2",
+        ):
+            if not isinstance(event, Mapping):
+                continue
+            event_type = event.get("type")
+            if event_type == "custom":
+                data = event.get("data")
+                if isinstance(data, Mapping) and data.get("type") in {"response.delta", "response.error"}:
+                    yield dict(data)
+                continue
+            if event_type != "updates":
+                continue
+            data = event.get("data")
+            if not isinstance(data, Mapping):
+                continue
+            for node_update in data.values():
+                if isinstance(node_update, Mapping) and isinstance(node_update.get("response"), Mapping):
+                    final_response = node_update["response"]
+
+        if final_response is None:
+            raise RuntimeError("graph did not produce a final response")
+        yield {"type": "response.complete", "response": dict(final_response)}
+
+
+def _state_from_payload(payload: Mapping[str, Any]) -> OrchestratorState:
+    state: OrchestratorState = {
+        "conversation_id": str(payload.get("conversation_id", "web-chat")),
+        "turn_id": str(payload.get("turn_id", "web-turn")),
+        "user_id": str(payload.get("user_id", "")),
+        "message": str(payload.get("message", "")),
+        "include_trace": bool(payload.get("include_trace", False)),
+        "execute_sql": bool(payload.get("execute_sql", False)),
+    }
+    # Authenticated API callers may pass the immutable server-resolved profile
+    # so the graph does not reconstruct identity from client data.
+    if payload.get("profile") is not None:
+        state["profile"] = payload["profile"]
+    return state
 
 
 def _route_after_question(state: OrchestratorState) -> str:
