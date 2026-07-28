@@ -290,7 +290,8 @@ def build_default_intent_classifier() -> IntentClassifier:
 
     from app.runtime.config import RuntimeConfig
 
-    if not RuntimeConfig.from_env().openai_api_key_configured:
+    config = RuntimeConfig.from_env()
+    if not config.openai_api_key_configured:
         return UnavailableIntentClassifier()
     try:
         return LangChainOpenAIIntentClassifier(

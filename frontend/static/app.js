@@ -46,8 +46,6 @@ const accountDetailDepartment = document.querySelector("#accountDetailDepartment
 const accountDetailLocation = document.querySelector("#accountDetailLocation");
 const accountDetailEmail = document.querySelector("#accountDetailEmail");
 const newChatButton = document.querySelector("#newChatButton");
-const conversationRail = document.querySelector("#conversationRail");
-const leftSidebarToggle = document.querySelector("#leftSidebarToggle");
 const conversationList = document.querySelector("#conversationList");
 const conversationEmpty = document.querySelector("#conversationEmpty");
 const conversationTitle = document.querySelector("#conversationTitle");
@@ -55,7 +53,6 @@ const pageTitle = document.querySelector("#pageTitle");
 const messages = document.querySelector("#messages");
 const chatForm = document.querySelector("#chatForm");
 const messageInput = document.querySelector("#messageInput");
-const characterCount = document.querySelector("#characterCount");
 const sendButton = document.querySelector("#sendButton");
 const traceToggle = document.querySelector("#traceToggle");
 const conversationStatus = document.querySelector("#conversationStatus");
@@ -64,9 +61,6 @@ const inspector = document.querySelector("#inspector");
 const inspectorContent = document.querySelector("#inspectorContent");
 const mobileInspectorButton = document.querySelector("#mobileInspectorButton");
 const closeInspectorButton = document.querySelector("#closeInspectorButton");
-const serviceStatus = document.querySelector("#serviceStatus");
-const serviceStatusIndicator = document.querySelector("#serviceStatusIndicator");
-const capabilityStatus = document.querySelector("#capabilityStatus");
 let skipNextAccountFocus = false;
 
 async function init() {
@@ -222,10 +216,7 @@ function enterWorkspace(account, sessionToken = null) {
   updateAccountControl();
   renderConversationList();
   renderActiveConversation();
-  setConversationStatus("Ready when you are.");
-  setServiceState("Session ready", "live");
-  capabilityStatus.textContent = "Protected session";
-  setSidebarExpanded(true);
+  setConversationStatus("");
   if (window.matchMedia("(min-width: 981px)").matches) openInspector();
   else closeInspector();
   setComposerAvailability();
@@ -491,7 +482,8 @@ function renderMessage(message) {
   article.dataset.messageId = message.id;
   if (message.role === "assistant") {
     article.tabIndex = 0;
-    article.setAttribute("aria-label", `Copilot response: ${statusLabel(message.status)}`);
+    const responseStatus = statusLabel(message.status);
+    article.setAttribute("aria-label", responseStatus ? `Copilot response: ${responseStatus}` : "Copilot response");
     article.classList.toggle("selected", message.id === state.selectedAssistantMessageId);
     article.addEventListener("click", () => selectAssistantMessage(message.id));
     article.addEventListener("focus", () => selectAssistantMessage(message.id));
@@ -504,11 +496,14 @@ function renderMessage(message) {
   } else {
     const assistantName = document.createElement("span");
     assistantName.textContent = "Copilot";
-    const status = document.createElement("span");
-    status.className = "message-status";
-    status.textContent = statusLabel(message.status);
     meta.appendChild(assistantName);
-    meta.appendChild(status);
+    const statusText = statusLabel(message.status);
+    if (statusText) {
+      const status = document.createElement("span");
+      status.className = "message-status";
+      status.textContent = statusText;
+      meta.appendChild(status);
+    }
   }
   const body = document.createElement("div");
   body.className = "message-body";
@@ -672,7 +667,6 @@ function finalizeStreamingAssistantMessage(payload) {
   renderConversationList();
   renderActiveConversation();
   updateResponseStatus(payload);
-  updateCapabilityStatus(payload);
 }
 
 function addAssistantMessage(payload) {
@@ -714,7 +708,6 @@ function addAssistantMessage(payload) {
   renderConversationList();
   renderActiveConversation();
   updateResponseStatus(payload);
-  updateCapabilityStatus(payload);
 }
 
 function collectSourceItems(payload) {
@@ -875,9 +868,9 @@ function closeInspector() {
   appView.classList.add("right-inspector-collapsed");
   mobileInspectorButton.setAttribute("aria-expanded", "false");
   setIconControlLabel(mobileInspectorButton, "Show conversation details");
-  mobileInspectorButton.querySelector(".panel-toggle-icon").textContent = "‹";
+  mobileInspectorButton.querySelector(".panel-toggle-icon").textContent = ">";
   setIconControlLabel(closeInspectorButton, "Expand conversation details");
-  closeInspectorButton.querySelector(".panel-toggle-icon").textContent = "›";
+  closeInspectorButton.querySelector(".panel-toggle-icon").textContent = ">";
   if (document.activeElement !== mobileInspectorButton && document.activeElement !== messageInput) mobileInspectorButton.focus();
 }
 
@@ -887,17 +880,9 @@ function openInspector() {
   appView.classList.remove("right-inspector-collapsed");
   mobileInspectorButton.setAttribute("aria-expanded", "true");
   setIconControlLabel(mobileInspectorButton, "Hide conversation details");
-  mobileInspectorButton.querySelector(".panel-toggle-icon").textContent = "›";
+  mobileInspectorButton.querySelector(".panel-toggle-icon").textContent = ">";
   setIconControlLabel(closeInspectorButton, "Collapse conversation details");
-  closeInspectorButton.querySelector(".panel-toggle-icon").textContent = "×";
-}
-
-function setSidebarExpanded(expanded) {
-  conversationRail.classList.toggle("is-collapsed", !expanded);
-  appView.classList.toggle("left-sidebar-collapsed", !expanded);
-  leftSidebarToggle.setAttribute("aria-expanded", String(expanded));
-  setIconControlLabel(leftSidebarToggle, expanded ? "Collapse navigation" : "Expand navigation");
-  leftSidebarToggle.querySelector(".sidebar-toggle-icon").textContent = expanded ? "‹" : "›";
+  closeInspectorButton.querySelector(".panel-toggle-icon").textContent = ">";
 }
 
 function renderInspector() {
@@ -1310,7 +1295,6 @@ async function sendMessage(text, options = {}) {
     removeLoadingMessage();
     setSending(false);
     messageInput.value = "";
-    updateCharacterCount();
     autoResizeComposer();
     if (activeAccount()) messageInput.focus();
   }
@@ -1321,15 +1305,9 @@ function updateResponseStatus(payload) {
     setConversationStatus("This request was stopped before restricted sources were searched.");
   } else if (payload.status === "error" || payload.status === "refused") {
     setConversationStatus("The request needs attention.", "error");
-  } else if (payload.status === "no_answer") {
-    setConversationStatus("No approved source matched that question.");
   } else {
-    setConversationStatus("Answer received.");
+    setConversationStatus("");
   }
-}
-
-function updateCapabilityStatus() {
-  capabilityStatus.textContent = "Protected session";
 }
 
 function updateSuggestionsVisibility() {
@@ -1342,11 +1320,6 @@ function updateSuggestionsVisibility() {
 function setConversationStatus(text, stateName = "") {
   conversationStatus.textContent = text;
   conversationStatus.className = `conversation-status ${stateName ? `is-${stateName}` : ""}`.trim();
-}
-
-function updateCharacterCount() {
-  characterCount.textContent = `${messageInput.value.length} / 2000`;
-  setComposerAvailability();
 }
 
 function autoResizeComposer() {
@@ -1365,7 +1338,7 @@ function startNewChat() {
   saveConversations();
   renderConversationList();
   renderActiveConversation();
-  setConversationStatus("New conversation ready.");
+  setConversationStatus("");
   messageInput.focus();
 }
 
@@ -1403,11 +1376,6 @@ function setAuthServiceState(text, stateName = "") {
   authServiceIndicator.className = `status-dot ${stateName ? `is-${stateName}` : ""}`.trim();
 }
 
-function setServiceState(text, stateName = "") {
-  serviceStatus.textContent = text;
-  serviceStatusIndicator.className = `status-dot ${stateName ? `is-${stateName}` : ""}`.trim();
-}
-
 function authServiceError(status) {
   if (status === 404) return "Sign-in service is not configured";
   if (status >= 500) return "Sign-in service is unavailable";
@@ -1419,8 +1387,8 @@ function payloadMessage(payload) {
 }
 
 function statusLabel(status) {
-  const labels = { answered: "Ready", denied: "Access limited", error: "Needs attention", refused: "Needs attention", no_answer: "No match", streaming: "Writing…", ready: "Ready" };
-  return labels[status] || "Response";
+  const labels = { denied: "Access limited", error: "Needs attention", refused: "Needs attention", streaming: "Writing…" };
+  return labels[status] || "";
 }
 
 function formatRole(role) {
@@ -1446,11 +1414,6 @@ accountButton.addEventListener("click", toggleAccountPopover);
 accountButton.addEventListener("focus", openAccountPopover);
 logoutButton.addEventListener("click", logout);
 newChatButton.addEventListener("click", startNewChat);
-leftSidebarToggle.addEventListener("click", () => {
-  const expanded = leftSidebarToggle.getAttribute("aria-expanded") === "true";
-  setSidebarExpanded(!expanded);
-  leftSidebarToggle.focus();
-});
 mobileInspectorButton.addEventListener("click", () => {
   const expanded = mobileInspectorButton.getAttribute("aria-expanded") === "true";
   if (expanded) closeInspector();
@@ -1462,11 +1425,11 @@ chatForm.addEventListener("submit", (event) => {
   sendMessage(messageInput.value);
 });
 messageInput.addEventListener("input", () => {
-  updateCharacterCount();
+  setComposerAvailability();
   autoResizeComposer();
 });
 messageInput.addEventListener("keydown", (event) => {
-  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
     chatForm.requestSubmit();
   }
@@ -1475,7 +1438,7 @@ suggestions.addEventListener("click", (event) => {
   const button = event.target.closest("[data-prompt]");
   if (!button || state.sending || !activeAccount()) return;
   messageInput.value = button.dataset.prompt || "";
-  updateCharacterCount();
+  setComposerAvailability();
   autoResizeComposer();
   messageInput.focus();
 });
@@ -1500,6 +1463,6 @@ document.addEventListener("keydown", (event) => {
 });
 accountPopover.addEventListener("click", (event) => event.stopPropagation());
 
-updateCharacterCount();
+setComposerAvailability();
 autoResizeComposer();
 init();

@@ -177,3 +177,14 @@
 - Local HTTP SSE smoke — pass: authenticated browser-shaped request received start, 16 deltas, and completion; accumulated deltas exactly matched the final message and citations were preserved.
 - `chrome-devtools-axi` smoke on desktop — pass: sign-in, streaming “Writing…” state, final cited answer, source inspector, trace metadata, and composer recovery were verified against the local server.
 - Repository validation note: no `package.json`, npm scripts, Python lint/type-check configuration, or committed browser E2E harness exists in this worktree, so `npm run lint`, `npm run typecheck`, `npm run build`, and `npm run test:e2e` are not available commands; Python compilation, Node syntax, unit tests, and manual chrome-devtools smoke were run instead.
+
+## Intent factory and composer cleanup validation
+
+- Fixed `build_default_intent_classifier` to construct `config = RuntimeConfig.from_env()` once before credential/model/temperature selection. The regression tests patch the config and provider constructor to prove configured OpenAI selection and preserve unavailable results for missing credentials or provider construction failures.
+- Removed the authenticated shell's protected-session and session-ready copy, the left rail toggle, the composer character counter, and normal/no-match response status labels. The right inspector control remains keyboard-labeled/focusable, renders a centered `>` symbol, and keeps source/trace/context data available.
+- Enter submits the composer; Shift+Enter remains the native multiline newline path. The textarea retains `maxlength="2000"`, while server-side request validation remains unchanged.
+- `./.venv/bin/python -m unittest tests.unit.agents.orchestrator.test_intent_classifier tests.unit.frontend.test_static_chat_ui tests.unit.frontend.test_frontend_security_contract` — pass, 40 focused tests.
+- `./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` — pass, 176 tests.
+- `./.venv/bin/python -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` — pass.
+- Local HTTP smoke with empty `OPENAI_API_KEY`/`DATABASE_URL` — pass: unauthenticated denial, local login/session, static marker absence, and safe `INTENT_CLASSIFIER_UNAVAILABLE` chat clarification.
+- `chrome-devtools-axi` smoke — pass: signed-out/authenticated shell, removed-label absence, centered `>` control, Enter submit recovery, Shift+Enter newline, and 390x844 layout with no horizontal overflow.

@@ -12,6 +12,7 @@ from app.agents.orchestrator.intent_classifier import (
     IntentClassificationSchema,
     LangChainOpenAIIntentClassifier,
     UnavailableIntentClassifier,
+    build_default_intent_classifier,
     classify_request,
     safe_intent_result,
 )
@@ -133,6 +134,55 @@ class IntentClassifierContractTest(unittest.TestCase):
         self.assertEqual("INTENT_CLASSIFIER_UNAVAILABLE", result.reason_code)
         self.assertEqual(INTENT_CONTRACT_VERSION, result.contract_version)
         self.assertEqual(CLASSIFIER_VERSION, result.classifier_version)
+
+    def test_default_factory_uses_configured_openai_model_and_temperature(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "OPENAI_API_KEY": "fixture-key-not-for-output",
+                "OPENAI_INTENT_MODEL": "fixture-intent-model",
+                "OPENAI_INTENT_TEMPERATURE": "0.15",
+            },
+            clear=True,
+        ), patch("app.agents.orchestrator.intent_classifier.LangChainOpenAIIntentClassifier") as provider_constructor:
+            classifier = build_default_intent_classifier()
+
+        self.assertIs(classifier, provider_constructor.return_value)
+        provider_constructor.assert_called_once_with(
+            model_name="fixture-intent-model",
+            temperature=0.15,
+        )
+
+    def test_default_factory_is_unavailable_without_credentials_or_provider(self) -> None:
+        from types import SimpleNamespace
+
+        missing_config = SimpleNamespace(
+            openai_api_key_configured=False,
+            openai_intent_model="unused",
+            openai_intent_temperature=0.0,
+        )
+        with patch("app.runtime.config.RuntimeConfig.from_env", return_value=missing_config), patch(
+            "app.agents.orchestrator.intent_classifier.LangChainOpenAIIntentClassifier"
+        ) as provider_constructor:
+            unavailable = build_default_intent_classifier()
+
+        self.assertIsInstance(unavailable, UnavailableIntentClassifier)
+        self.assertEqual("INTENT_CLASSIFIER_UNAVAILABLE", unavailable.reason_code)
+        provider_constructor.assert_not_called()
+
+        failing_config = SimpleNamespace(
+            openai_api_key_configured=True,
+            openai_intent_model="fixture-intent-model",
+            openai_intent_temperature=0.0,
+        )
+        with patch("app.runtime.config.RuntimeConfig.from_env", return_value=failing_config), patch(
+            "app.agents.orchestrator.intent_classifier.LangChainOpenAIIntentClassifier",
+            side_effect=RuntimeError("provider construction failed"),
+        ):
+            unavailable = build_default_intent_classifier()
+
+        self.assertIsInstance(unavailable, UnavailableIntentClassifier)
+        self.assertEqual("INTENT_PROVIDER_UNAVAILABLE", unavailable.reason_code)
 
     def test_no_provider_default_is_clarification_without_protected_nodes(self) -> None:
         from app.agents.orchestrator import NexusOneOrchestrator
