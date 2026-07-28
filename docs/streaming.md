@@ -12,13 +12,13 @@ Each event has an SSE `event` name and a JSON `data` object with the same `type`
 
 ```text
 event: response.start
-data: {"type":"response.start","conversation_id":"web-chat","turn_id":"web-turn"}
+data: {"type":"response.start","conversation_id":"<server-conversation-uuid>","turn_id":"<server-turn-uuid>"}
 
 ```
 
 Supported event types:
 
-- `response.start`: safe turn identifiers only; no question, prompt, profile internals, or provider details.
+- `response.start`: server-recognized conversation and turn identifiers only; no question, prompt, profile internals, or provider details. The conversation ID is stable across turns and is also the graph `thread_id`.
 - `response.delta`: one user-visible assistant text delta in `delta`.
 - `response.error`: a safe, typed error. Provider fallback errors may be marked `recoverable`; transport/orchestration failures are terminal.
 - `response.complete`: the existing JSON chat response under `response`, including the accumulated `message`, citations, rows, trace/subgraph trace when requested, capabilities, and response metadata.

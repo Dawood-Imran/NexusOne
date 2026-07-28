@@ -94,16 +94,47 @@ and returns `200`:
 {"status":"signed_out"}
 ```
 
+### `POST /api/conversations`
+
+Requires the session cookie. Creates a server-owned conversation and returns its
+opaque UUID. A browser must not invent a durable conversation ID.
+
+```json
+{
+  "status": "created",
+  "conversation_id": "2d5c...",
+  "title": "New conversation",
+  "turn_count": 0
+}
+```
+
+`GET /api/conversations` lists the authenticated owner's bounded recent
+conversations and turns. `GET /api/conversations/{conversation_id}` reads one
+owner-scoped conversation. `DELETE /api/conversations/{conversation_id}`
+removes it for that owner. Unknown and other-owner IDs return the same generic
+`CONVERSATION_NOT_FOUND` response.
+
 ### `POST /api/chat`
 
 Requires the session cookie. Request body:
 
 ```json
 {
+  "conversation_id": "2d5c...",
+  "turn_id": "optional-client-idempotency-id",
   "message": "How do I request AWS access?",
-  "include_trace": false
+  "include_trace": false,
+  "memory_opt_in": false
 }
 ```
+
+`conversation_id` is optional for compatibility. When omitted, the server
+creates a UUID conversation; subsequent turns must send the returned ID. The
+response and every SSE event's `response.start`/`response.complete` metadata
+return `conversation_id` and a server-generated `turn_id`. A repeated turn ID
+with identical text replays the stored response; a different text returns
+`TURN_ID_REUSE` (`409`). Malformed IDs return `400`; unknown or other-owner
+IDs return `404` without confirming ownership or existence.
 
 The server takes the user ID/profile/role from the session and passes that
 identity to the orchestrator. A legacy `user_id` field is ignored as an

@@ -73,6 +73,9 @@ class RuntimeConfig:
     langsmith_api_key_configured: bool
     langsmith_project: str
     retrieval_config: HybridRetrievalConfig
+    runtime_data_dir: Path
+    conversation_database_path: Path
+    user_memory_dir: Path
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "RuntimeConfig":
@@ -90,6 +93,9 @@ class RuntimeConfig:
             langsmith_api_key_configured=_configured_secret(values.get("LANGSMITH_API_KEY")),
             langsmith_project=values.get("LANGSMITH_PROJECT", "nexusone-copilot").strip() or "nexusone-copilot",
             retrieval_config=HybridRetrievalConfig.from_env(values),
+            runtime_data_dir=_runtime_data_dir(values),
+            conversation_database_path=_runtime_data_dir(values) / "nexusone_conversations.sqlite3",
+            user_memory_dir=_user_memory_dir(values, _runtime_data_dir(values)),
         )
 
     def safe_metadata(self) -> dict[str, object]:
@@ -109,6 +115,22 @@ class RuntimeConfig:
             "langsmith_project": self.langsmith_project,
             "retrieval": self.retrieval_config.safe_metadata(),
         }
+
+
+def _runtime_data_dir(values: Mapping[str, str]) -> Path:
+    configured = values.get("NEXUSONE_RUNTIME_DIR") or values.get("NEXUSONE_MEMORY_DIR")
+    if configured and configured.strip():
+        path = Path(configured.strip()).expanduser()
+        return (path if path.is_absolute() else repository_root() / path).resolve()
+    return repository_root() / "data" / "runtime"
+
+
+def _user_memory_dir(values: Mapping[str, str], runtime_dir: Path) -> Path:
+    configured = values.get("NEXUSONE_USER_MEMORY_DIR")
+    if configured and configured.strip():
+        path = Path(configured.strip()).expanduser()
+        return (path if path.is_absolute() else repository_root() / path).resolve()
+    return runtime_dir / "user_memory"
 
 
 def _optional_value(value: str | None) -> str | None:

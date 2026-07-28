@@ -14,6 +14,16 @@
   - Playwright MCP is now available in this session and was used for manual desktop/mobile UI inspection. Committed Playwright E2E coverage is still pending.
   - LangSmith hosted upload can fail noisily in restricted-network shells when tracing is enabled in the environment; graph execution still succeeds and safe metadata config is covered by unit tests.
 - The local authentication contract now uses salted password verifiers, opaque server-side sessions, and cookie-authenticated chat/feedback; the static UI uses that contract and omits client identity from chat/feedback requests.
+- Server memory phase: `docs/conversation-memory.md` records the pre-change inventory and official LangChain references. `SQLiteConversationStore` now owns server conversation IDs/turns, and JSON user memory/tools own bounded per-user durable facts/preferences; frontend history now reloads from authenticated conversation endpoints instead of browser persistence.
+
+## Memory Coverage
+
+| Layer | Evidence | Status |
+|---|---|---|
+| Short-term owner-scoped threads | `app/memory/conversation_store.py`, `app/services/chat_service.py`, authenticated `/api/conversations`, `tests/unit/memory/test_conversation_store.py`, `tests/unit/services/test_memory_integration.py`, `tests/unit/api/test_conversation_memory_http.py` | complete locally |
+| Long-term per-user profiles/tools | `app/memory/user_memory.py`, `app/memory/tools.py`, `app/memory/extraction.py`, `tests/unit/memory/test_user_memory.py`, memory integration tests | complete locally |
+| LangGraph thread/config bridge | `app/observability/langsmith.py`, `app/agents/orchestrator/graph.py`, `docs/conversation-memory.md` | repository-owned checkpointer equivalent; replaceable for production |
+| Frontend/API lifecycle | `frontend/static/app.js`, `app/api/dev_server.py`, `docs/authentication.md` | complete locally |
 
 ## Requirement Coverage
 
@@ -84,6 +94,10 @@
 | Local static asset smoke on `http://127.0.0.1:8012` | pass | HTML/CSS/JS served with auth view, app view, conversation list, inspector, and profile-scoped conversation markers. |
 | `./venv/bin/python -m compileall app scripts` | pass | Python syntax/import compile check for app and scripts after Phase 4 action wiring. |
 | `./venv/bin/python -m unittest tests.unit.agents.orchestrator.test_graph tests.unit.frontend.test_static_chat_ui tests.unit.services.test_chat_service` | pass | 14 focused tests for graph routing, combined citations/sources, frontend source rendering contract, and chat service behavior. |
+| `OPENAI_API_KEY='' DATABASE_URL='' .venv/bin/python -m unittest tests.unit.memory.test_conversation_store tests.unit.memory.test_user_memory tests.unit.services.test_memory_integration tests.unit.api.test_conversation_memory_http tests.unit.api.test_streaming` | pass | 23 focused memory, ownership/isolation, retention, replay/concurrency, profile validation/locking, server-controlled tools, HTTP lifecycle, and SSE identifier tests. |
+| `OPENAI_API_KEY='' DATABASE_URL='' LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false .venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 208 deterministic tests after server memory integration. |
+| Local in-process HTTP/SSE smoke with `ThreadingHTTPServer`, injected fake classifier/composer, and temporary runtime directory | pass | Authenticated UUID conversation creation, same-thread history recall, separate-thread isolation, explicit profile-memory update/read, and SSE start/complete IDs verified without OpenAI/Postgres/network. |
+| `.venv/bin/python -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` | pass | Final Python compilation, JavaScript syntax, and whitespace validation after server memory changes. |
 | `./venv/bin/python -m unittest tests.unit.actions.test_ticket_service tests.unit.actions.test_feedback_service tests.unit.actions.test_audit_service tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service tests.unit.frontend.test_static_chat_ui` | pass | 28 focused Phase 4 tests for deterministic ticket actions, feedback, audit metadata, graph routing, and frontend contracts. |
 | `./venv/bin/python scripts/run_orchestrator.py --deterministic-composer --user-id u001 --trace "Create an IT ticket for AWS sandbox access needed for billing migration."` | pass | Ticket action route returned `ticket_created`, safe ticket payload, and trace without RAG/SQL nodes. LangSmith hosted upload still failed due restricted network. |
 | `./venv/bin/python scripts/smoke_phase4_actions.py` | pass | Live Postgres smoke passed outside sandbox. Created ticket `IT-1047`, feedback `1`, and audit `1`; verified `tickets`, `ticket_events`, `feedback`, and `audit_logs`. |
@@ -107,6 +121,7 @@
 | OI-006 | Testing | medium | Browser-level committed Playwright E2E is not completed. Manual Playwright MCP inspection is available and passed for auth/workspace/mobile drawer. | Add a committed E2E harness for ticket creation, cited answer inspection, feedback, and restricted-denial journeys. |
 | OI-007 | Observability | low | LangSmith upload attempts fail in restricted-network shells if hosted tracing is enabled through environment variables. | Keep tracing config safe; verify hosted traces only when network and credentials are intentionally available. |
 | OI-008 | Frontend | closed | The frontend now uses username/password auth, immutable server-returned identity, cookie-authenticated chat/feedback, and omits client identity from request bodies. | Keep browser/E2E coverage as the remaining validation gap. |
+| OI-009 | Backend/Frontend | closed | Server conversation create/list/read/delete, owner-scoped append, replay/idempotency, bounded retention, SSE IDs, and per-user durable profile memory are implemented locally. Legacy browser-only keys are ignored and documented for cleanup. | Replace local SQLite/JSON boundaries with production checkpointer/store when deployment requires it. |
 
 ## Phase Progress
 

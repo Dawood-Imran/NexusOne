@@ -208,12 +208,50 @@ def _state_from_payload(payload: Mapping[str, Any]) -> OrchestratorState:
         "execute_sql": bool(payload.get("execute_sql", False)),
         "conversation_context": payload.get("conversation_context"),
         "active_ticket_draft": payload.get("active_ticket_draft"),
+        "short_term_history": _bounded_short_term_history(payload.get("short_term_history")),
+        "user_memory": _bounded_user_memory(payload.get("user_memory")),
     }
     # Authenticated API callers may pass the immutable server-resolved profile
     # so the graph does not reconstruct identity from client data.
     if payload.get("profile") is not None:
         state["profile"] = payload["profile"]
     return state
+
+
+def _bounded_short_term_history(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list | tuple):
+        return []
+    history: list[dict[str, str]] = []
+    for item in value[-8:]:
+        if not isinstance(item, Mapping):
+            continue
+        user_message = item.get("user_message")
+        assistant_message = item.get("assistant_message")
+        if not isinstance(user_message, str):
+            continue
+        history.append(
+            {
+                "user_message": user_message.strip()[:600],
+                "assistant_message": assistant_message.strip()[:600] if isinstance(assistant_message, str) else "",
+            }
+        )
+    return history
+
+
+def _bounded_user_memory(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {"schema_version": 1, "facts": {}, "preferences": {}}
+    result: dict[str, Any] = {"schema_version": 1, "facts": {}, "preferences": {}}
+    for group in ("facts", "preferences"):
+        source = value.get(group)
+        if not isinstance(source, Mapping):
+            continue
+        result[group] = {
+            str(field)[:48]: str(item)[:120]
+            for field, item in list(source.items())[:8]
+            if isinstance(field, str) and isinstance(item, str) and item.strip()
+        }
+    return result
 
 
 def _route_after_question(state: OrchestratorState) -> str:

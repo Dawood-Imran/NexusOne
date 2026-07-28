@@ -33,6 +33,8 @@ class OrchestratorState(TypedDict, total=False):
     execute_sql: bool
     conversation_context: Any
     active_ticket_draft: Any
+    short_term_history: list[dict[str, str]]
+    user_memory: dict[str, Any]
 
     profile: Any
     clean_message: str
@@ -57,6 +59,7 @@ class OrchestratorState(TypedDict, total=False):
     feedback_message: str
     clarification_message: str
     unsupported_message: str
+    history_message: str
     general_answer: str
     general_answer_available: bool
 
@@ -80,6 +83,7 @@ class OrchestratorState(TypedDict, total=False):
     composer_backend: str
     composer_error: str
     composer_fallback_reason: str
+    memory_update: dict[str, Any]
     response: dict[str, Any]
     status: str
     reason_code: str
