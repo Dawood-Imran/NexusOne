@@ -146,8 +146,13 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("mobileInspectorButton.setAttribute(\"aria-expanded\", \"false\");", self.app_js)
         self.assertIn("mobileInspectorButton.focus();", self.app_js)
 
-    def test_ready_message_does_not_show_feedback_controls(self) -> None:
+    def test_normal_and_no_answer_messages_have_no_ready_or_match_status_label(self) -> None:
         self.assertIn("![\"error\", \"refused\", \"ready\"].includes(message.status)", self.app_js)
+        self.assertNotIn('answered: "Ready"', self.app_js)
+        self.assertNotIn('no_answer: "No match"', self.app_js)
+        self.assertNotIn("No match", self.index_html)
+        self.assertNotIn("Ready when", self.index_html)
+        self.assertIn('setConversationStatus("");', self.app_js)
 
     def test_requested_shell_copy_and_provider_diagnostics_are_not_user_facing(self) -> None:
         self.assertNotIn(">Ask Copilot<", self.index_html)
@@ -160,7 +165,10 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertNotIn("SQL capability", self.app_js)
         self.assertNotIn("Access checked", self.index_html)
         self.assertNotIn("Access checked", self.app_js)
-        self.assertIn('capabilityStatus.textContent = "Protected session"', self.app_js)
+        self.assertNotIn("Protected session", self.index_html)
+        self.assertNotIn("Protected session", self.app_js)
+        self.assertNotIn("Session ready", self.index_html)
+        self.assertNotIn("Session ready", self.app_js)
 
     def test_ticket_cards_are_structured_and_error_states_are_concise(self) -> None:
         self.assertIn("function sanitizeTicket(ticket)", self.app_js)
@@ -184,10 +192,10 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn('summary.textContent = "Trace for this answer"', self.app_js)
         self.assertIn('section.className = "trace"', self.app_js)
         self.assertIn('section.addEventListener("toggle", () => onToggle(section.open))', self.app_js)
-        self.assertIn('function setSidebarExpanded(expanded)', self.app_js)
-        self.assertIn('leftSidebarToggle.setAttribute("aria-expanded", String(expanded))', self.app_js)
-        self.assertIn('id="leftSidebarToggle"', self.index_html)
-        self.assertIn('aria-controls="conversationRail"', self.index_html)
+        self.assertNotIn("setSidebarExpanded", self.app_js)
+        self.assertNotIn("leftSidebarToggle", self.app_js)
+        self.assertNotIn('id="leftSidebarToggle"', self.index_html)
+        self.assertIn('aria-controls="inspector"', self.index_html)
 
     def test_shell_has_accessible_profile_context_and_composer_states(self) -> None:
         self.assertIn('aria-label="NexusOne Copilot workspace"', self.index_html)
@@ -199,6 +207,8 @@ class StaticChatUIContractTest(unittest.TestCase):
     def test_composer_auto_resizes_and_keeps_send_action_usable(self) -> None:
         self.assertIn('id="messageInput"', self.index_html)
         self.assertIn('maxlength="2000"', self.index_html)
+        self.assertNotIn('id="characterCount"', self.index_html)
+        self.assertNotIn("characterCount", self.app_js)
         self.assertIn('id="sendButton"', self.index_html)
         self.assertIn("const MAX_COMPOSER_HEIGHT = 168", self.app_js)
         self.assertIn("function autoResizeComposer()", self.app_js)
@@ -210,6 +220,16 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("align-self: end", self.styles)
         self.assertIn("resize: none", self.styles)
 
+    def test_enter_submits_and_shift_enter_keeps_multiline_composer(self) -> None:
+        keydown = self.app_js.split('messageInput.addEventListener("keydown"', 1)[1].split('suggestions.addEventListener', 1)[0]
+        self.assertIn('event.key === "Enter"', keydown)
+        self.assertIn("!event.shiftKey", keydown)
+        self.assertIn("event.preventDefault()", keydown)
+        self.assertIn("chatForm.requestSubmit()", keydown)
+        self.assertNotIn("if (event.shiftKey)", keydown)
+        self.assertIn('rows="1"', self.index_html)
+        self.assertIn("white-space: pre-wrap", self.styles)
+
     def test_delete_conversation_confirms_and_rehomes_the_active_view(self) -> None:
         self.assertIn("function deleteConversation(conversationId)", self.app_js)
         self.assertIn("window.confirm(`Delete “${conversation.title}”?", self.app_js)
@@ -219,15 +239,18 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn('aria-label", `Delete conversation ${conversation.title}`', self.app_js)
         self.assertIn("saveConversations();", self.app_js)
 
-    def test_sidebar_controls_are_icon_only_but_keep_accessible_labels_and_tooltips(self) -> None:
-        self.assertIn('title="Collapse navigation"', self.index_html)
-        self.assertIn('class="sidebar-toggle-label sr-only"', self.index_html)
+    def test_remaining_right_control_is_a_centered_chevron_with_accessible_labels(self) -> None:
+        self.assertNotIn('title="Collapse navigation"', self.index_html)
+        self.assertNotIn('class="sidebar-toggle-label sr-only"', self.index_html)
         self.assertIn('title="Show conversation details"', self.index_html)
         self.assertIn('title="Collapse conversation details"', self.index_html)
         self.assertIn('function setIconControlLabel(control, label)', self.app_js)
         self.assertIn("control.title = label", self.app_js)
-        self.assertIn('mobileInspectorButton.querySelector(".panel-toggle-icon").textContent', self.app_js)
-        self.assertIn('leftSidebarToggle.setAttribute("aria-expanded", String(expanded))', self.app_js)
+        self.assertIn('mobileInspectorButton.querySelector(".panel-toggle-icon").textContent = ">"', self.app_js)
+        self.assertIn('closeInspectorButton.querySelector(".panel-toggle-icon").textContent = ">"', self.app_js)
+        self.assertNotIn('textContent = "×"', self.app_js)
+        self.assertIn('place-items: center', self.styles)
+        self.assertIn('text-align: center', self.styles)
 
     def test_suggestions_fill_composer_without_mocking_chat(self) -> None:
         self.assertIn('id="suggestions"', self.index_html)
@@ -247,7 +270,7 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn('@media (max-width: 480px)', self.styles)
         self.assertIn('@media (prefers-reduced-motion: reduce)', self.styles)
         self.assertIn(".inspector.open", self.styles)
-        self.assertIn(".conversation-rail.is-collapsed", (ROOT / "frontend" / "static" / "professional.css").read_text(encoding="utf-8"))
+        self.assertNotIn(".conversation-rail.is-collapsed", (ROOT / "frontend" / "static" / "professional.css").read_text(encoding="utf-8"))
         self.assertIn("touch-action: manipulation", self.styles)
         self.assertIn("min-height: 46px", self.styles)
         self.assertIn(".message.denied", self.styles)

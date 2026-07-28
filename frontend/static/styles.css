@@ -452,28 +452,6 @@ textarea:disabled {
   border-right: 1px solid var(--line);
 }
 
-.sidebar-toggle {
-  display: inline-grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  justify-self: start;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-size: 11px;
-  font-weight: 750;
-}
-
-.sidebar-toggle:hover {
-  border-color: var(--teal);
-  background: var(--teal-pale);
-  color: var(--teal-deep);
-}
-
-.sidebar-toggle-icon,
 .panel-toggle-icon {
   display: grid;
   width: 22px;
@@ -483,6 +461,7 @@ textarea:disabled {
   border-radius: 5px;
   font-size: 17px;
   line-height: 1;
+  text-align: center;
 }
 
 .rail-header {
@@ -898,16 +877,6 @@ textarea:disabled {
   align-items: center;
   flex: 0 0 auto;
   gap: 8px;
-}
-
-.capability-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-soft);
-  font-size: 11px;
-  font-weight: 650;
-  white-space: nowrap;
 }
 
 .trace-toggle,
@@ -1571,14 +1540,6 @@ textarea:disabled {
   opacity: 0.62;
 }
 
-.composer-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--ink-faint);
-  font-size: 9px;
-}
-
 .send-button {
   display: inline-flex;
   align-items: center;
@@ -1815,14 +1776,9 @@ textarea:disabled {
     width: 100%;
   }
 
-  .capability-state,
   .trace-toggle,
   .secondary-action {
     flex: 1 1 auto;
-  }
-
-  .capability-state {
-    min-height: 42px;
   }
 
   .conversation-status,

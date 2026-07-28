@@ -91,18 +91,6 @@
 
     <div id="appView" class="app-shell hidden" aria-label="NexusOne Copilot workspace">
       <aside id="conversationRail" class="conversation-rail" aria-label="Workspace navigation and conversations">
-        <button
-          id="leftSidebarToggle"
-          class="sidebar-toggle"
-          type="button"
-          aria-expanded="true"
-          aria-controls="conversationRail"
-          aria-label="Collapse navigation"
-          title="Collapse navigation"
-        >
-          <span class="sidebar-toggle-icon" aria-hidden="true">‹</span>
-          <span class="sidebar-toggle-label sr-only">Collapse navigation</span>
-        </button>
         <header class="rail-header">
           <a class="brand-mini" href="#pageTitle" aria-label="NexusOne Copilot home">
             <span class="brand-mark small" aria-hidden="true">N1</span>
@@ -163,10 +151,6 @@
           <p id="conversationEmpty" class="rail-empty">Your recent conversations will appear here.</p>
         </section>
 
-        <footer class="rail-footer">
-          <span id="serviceStatusIndicator" class="status-dot is-neutral" aria-hidden="true"></span>
-          <span id="serviceStatus" aria-live="polite"></span>
-        </footer>
       </aside>
 
       <main class="chat-workspace" aria-labelledby="pageTitle">
@@ -177,19 +161,18 @@
             <p id="conversationTitle" class="conversation-title">New conversation</p>
           </div>
           <div class="topbar-actions">
-            <span class="capability-state"><span class="status-dot is-live" aria-hidden="true"></span><span id="capabilityStatus">Protected session</span></span>
             <label class="trace-toggle">
               <input id="traceToggle" type="checkbox" />
               <span>Trace</span>
             </label>
             <button id="mobileInspectorButton" class="secondary-action icon-control" type="button" aria-expanded="false" aria-controls="inspector" aria-label="Show conversation details" title="Show conversation details">
-              <span class="panel-toggle-icon" aria-hidden="true">‹</span>
+              <span class="panel-toggle-icon" aria-hidden="true">></span>
               <span class="sr-only">Show conversation details</span>
             </button>
           </div>
         </header>
 
-        <section class="conversation-status" id="conversationStatus" role="status" aria-live="polite">Ready when you are.</section>
+        <section class="conversation-status" id="conversationStatus" role="status" aria-live="polite"></section>
         <section id="messages" class="messages" aria-live="polite" aria-relevant="additions"></section>
 
         <section id="suggestions" class="suggestions" aria-labelledby="suggestionsHeading">
@@ -210,7 +193,6 @@
           <label class="sr-only" for="messageInput">Your question</label>
           <div class="composer-input-wrap">
             <textarea id="messageInput" rows="1" maxlength="2000" placeholder="Ask about a policy, process, or ticket…" autocomplete="off"></textarea>
-            <div class="composer-meta"><span id="characterCount">0 / 2000</span></div>
           </div>
           <button id="sendButton" class="send-button" type="submit" disabled>
             <span>Send</span>
@@ -227,7 +209,7 @@
             <h2>Conversation details</h2>
           </div>
           <button id="closeInspectorButton" class="icon-button icon-control" type="button" aria-label="Collapse conversation details" title="Collapse conversation details">
-            <span class="panel-toggle-icon" aria-hidden="true">›</span>
+            <span class="panel-toggle-icon" aria-hidden="true">></span>
             <span class="sr-only">Collapse conversation details</span>
           </button>
         </div>

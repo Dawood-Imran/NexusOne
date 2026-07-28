@@ -431,38 +431,6 @@ body {
 }
 
 /* Independent workspace panel controls */
-.sidebar-toggle {
-  min-height: 40px;
-  border-color: var(--line);
-  background: #ffffff;
-}
-
-.conversation-rail.is-collapsed {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 14px 10px;
-}
-
-.conversation-rail.is-collapsed > :not(.sidebar-toggle) {
-  display: none;
-}
-
-.conversation-rail.is-collapsed .sidebar-toggle {
-  justify-content: center;
-  width: 100%;
-  padding: 0;
-}
-
-.conversation-rail.is-collapsed .sidebar-toggle-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-}
-
 .ticket-status-unavailable p {
   margin: 9px 0 0;
   color: var(--error);
@@ -489,16 +457,8 @@ body {
     grid-template-columns: 258px minmax(0, 1fr) 320px;
   }
 
-  .app-shell.left-sidebar-collapsed {
-    grid-template-columns: 60px minmax(0, 1fr) 320px;
-  }
-
   .app-shell.right-inspector-collapsed {
     grid-template-columns: 258px minmax(0, 1fr) 0;
-  }
-
-  .app-shell.left-sidebar-collapsed.right-inspector-collapsed {
-    grid-template-columns: 60px minmax(0, 1fr) 0;
   }
 
   .inspector {
@@ -519,17 +479,7 @@ body {
   }
 }
 
-@media (min-width: 761px) and (max-width: 980px) {
-  .app-shell.left-sidebar-collapsed {
-    grid-template-columns: 60px minmax(0, 1fr);
-  }
-}
-
 @media (max-width: 980px) {
-  .conversation-rail.is-collapsed {
-    min-height: 58px;
-  }
-
   .inspector.is-collapsed {
     transform: translateX(100%);
   }

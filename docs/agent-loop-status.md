@@ -4,8 +4,8 @@
 
 - State: in-progress
 - Active phase: Phase 4 - Ticket Actions and Feedback / integration validation
-- Last run: added the local-only test/evaluation matrix, 14-case deterministic dataset/evaluator, HTTP product-surface contracts, role/route/SQL/retrieval/auth boundaries, frontend event/security contracts, and live-evaluator opt-in refusal. The branch now passes 164 tests and the offline evaluation; repository `.env` was absent, so OpenAI/Postgres live paths were not exercised.
-- Integration note: `docs/requirements-coverage.md` is retained as the frontend/audit branch's durable R1-R14 evidence matrix; the integrated UI preserves the action-aware conversation inspector and adds loading, denied, no-answer, error/retry, responsive, auto-growing composer, and authenticated account-session states. The frontend no longer exposes a demo profile picker or post-login role switcher; it consumes `/api/auth/session`, `/api/auth/login`, and `/api/auth/logout`.
+- Last run: integrated 105-test suite, focused contracts, JavaScript syntax, Python compile checks, local HTTP smoke, and chrome-devtools-axi desktop/mobile smoke passed; repository `.env` was absent, so OpenAI/Postgres live paths were not exercised.
+- Integration note: `docs/requirements-coverage.md` is retained as the frontend/audit branch's durable R1-R14 evidence matrix; the integrated UI preserves the action-aware conversation inspector and adds loading, denied, no-answer, error/retry, responsive, auto-growing composer, and authenticated account-session states. The frontend no longer exposes a demo profile picker or post-login role switcher; it consumes `/api/auth/session`, `/api/auth/login`, and `/api/auth/logout`. The current UI polish keeps ticket cards structured-only, adds independent keyboard-accessible left/right panel toggles, stores a per-answer expandable trace, collapses prior traces on new questions, and removes provider/fallback diagnostics and obsolete shell copy.
 - Main risks:
   - FastAPI/React production adapters are not wired yet; the app still uses a framework-independent service layer plus stdlib dev server.
   - The stdlib web entry point now loads the repository `.env` before constructing ChatService; safe capability metadata reports live SQL versus local validation-only mode and provider fallback reasons without values.
@@ -14,9 +14,6 @@
   - Playwright MCP is now available in this session and was used for manual desktop/mobile UI inspection. Committed Playwright E2E coverage is still pending.
   - LangSmith hosted upload can fail noisily in restricted-network shells when tracing is enabled in the environment; graph execution still succeeds and safe metadata config is covered by unit tests.
 - The local authentication contract now uses salted password verifiers, opaque server-side sessions, and cookie-authenticated chat/feedback; the static UI uses that contract and omits client identity from chat/feedback requests.
-- The main graph now has first-class `CASUAL` and `GENERAL_KNOWLEDGE` routes. Casual messages use deterministic responses without composer/tool calls; general questions use the existing answer composer with curated local fallback answers and no protected retrieval.
-- Intent routing now uses the bounded LangChain/OpenAI classifier and versioned route contract documented in `docs/intent-routing.md`; the former top-level keyword router is no longer active. No provider or invalid/low-confidence output fails closed to clarification without retrieval, SQL, or actions. Offline tests inject explicit mapping fakes.
-- Authenticated conversation history is currently browser-local (`localStorage`) because the available dev API exposes chat, feedback, and auth only—not conversation list/delete persistence. The UI deletes local conversations with confirmation and does not claim server deletion; a server conversation-delete contract is still required for shared history.
 
 ## Requirement Coverage
 
@@ -33,7 +30,7 @@
 | Prompt-injection resistance | Backend | partial | `tests/unit/services/test_guardrail_policy.py`, `tests/unit/services/test_chat_service.py`, `tests/unit/agents/orchestrator/test_graph.py` | Main graph denies before retrieval, SQL, or model/tool work. |
 | Feedback capture | Backend/Frontend | partial | `app/actions/feedback_service.py`, `app/api/dev_server.py`, `frontend/static/app.js`, `tests/unit/actions/test_feedback_service.py`, `scripts/smoke_phase4_actions.py` | `/api/feedback` stores validated feedback through service layer; live Postgres and HTTP API smokes passed. Browser E2E remains. |
 | Audit metadata | Backend | partial | `app/actions/audit_service.py`, `app/services/chat_service.py`, `tests/unit/actions/test_audit_service.py`, `tests/unit/services/test_chat_service.py`, `scripts/smoke_phase4_actions.py` | Chat service writes safe metadata with redacted query text; live Postgres smoke passed. |
-| Evaluation tests | Testing | complete (offline) | `docs/test-coverage-matrix.md`, `tests/evaluation/dataset.json`, `tests/evaluation/evaluator.py`, `scripts/run_evaluation.py`, `tests/unit/evaluation/test_evaluator.py` | 14 deterministic cases cover public, role-scoped, executive allow/deny, retrieval, SQL, ticket, casual, injection, malformed, and no-provider paths. Live provider scoring and browser E2E remain opt-in/follow-up. |
+| Evaluation tests | Testing | partial | Existing SQL unit tests | Broader role/RAG/E2E tests pending. |
 | Responsive frontend | Frontend/Testing | partial | `frontend/static/styles.css`, static frontend contract tests, `docs/requirements-coverage.md` | Integrated action-aware conversation workspace retains authenticated session handling, immutable account control, profile-scoped history, inspector, tickets, and feedback while adding loading/denied/no-answer/error-retry states, source metadata, focus/touch treatment, auto-growing composer behavior, and reduced-motion support. Browser E2E remains. |
 | Observability hooks | Backend | partial | `app/observability/langsmith.py`, `app/agents/orchestrator/graph.py`, graph trace response fields | Graph invocations now include LangSmith-compatible run name, tags, and safe metadata. Hosted LangSmith verification depends on env credentials. |
 
@@ -86,9 +83,6 @@
 | Playwright MCP mobile workspace inspection at `390x844` | pass | Verified stacked conversation layout, accessible details drawer, mobile touch targets, and drawer close behavior. |
 | Local static asset smoke on `http://127.0.0.1:8012` | pass | HTML/CSS/JS served with auth view, app view, conversation list, inspector, and profile-scoped conversation markers. |
 | `./venv/bin/python -m compileall app scripts` | pass | Python syntax/import compile check for app and scripts after Phase 4 action wiring. |
-| `.venv/bin/python -m unittest tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service tests.unit.observability.test_langsmith tests.unit.frontend.test_static_chat_ui` | pass | 44 focused tests for CASUAL/GENERAL_KNOWLEDGE routing, deterministic/no-tool casual behavior, answer-composer reuse and local fallback, safe route metadata, existing protected routes, and frontend route display contract. |
-| `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 114-test full suite after adding the two first-class routes. |
-| `.venv/bin/python -m compileall -q app scripts tests` + `node --check frontend/static/app.js` | pass | Python compilation and static JavaScript syntax checks after route integration. |
 | `./venv/bin/python -m unittest tests.unit.agents.orchestrator.test_graph tests.unit.frontend.test_static_chat_ui tests.unit.services.test_chat_service` | pass | 14 focused tests for graph routing, combined citations/sources, frontend source rendering contract, and chat service behavior. |
 | `./venv/bin/python -m unittest tests.unit.actions.test_ticket_service tests.unit.actions.test_feedback_service tests.unit.actions.test_audit_service tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service tests.unit.frontend.test_static_chat_ui` | pass | 28 focused Phase 4 tests for deterministic ticket actions, feedback, audit metadata, graph routing, and frontend contracts. |
 | `./venv/bin/python scripts/run_orchestrator.py --deterministic-composer --user-id u001 --trace "Create an IT ticket for AWS sandbox access needed for billing migration."` | pass | Ticket action route returned `ticket_created`, safe ticket payload, and trace without RAG/SQL nodes. LangSmith hosted upload still failed due restricted network. |
@@ -100,28 +94,6 @@
 | `./venv/bin/python scripts/run_orchestrator.py --user-id u001 --execute-sql "What holidays apply in Pakistan?"` | pass | Live Postgres smoke test passed outside sandbox; returned 3 Pakistan holiday rows. |
 | `./venv/bin/python scripts/run_orchestrator.py --user-id u001 --trace "How do I request AWS access?"` | pass | OpenAI final composer passed outside sandbox; trace showed `compose_final_answer` with `backend=openai:gpt-4.1-mini` and preserved AWS request steps. |
 | Playwright MCP initial page load at `http://127.0.0.1:8010` | partial | Page rendered and snapshot captured; console only showed missing favicon before fix. Final restart was blocked by sandbox approval timeout. |
-| `./.venv/bin/python -m unittest tests.unit.frontend.test_static_chat_ui` | pass | 24 focused contracts covering conversation deletion confirmation/re-homing, icon-only controls and labels, inspector-only trace placement, removed shell copy/workspace action, and suggestion visibility. |
-| `./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 121-test full suite after authenticated-chat UI updates. |
-| `./.venv/bin/python -m compileall -q app scripts tests` + `node --check frontend/static/app.js` + `git diff --check` | pass | Python compilation, JavaScript syntax, and diff whitespace validation. |
-| `./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 164 deterministic unit, integration, auth/HTTP, orchestration, SQL, retrieval, action, streaming, and frontend contract tests. |
-| `./.venv/bin/python scripts/run_evaluation.py` | pass | 14 offline cases; authorization, route, grounding/facts, citations, safety/no-leakage, and response-shape dimensions all passed. |
-| `./.venv/bin/python scripts/run_live_evaluation.py` | expected refusal | Refused because explicit `NEXUSONE_ENABLE_LIVE_EVAL=1` and configured credentials were absent; no provider was contacted. |
-| `./.venv/bin/python -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` | pass | Syntax/compile and whitespace checks after coverage additions. |
-| `.venv/bin/python -m unittest tests.unit.agents.orchestrator.test_intent_classifier tests.unit.agents.orchestrator.test_routing_contract tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service tests.unit.api.test_local_http_surface` | pass | Guarded classifier contract, fake-provider failures, casing/punctuation, context/draft bounds, ticket create/status distinction, direct feedback/history/unsupported routes, and guardrail recheck. |
-| `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 173 tests after replacing the active deterministic top-level router with the versioned classifier route contract. |
-| `.venv/bin/python scripts/run_evaluation.py` | pass | 20 versioned offline intent/authorization/route/grounding/citation/safety cases; no provider, database, or network required. |
-| `OPENAI_API_KEY='' DATABASE_URL='' .venv/bin/python -m unittest tests.unit.agents.orchestrator.test_intent_classifier` | pass | Default no-provider behavior returns `INTENT_CLASSIFIER_UNAVAILABLE` clarification and no protected graph node. |
-| `OPENAI_API_KEY='' DATABASE_URL='' .venv/bin/python scripts/run_web_app.py` + authenticated local HTTP request | pass | Local HTTP smoke returned `INTENT_CLASSIFIER_UNAVAILABLE` clarification; no RAG, SQL, or ticket node was reached. |
-| `.venv/bin/python scripts/run_live_evaluation.py` | expected refusal | Refused without explicit `NEXUSONE_ENABLE_LIVE_EVAL=1`; no provider was contacted. |
-
-## Test coverage evaluation update
-
-- Baseline inventory and risk matrix: `docs/test-coverage-matrix.md`.
-- The versioned offline dataset contains 14 stable cases. The deterministic evaluator reports authorization, route, grounding/facts, citations, safety/no-leakage, and response-shape dimensions without printing raw answers.
-- Added local HTTP contracts for happy/denied/malformed/no-provider/ticket/feedback retry paths, plus auth expiry, all-role guardrail matrix, route/action boundaries, SQL execution boundaries, retrieval default-deny, frontend event/security contracts, and live-evaluator opt-in refusal.
-- Streaming was present in the launch checkout (`fed93e9`) and was not modified; existing SSE unit/HTTP tests remain in scope. No separate streaming implementation was merged by this branch.
-- Latest local-only validation for this branch is recorded after implementation below. No Postgres, OpenAI, LangSmith, or browser service is required by the default commands.
-- Coverage found and fixed two real safety boundary defects: malformed non-string password verifiers could raise instead of failing closed, and inactive profiles were allowed through the general guardrail policy. Regression tests are in `tests/unit/auth/test_auth_boundaries.py` and `tests/unit/services/test_guardrail_matrix.py`.
 
 ## Open Issues
 
@@ -135,7 +107,6 @@
 | OI-006 | Testing | medium | Browser-level committed Playwright E2E is not completed. Manual Playwright MCP inspection is available and passed for auth/workspace/mobile drawer. | Add a committed E2E harness for ticket creation, cited answer inspection, feedback, and restricted-denial journeys. |
 | OI-007 | Observability | low | LangSmith upload attempts fail in restricted-network shells if hosted tracing is enabled through environment variables. | Keep tracing config safe; verify hosted traces only when network and credentials are intentionally available. |
 | OI-008 | Frontend | closed | The frontend now uses username/password auth, immutable server-returned identity, cookie-authenticated chat/feedback, and omits client identity from request bodies. | Keep browser/E2E coverage as the remaining validation gap. |
-| OI-009 | Backend/Frontend | medium | The available authenticated dev API has no conversation list/delete endpoint; chat history remains browser-local. Individual delete therefore removes the conversation from local storage and the visible shell only, with confirmation, without faking server persistence. | Add a server-owned conversation history/delete contract before shared or cross-device history is introduced. |
 
 ## Phase Progress
 
@@ -143,8 +114,8 @@
 |---|---|---|---|
 | Phase 0 | complete | Source docs created; SQL subgraph restored; existing unit tests pass. | Working tree had deleted tracked modules; restored with stricter current tests. |
 | Phase 1 | partial | Profile service, guardrail policy, local KB retriever, chat service facade, stdlib HTTP API, static frontend shell, and service tests. | Final browser interaction test remains. |
-| Phase 2 | complete | Markdown/PDF-source loader, deterministic chunker, permission metadata writer, optional LSA/FAISS writer, ingestion report, local LSA hybrid retriever, lexical fallback, and retrieval tests. | Metadata exists at `data/faiss/nexusone_chunks_metadata.jsonl`; optional FAISS is absent in the default local environment and is not required. |
-| Phase 3 | in-progress | Main LangGraph orchestrator added with load user, guardrail precheck, deterministic router, SQL subgraph route, RAG route, combined route, first-class CASUAL/GENERAL_KNOWLEDGE routes, deterministic casual response, existing answer-composer general route with local fallback, validation nodes, inline citation markers, source chunk payloads, combined citation+SQL source UI rendering, LangSmith-compatible run config, final response node, CLI runner, diagram, and tests. | Browser-level Playwright E2E coverage remains. |
+| Phase 2 | complete | Markdown/PDF-source loader, deterministic chunker, chunk metadata writer, FAISS writer, ingestion report, FAISS hybrid retriever, lexical fallback, retrieval tests. | Metadata exists at `data/faiss/nexusone_chunks_metadata.jsonl`; FAISS index exists at `data/faiss/nexusone_chunks.index`. |
+| Phase 3 | in-progress | Main LangGraph orchestrator added with load user, guardrail precheck, deterministic router, SQL subgraph route, RAG route, combined route, validation node, required final answer composition node, inline citation markers, source chunk payloads, combined citation+SQL source UI rendering, LangSmith-compatible run config, final response node, CLI runner, diagram, and tests. | Browser-level Playwright E2E coverage remains. |
 | Phase 4 | in-progress | Deterministic ticket actions, feedback/audit services, graph/API routes, salted local username/password auth with cookie sessions, immutable account popover, profile-scoped conversation history, inspector-based sources/rows/tickets/trace, feedback controls, auto-growing composer, UI Pro Max refinement, repository `.env` loading, configured SQL executor injection, sanitized live rows, provider capability metadata, live Postgres smoke, and HTTP API/static asset smoke. | Committed browser E2E and production hardening remain.
 | Phase 5 | pending | None | Requires E2E and production hardening. |
 
@@ -166,22 +137,3 @@
 - [ ] UI/UX review pass
 - [ ] Build passes
 - [ ] No known critical issues
-
-## Streaming launch validation
-
-- Transport choice: `POST /api/chat` remains JSON by default; browser callers opt in with `Accept: text/event-stream`. The stdlib adapter frames explicit SSE `response.start`, `response.delta`, `response.error`, and `response.complete` events. See `docs/streaming.md`.
-- Graph path: existing LangGraph `stream_mode=["updates", "custom"]` execution is retained. Only sanitized composer deltas and the final public response cross the HTTP boundary; deterministic/offline composition emits bounded deltas.
-- `./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` — pass, 134 tests.
-- `./.venv/bin/python -m unittest tests.unit.agents.orchestrator.test_answer_composer tests.unit.agents.orchestrator.test_graph tests.unit.services.test_chat_service tests.unit.api.test_streaming tests.unit.frontend.test_static_chat_ui` — pass, 61 focused streaming/orchestration/frontend tests.
-- `./.venv/bin/python -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` — pass.
-- Local HTTP SSE smoke — pass: authenticated browser-shaped request received start, 16 deltas, and completion; accumulated deltas exactly matched the final message and citations were preserved.
-- `chrome-devtools-axi` smoke on desktop — pass: sign-in, streaming “Writing…” state, final cited answer, source inspector, trace metadata, and composer recovery were verified against the local server.
-- Repository validation note: no `package.json`, npm scripts, Python lint/type-check configuration, or committed browser E2E harness exists in this worktree, so `npm run lint`, `npm run typecheck`, `npm run build`, and `npm run test:e2e` are not available commands; Python compilation, Node syntax, unit tests, and manual chrome-devtools smoke were run instead.
-
-## Hybrid retrieval launch update
-
-- `app/retrieval/chunk_index.py` now runs one permission-aware hybrid pipeline: exact lexical relevance plus local LSA semantic cosine, with normalized 0.55/0.45 defaults, explicit candidate pools, deterministic tie-breaking, document de-duplication, and bounded top-k.
-- `app/retrieval/embeddings.py` is the honest default semantic implementation. It trains a small TF-IDF/SVD latent space from local chunks and needs only NumPy; the removed token-hash vectors and stale FAISS artifact are not active. Optional FAISS output, when installed, contains LSA vectors only.
-- `app/retrieval/access.py` adds confidentiality gates and department-scoped role/group handling without broadening explicit grants. Query-time provider calls receive only authorized chunks; guardrail denial remains before the retrieval graph node.
-- Configuration is validated through `HybridRetrievalConfig` and `RuntimeConfig`: `NEXUSONE_RETRIEVAL_LEXICAL_WEIGHT`, `NEXUSONE_RETRIEVAL_SEMANTIC_WEIGHT`, candidate counts, and max results. See `docs/retrieval.md`.
-- Focused retrieval/config/permission/ingestion tests pass; `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` passes 186 tests; `.venv/bin/python -m compileall -q app tests scripts` and `git diff --check` pass. Local metadata rebuild reports `embedding_provider=local_lsa` and `faiss_status=not_installed` without credentials or network.
