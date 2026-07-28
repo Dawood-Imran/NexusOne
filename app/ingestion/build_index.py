@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 from collections import Counter
@@ -76,6 +75,14 @@ def write_metadata(records: tuple[ChunkRecord, ...], metadata_path: Path = DEFAU
 
 
 def build_optional_faiss(records: tuple[ChunkRecord, ...], faiss_path: Path = DEFAULT_FAISS_PATH) -> str:
+    """Write an optional FAISS index over local LSA vectors.
+
+    The function name is retained for CLI/report compatibility.  It no longer
+    writes the removed token-hash vectors.  The metadata retriever can operate
+    without FAISS and computes the same local semantic space directly, which
+    keeps default tests and local development credential-free.
+    """
+
     try:
         import faiss  # type: ignore[import-not-found]
         import numpy as np
@@ -84,7 +91,15 @@ def build_optional_faiss(records: tuple[ChunkRecord, ...], faiss_path: Path = DE
 
     if not records:
         return "empty"
-    vectors = np.array([_hash_embedding(record.text) for record in records], dtype="float32")
+    try:
+        from app.retrieval.embeddings import LocalSemanticEmbeddingProvider
+
+        provider = LocalSemanticEmbeddingProvider(tuple(record.text for record in records))
+        vectors = np.array(provider.embed_documents([record.text for record in records]), dtype="float32")
+    except Exception:
+        return "semantic_unavailable"
+    if vectors.ndim != 2 or vectors.shape[0] != len(records) or vectors.shape[1] == 0:
+        return "semantic_unavailable"
     index = faiss.IndexFlatIP(vectors.shape[1])
     index.add(vectors)
     faiss_path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,6 +112,9 @@ def write_report(
     records: tuple[ChunkRecord, ...],
     faiss_status: str,
     report_path: Path = DEFAULT_REPORT_PATH,
+    *,
+    metadata_path: Path = DEFAULT_METADATA_PATH,
+    faiss_path: Path = DEFAULT_FAISS_PATH,
 ) -> dict[str, object]:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     by_confidentiality = Counter(record.confidentiality for record in records)
@@ -104,14 +122,24 @@ def write_report(
     report = {
         "document_count": len(documents),
         "chunk_count": len(records),
-        "metadata_path": str(DEFAULT_METADATA_PATH),
-        "faiss_path": str(DEFAULT_FAISS_PATH),
+        "metadata_path": _report_path(metadata_path),
+        "faiss_path": _report_path(faiss_path),
         "faiss_status": faiss_status,
+        "embedding_provider": "local_lsa" if records else "not_available",
         "chunks_by_confidentiality": dict(sorted(by_confidentiality.items())),
         "chunks_by_source_type": dict(sorted(by_source_type.items())),
     }
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     return report
+
+
+def _report_path(path: Path) -> str:
+    """Keep committed reports portable across worktrees."""
+
+    try:
+        return str(path.resolve().relative_to(ROOT))
+    except ValueError:
+        return str(path)
 
 
 def build_index(
@@ -123,7 +151,14 @@ def build_index(
     records = build_chunk_records(documents)
     write_metadata(records, metadata_path)
     faiss_status = build_optional_faiss(records, faiss_path)
-    return write_report(documents, records, faiss_status, report_path)
+    return write_report(
+        documents,
+        records,
+        faiss_status,
+        report_path,
+        metadata_path=metadata_path,
+        faiss_path=faiss_path,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -143,18 +178,6 @@ def main() -> int:
     )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
-
-
-def _hash_embedding(text: str, dimensions: int = 384) -> list[float]:
-    vector = [0.0] * dimensions
-    tokens = text.lower().split()
-    for token in tokens:
-        digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
-        bucket = int.from_bytes(digest[:4], "big") % dimensions
-        sign = 1.0 if digest[4] % 2 == 0 else -1.0
-        vector[bucket] += sign
-    norm = math.sqrt(sum(value * value for value in vector)) or 1.0
-    return [value / norm for value in vector]
 
 
 if __name__ == "__main__":

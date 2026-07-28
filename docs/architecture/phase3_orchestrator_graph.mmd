@@ -36,6 +36,6 @@ flowchart TD
     SQL_EXEC -. execution/grounding issue .-> SQL_REPAIR
   end
 
-  RAG -. uses .-> FAISS[FAISS hybrid search]
+  RAG -. uses .-> LSA[Local LSA + lexical hybrid search]
   RAG -. fallback .-> LEXICAL[metadata lexical search]
   PRECHECK -. server-side policy .-> GUARDRAILS[default-deny guardrails]

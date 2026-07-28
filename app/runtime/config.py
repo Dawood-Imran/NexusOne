@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+from app.retrieval.config import HybridRetrievalConfig
+
 
 _PLACEHOLDER_VALUES = {
     "sk-your-key-here",
@@ -70,6 +72,7 @@ class RuntimeConfig:
     langsmith_tracing: bool
     langsmith_api_key_configured: bool
     langsmith_project: str
+    retrieval_config: HybridRetrievalConfig
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "RuntimeConfig":
@@ -86,6 +89,7 @@ class RuntimeConfig:
             langsmith_tracing=_as_bool(values.get("LANGSMITH_TRACING", values.get("LANGCHAIN_TRACING_V2", "false"))),
             langsmith_api_key_configured=_configured_secret(values.get("LANGSMITH_API_KEY")),
             langsmith_project=values.get("LANGSMITH_PROJECT", "nexusone-copilot").strip() or "nexusone-copilot",
+            retrieval_config=HybridRetrievalConfig.from_env(values),
         )
 
     def safe_metadata(self) -> dict[str, object]:
@@ -103,6 +107,7 @@ class RuntimeConfig:
             "langsmith_tracing": self.langsmith_tracing,
             "langsmith_api_key_configured": self.langsmith_api_key_configured,
             "langsmith_project": self.langsmith_project,
+            "retrieval": self.retrieval_config.safe_metadata(),
         }
 
 

@@ -1,4 +1,4 @@
-"""Permission-aware retrieval over generated RAG chunk metadata."""
+"""Permission-aware lexical + semantic retrieval over chunk metadata."""
 
 from __future__ import annotations
 
@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Iterable
 
 from app.auth.profiles import UserProfile
-from app.ingestion.build_index import DEFAULT_FAISS_PATH, DEFAULT_METADATA_PATH, _hash_embedding
+from app.ingestion.build_index import DEFAULT_FAISS_PATH, DEFAULT_METADATA_PATH
+from app.retrieval.access import can_access_metadata
+from app.retrieval.config import HybridRetrievalConfig
+from app.retrieval.embeddings import (
+    EmbeddingProvider,
+    LocalSemanticEmbeddingProvider,
+    cosine_similarity,
+)
 from app.retrieval.local_kb import Citation, _tokenize
 
 
@@ -43,89 +50,189 @@ class Chunk:
 
 @dataclass(frozen=True)
 class ChunkSearchResult:
+    """A public retrieval result with backward-compatible ``score`` metadata."""
+
     chunk: Chunk
     score: float
     snippet: str
+    lexical_score: float = 0.0
+    semantic_score: float = 0.0
 
 
 class MetadataChunkRetriever:
-    """Permission-aware hybrid retriever over generated chunk metadata and FAISS."""
+    """Hybrid retriever with authorization before candidate scoring/output.
 
-    def __init__(self, metadata_path: Path = DEFAULT_METADATA_PATH, faiss_path: Path = DEFAULT_FAISS_PATH) -> None:
+    The old FAISS file was built from token-hash vectors.  Hash vectors are not
+    semantic embeddings, so this retriever deliberately does not read that
+    legacy index.  The default semantic path is local LSA from
+    :mod:`app.retrieval.embeddings`; an injected provider can replace it for
+    tests or an explicitly managed deployment provider.
+    """
+
+    def __init__(
+        self,
+        metadata_path: Path = DEFAULT_METADATA_PATH,
+        faiss_path: Path = DEFAULT_FAISS_PATH,
+        *,
+        embedding_provider: EmbeddingProvider | None = None,
+        config: HybridRetrievalConfig | None = None,
+    ) -> None:
         self.metadata_path = metadata_path
+        # Retained for constructor compatibility and rebuild tooling.  Legacy
+        # hash-vector FAISS files are intentionally not an active backend.
         self.faiss_path = faiss_path
+        self.config = config or HybridRetrievalConfig.from_env()
         self.chunks = tuple(load_chunks(metadata_path))
-        self._faiss_index = _load_faiss_index(faiss_path, expected_size=len(self.chunks))
+        self._embedding_error: str | None = None
+        if embedding_provider is not None:
+            self._embedding_provider: EmbeddingProvider | None = embedding_provider
+        elif self.chunks:
+            try:
+                self._embedding_provider = LocalSemanticEmbeddingProvider(tuple(chunk.text for chunk in self.chunks))
+            except Exception as exc:  # noqa: BLE001 - lexical search remains safe.
+                self._embedding_provider = None
+                self._embedding_error = type(exc).__name__
+        else:
+            self._embedding_provider = None
+        self._document_embedding_cache: dict[int, tuple[float, ...]] = {}
 
     def available(self) -> bool:
         return bool(self.chunks)
 
     def vector_available(self) -> bool:
-        return self._faiss_index is not None
+        return self._embedding_provider is not None and self._embedding_error is None
 
     def backend_name(self) -> str:
-        return "faiss_hybrid" if self.vector_available() else "metadata_lexical"
+        if not self.vector_available():
+            return "metadata_lexical"
+        return f"hybrid_{_provider_name(self._embedding_provider)}"
+
+    def safe_metadata(self) -> dict[str, object]:
+        provider = self._embedding_provider
+        metadata: dict[str, object] = {
+            "backend": self.backend_name(),
+            "semantic_available": self.vector_available(),
+            "legacy_hash_vectors_active": False,
+            "embedding_error": self._embedding_error,
+            "config": self.config.safe_metadata(),
+        }
+        provider_metadata = getattr(provider, "safe_metadata", None)
+        if callable(provider_metadata):
+            details = provider_metadata()
+            if isinstance(details, dict):
+                metadata["embedding"] = dict(details)
+        return metadata
 
     def search(self, query: str, profile: UserProfile, max_results: int = 4) -> tuple[ChunkSearchResult, ...]:
         terms = _tokenize(query)
-        if not terms:
+        if not terms or max_results <= 0:
             return ()
-        if self._faiss_index is not None:
-            return self._hybrid_search(query, terms, profile, max_results)
-        return self._lexical_search(query, terms, profile, max_results)
 
-    def _lexical_search(
+        # Filter before semantic provider calls and before any candidate can
+        # become a result.  Restricted chunks never reach an injected provider
+        # during query-time retrieval and never reach answer composition.
+        accessible = tuple(
+            (index, chunk)
+            for index, chunk in enumerate(self.chunks)
+            if can_access_chunk(profile, chunk)
+        )
+        if not accessible:
+            return ()
+
+        lexical_raw = {
+            index: float(_lexical_score(chunk, query, terms))
+            for index, chunk in accessible
+        }
+        semantic_raw = self._semantic_scores(query, accessible)
+        lexical_max = max(lexical_raw.values(), default=0.0)
+        lexical_normalized = {
+            index: (score / lexical_max if lexical_max else 0.0)
+            for index, score in lexical_raw.items()
+        }
+
+        lexical_pool = _top_indices(
+            lexical_raw,
+            accessible,
+            self.config.lexical_candidate_count,
+        )
+        semantic_pool = _top_indices(
+            semantic_raw,
+            accessible,
+            self.config.semantic_candidate_count,
+        )
+        candidate_indexes = lexical_pool | semantic_pool
+        if not candidate_indexes:
+            return ()
+
+        weight_total = self.config.lexical_weight + self.config.semantic_weight
+        lexical_weight = self.config.lexical_weight / weight_total
+        semantic_weight = self.config.semantic_weight / weight_total
+        results: list[ChunkSearchResult] = []
+        accessible_by_index = dict(accessible)
+        for index in candidate_indexes:
+            lexical_score = lexical_normalized.get(index, 0.0)
+            semantic_score = semantic_raw.get(index, 0.0)
+            score = lexical_weight * lexical_score + semantic_weight * semantic_score
+            if score <= 0.0:
+                continue
+            chunk = accessible_by_index[index]
+            results.append(
+                ChunkSearchResult(
+                    chunk=chunk,
+                    score=float(score),
+                    snippet=_snippet(chunk.text, terms),
+                    lexical_score=float(lexical_score),
+                    semantic_score=float(semantic_score),
+                )
+            )
+
+        # Sort before document de-duplication so the strongest chunk represents
+        # each document.  All keys after scores are stable and data-derived.
+        results.sort(key=_result_sort_key)
+        limit = min(max_results, self.config.max_results)
+        return tuple(_dedupe_by_doc(results)[:limit])
+
+    def _semantic_scores(
         self,
         query: str,
-        terms: tuple[str, ...],
-        profile: UserProfile,
-        max_results: int,
-    ) -> tuple[ChunkSearchResult, ...]:
-        results: list[ChunkSearchResult] = []
-        for chunk in self.chunks:
-            if not can_access_chunk(profile, chunk):
-                continue
-            score = _lexical_score(chunk, query, terms)
-            if score <= 0:
-                continue
-            results.append(ChunkSearchResult(chunk=chunk, score=float(score), snippet=_snippet(chunk.text, terms)))
-        results.sort(key=lambda item: (item.score, item.chunk.updated_at), reverse=True)
-        return tuple(_dedupe_by_doc(results)[:max_results])
+        accessible: tuple[tuple[int, Chunk], ...],
+    ) -> dict[int, float]:
+        provider = self._embedding_provider
+        if provider is None:
+            return {}
+        try:
+            query_vector = provider.embed_query(query)
+            document_vectors = self._document_vectors(provider, accessible)
+        except Exception as exc:  # noqa: BLE001 - semantic failure falls back safely.
+            self._embedding_error = type(exc).__name__
+            return {}
 
-    def _hybrid_search(
+        scores: dict[int, float] = {}
+        for index, vector in document_vectors.items():
+            # Negative cosine is dissimilar, not useful positive relevance.
+            scores[index] = max(0.0, cosine_similarity(query_vector, vector))
+        return scores
+
+    def _document_vectors(
         self,
-        query: str,
-        terms: tuple[str, ...],
-        profile: UserProfile,
-        max_results: int,
-    ) -> tuple[ChunkSearchResult, ...]:
-        import numpy as np
+        provider: EmbeddingProvider,
+        accessible: tuple[tuple[int, Chunk], ...],
+    ) -> dict[int, tuple[float, ...]]:
+        local_vectors = getattr(provider, "document_vectors", None)
+        if callable(local_vectors):
+            fitted = tuple(local_vectors())
+            if len(fitted) == len(self.chunks):
+                for index, _chunk in accessible:
+                    self._document_embedding_cache[index] = tuple(float(value) for value in fitted[index])
 
-        vector = np.array([_hash_embedding(query)], dtype="float32")
-        candidate_count = min(len(self.chunks), max(50, max_results * 10))
-        scores, indexes = self._faiss_index.search(vector, candidate_count)
-        candidates: dict[int, float] = {}
-        for raw_index, raw_score in zip(indexes[0], scores[0], strict=False):
-            index = int(raw_index)
-            if index < 0:
-                continue
-            candidates[index] = max(candidates.get(index, 0.0), float(raw_score))
-
-        for index, chunk in enumerate(self.chunks):
-            lexical_score = _lexical_score(chunk, query, terms)
-            if lexical_score > 0:
-                candidates[index] = candidates.get(index, 0.0) + float(lexical_score)
-
-        results: list[ChunkSearchResult] = []
-        for index, score in candidates.items():
-            chunk = self.chunks[index]
-            if not can_access_chunk(profile, chunk):
-                continue
-            if score <= 0:
-                continue
-            results.append(ChunkSearchResult(chunk=chunk, score=score, snippet=_snippet(chunk.text, terms)))
-        results.sort(key=lambda item: (item.score, item.chunk.updated_at), reverse=True)
-        return tuple(_dedupe_by_doc(results)[:max_results])
+        missing = [(index, chunk) for index, chunk in accessible if index not in self._document_embedding_cache]
+        if missing:
+            vectors = provider.embed_documents([chunk.text for _index, chunk in missing])
+            if len(vectors) != len(missing):
+                raise ValueError("embedding provider returned the wrong document count")
+            for (index, _chunk), vector in zip(missing, vectors, strict=True):
+                self._document_embedding_cache[index] = tuple(float(value) for value in vector)
+        return {index: self._document_embedding_cache[index] for index, _chunk in accessible}
 
 
 def load_chunks(metadata_path: Path = DEFAULT_METADATA_PATH) -> list[Chunk]:
@@ -159,26 +266,44 @@ def load_chunks(metadata_path: Path = DEFAULT_METADATA_PATH) -> list[Chunk]:
 
 
 def can_access_chunk(profile: UserProfile, chunk: Chunk) -> bool:
-    if profile.status != "active":
-        return False
-    if profile.user_id in chunk.allowed_users:
-        return True
-    if profile.role in chunk.allowed_roles:
-        return True
-    return bool(set(profile.groups).intersection(chunk.allowed_groups))
+    return can_access_metadata(
+        profile,
+        department=chunk.department,
+        confidentiality=chunk.confidentiality,
+        allowed_roles=chunk.allowed_roles,
+        allowed_groups=chunk.allowed_groups,
+        allowed_users=chunk.allowed_users,
+    )
 
 
-def _load_faiss_index(faiss_path: Path, expected_size: int):
-    if not faiss_path.exists() or expected_size <= 0:
-        return None
-    try:
-        import faiss  # type: ignore[import-not-found]
-    except ImportError:
-        return None
-    index = faiss.read_index(str(faiss_path))
-    if index.ntotal != expected_size:
-        return None
-    return index
+def _provider_name(provider: EmbeddingProvider) -> str:
+    name = str(getattr(provider, "name", "custom")).strip().lower()
+    return re.sub(r"[^a-z0-9_-]+", "_", name) or "custom"
+
+
+def _top_indices(
+    scores: dict[int, float],
+    accessible: tuple[tuple[int, Chunk], ...],
+    limit: int,
+) -> set[int]:
+    positive = [
+        (index, score, chunk)
+        for index, chunk in accessible
+        if (score := scores.get(index, 0.0)) > 0.0
+    ]
+    positive.sort(key=lambda item: (-item[1], item[2].doc_id, item[2].chunk_index, item[2].chunk_id))
+    return {index for index, _score, _chunk in positive[:limit]}
+
+
+def _result_sort_key(item: ChunkSearchResult) -> tuple[float, float, float, str, int, str]:
+    return (
+        -item.score,
+        -item.lexical_score,
+        -item.semantic_score,
+        item.chunk.doc_id,
+        item.chunk.chunk_index,
+        item.chunk.chunk_id,
+    )
 
 
 def _lexical_score(chunk: Chunk, query: str, terms: tuple[str, ...]) -> int:

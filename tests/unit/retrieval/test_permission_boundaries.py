@@ -47,6 +47,68 @@ class RetrievalPermissionBoundaryTest(unittest.TestCase):
         inactive = self.profile.__class__(**{**self.profile.__dict__, "status": "inactive"})
         self.assertFalse(can_access_document(inactive, document))
 
+    def test_confidentiality_cannot_be_bypassed_by_a_broad_role_or_group_grant(self) -> None:
+        chunk = Chunk(
+            chunk_id="fixture:finance",
+            doc_id="fixture-finance",
+            chunk_index=0,
+            title="Finance fixture",
+            source_type="markdown",
+            source_path="fixture.md",
+            department="finance",
+            confidentiality="finance_sensitive",
+            allowed_roles=("employee",),
+            allowed_groups=("all_employees",),
+            allowed_users=(),
+            updated_at="2026-01-01",
+            text="hidden amount",
+            token_estimate=2,
+        )
+
+        self.assertFalse(can_access_chunk(self.profile, chunk))
+
+    def test_department_scope_requires_matching_department_or_explicit_team(self) -> None:
+        chunk = Chunk(
+            chunk_id="fixture:department",
+            doc_id="fixture-department",
+            chunk_index=0,
+            title="Department fixture",
+            source_type="markdown",
+            source_path="fixture.md",
+            department="finance",
+            confidentiality="department_internal",
+            allowed_roles=("employee",),
+            allowed_groups=(),
+            allowed_users=(),
+            updated_at="2026-01-01",
+            text="department process",
+            token_estimate=2,
+        )
+
+        self.assertFalse(can_access_chunk(self.profile, chunk))
+        matching = self.profile.__class__(**{**self.profile.__dict__, "department": "finance"})
+        self.assertTrue(can_access_chunk(matching, chunk))
+
+    def test_explicit_shared_user_can_access_known_sensitive_category(self) -> None:
+        chunk = Chunk(
+            chunk_id="fixture:shared",
+            doc_id="fixture-shared",
+            chunk_index=0,
+            title="Shared fixture",
+            source_type="markdown",
+            source_path="fixture.md",
+            department="finance",
+            confidentiality="finance_sensitive",
+            allowed_roles=(),
+            allowed_groups=(),
+            allowed_users=("u001",),
+            updated_at="2026-01-01",
+            text="shared amount",
+            token_estimate=2,
+        )
+
+        self.assertTrue(can_access_chunk(self.profile, chunk))
+
     def test_chunk_filter_has_the_same_default_deny_behavior(self) -> None:
         chunk = Chunk(
             chunk_id="fixture:0",

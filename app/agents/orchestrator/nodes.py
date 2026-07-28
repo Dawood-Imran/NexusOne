@@ -827,6 +827,9 @@ def _chunk_source_refs(results: tuple[ChunkSearchResult, ...]) -> list[dict[str,
                 "chunk_index": result.chunk.chunk_index,
                 "excerpt": result.snippet,
                 "text": result.chunk.text,
+                "score": result.score,
+                "lexical_score": result.lexical_score,
+                "semantic_score": result.semantic_score,
             }
         )
         refs.append(payload)

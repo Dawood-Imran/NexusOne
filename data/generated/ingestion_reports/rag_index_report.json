@@ -15,7 +15,8 @@
     "pdf": 67
   },
   "document_count": 71,
-  "faiss_path": "/home/tk-lpt-0427/Dawood Personal/NexusOne_Copilot/data/faiss/nexusone_chunks.index",
-  "faiss_status": "written",
-  "metadata_path": "/home/tk-lpt-0427/Dawood Personal/NexusOne_Copilot/data/faiss/nexusone_chunks_metadata.jsonl"
+  "embedding_provider": "local_lsa",
+  "faiss_path": "data/faiss/nexusone_chunks.index",
+  "faiss_status": "not_installed",
+  "metadata_path": "data/faiss/nexusone_chunks_metadata.jsonl"
 }

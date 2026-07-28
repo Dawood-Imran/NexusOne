@@ -21,7 +21,7 @@ flowchart TD
 
   subgraph RAG["RAG Retrieval Subgraph: PDFs + Markdown"]
     RAG_PERM[Build permission filter<br/>from Postgres user context]
-    RAG_SEARCH[Hybrid search<br/>FAISS vector + BM25 keyword]
+    RAG_SEARCH[Hybrid search<br/>local LSA semantic + lexical keyword]
     RAG_POSTFILTER[Postgres permission filter<br/>can_user_access_document]
     RAG_REWRITE{Enough allowed context?}
     RAG_QUERY_REWRITE[Rewrite query<br/>bounded retry]

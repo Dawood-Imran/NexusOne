@@ -47,7 +47,7 @@ Phase 0 and Phase 1 focus on a safe foundation:
 - Static professional chat UI.
 - Unit tests for guardrails, retrieval permissions, and SQL behavior.
 
-Full FAISS ingestion, LLM final-answer generation, ticket creation persistence, LangSmith tracing, and Playwright E2E hardening are later phases.
+Hosted/provider-backed vector ingestion, ticket creation persistence, LangSmith tracing, and Playwright E2E hardening are later phases. Local permission-carrying metadata and corpus-trained LSA hybrid retrieval run without hosted services.
 
 ## Acceptance Criteria
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.auth.profiles import UserProfile
+from app.retrieval.access import can_access_metadata
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -115,13 +116,14 @@ def load_markdown_documents(kb_root: Path = DEFAULT_KB_ROOT) -> list[KBDocument]
 
 
 def can_access_document(profile: UserProfile, document: KBDocument) -> bool:
-    if profile.status != "active":
-        return False
-    if profile.user_id in document.allowed_users:
-        return True
-    if profile.role in document.allowed_roles:
-        return True
-    return bool(set(profile.groups).intersection(document.allowed_groups))
+    return can_access_metadata(
+        profile,
+        department=document.department,
+        confidentiality=document.confidentiality,
+        allowed_roles=document.allowed_roles,
+        allowed_groups=document.allowed_groups,
+        allowed_users=document.allowed_users,
+    )
 
 
 def build_answer_from_results(query: str, results: tuple[RetrievalResult, ...]) -> str:
@@ -170,6 +172,8 @@ def _parse_inline_list(value: str) -> tuple[str, ...]:
 
 
 def _tokenize(query: str) -> tuple[str, ...]:
+    """Tokenize useful terms without discarding identifiers or acronyms."""
+
     stop_words = {
         "about",
         "can",
@@ -189,11 +193,22 @@ def _tokenize(query: str) -> tuple[str, ...]:
         "with",
         "your",
     }
-    return tuple(
-        token
-        for token in re.findall(r"[a-z0-9]+", query.lower())
-        if len(token) > 2 and token not in stop_words
-    )
+    tokens: list[str] = []
+    for original_token in re.findall(r"[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*", query):
+        raw_token = original_token.lower()
+        if raw_token in stop_words:
+            continue
+        # Keep short identifiers/acronyms such as HR, IT, SSO, and ID-7 while
+        # retaining the existing stop-word and very-short-token filtering.
+        if (
+            len(raw_token) > 2
+            or (original_token.isupper() and len(raw_token) >= 2)
+            or any(char.isdigit() for char in raw_token)
+            or "-" in raw_token
+            or "_" in raw_token
+        ):
+            tokens.append(raw_token)
+    return tuple(tokens)
 
 
 def _best_snippet(body: str, terms: tuple[str, ...]) -> str:

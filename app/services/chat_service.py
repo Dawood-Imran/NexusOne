@@ -50,7 +50,7 @@ class ChatService:
         load_dotenv()
         self.runtime_config = RuntimeConfig.from_env()
         self.retriever = retriever or LocalKBRetriever()
-        self.chunk_retriever = chunk_retriever or MetadataChunkRetriever()
+        self.chunk_retriever = chunk_retriever or MetadataChunkRetriever(config=self.runtime_config.retrieval_config)
 
         self._database_init_error: str | None = None
         self._database_engine = None
@@ -367,6 +367,7 @@ class ChatService:
             "answer_composer": answer_capability,
             "intent_classifier": classifier_capability,
             "sql_planner": planner_capability,
+            "retrieval": self.chunk_retriever.safe_metadata(),
             "tracing": {
                 "enabled": self.runtime_config.langsmith_tracing,
                 "project": self.runtime_config.langsmith_project,
