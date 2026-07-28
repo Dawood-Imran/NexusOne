@@ -14,6 +14,7 @@ from unittest.mock import patch
 from app.actions.audit_service import AuditService, InMemoryAuditRepository
 from app.actions.feedback_service import FeedbackService, InMemoryFeedbackRepository
 from app.agents.orchestrator.answer_composer import DeterministicAnswerComposer
+from app.agents.sql_subgraph.state import SQLExecutionResult
 from tests.unit.agents.orchestrator.intent_fixtures import fixture_classifier
 from app.api.dev_server import NexusOneRequestHandler
 from app.services.chat_service import ChatService
@@ -153,6 +154,42 @@ class LocalHTTPProductSurfaceTest(unittest.TestCase):
         self.assertEqual("EMPTY_MESSAGE", empty["reason_code"])
         self.assertNotIn("Traceback", json.dumps(empty))
 
+    def test_two_authenticated_users_receive_owner_scoped_ticket_lists(self) -> None:
+        original_service = NexusOneRequestHandler.service
+        NexusOneRequestHandler.service = ChatService(
+            sql_executor=_AuthenticatedTicketListExecutor(),
+            answer_composer=DeterministicAnswerComposer(fallback_reason="OFFLINE_HTTP_TEST"),
+            intent_classifier=fixture_classifier(),
+            feedback_service=FeedbackService(self.feedback_repository),
+            audit_service=AuditService(self.audit_repository),
+        )
+        try:
+            employee_cookie, _ = self.login("u001")
+            manager_cookie, _ = self.login("u002")
+            employee_status, _, employee = self.request(
+                "POST",
+                "/api/chat",
+                payload={"message": "Show my ticket status."},
+                cookie=employee_cookie,
+            )
+            manager_status, _, manager = self.request(
+                "POST",
+                "/api/chat",
+                payload={"message": "Show my ticket status."},
+                cookie=manager_cookie,
+            )
+        finally:
+            NexusOneRequestHandler.service = original_service
+
+        self.assertEqual(200, employee_status)
+        self.assertEqual(200, manager_status)
+        self.assertEqual("u001", employee["profile"]["user_id"])
+        self.assertEqual("u002", manager["profile"]["user_id"])
+        self.assertEqual(["IT-9001"], [row["ticket_id"] for row in employee["rows"]])
+        self.assertEqual({"IT-9001", "IT-9002"}, {row["ticket_id"] for row in manager["rows"]})
+        self.assertNotIn("HR-9003", json.dumps(employee))
+        self.assertNotIn("requester_id", json.dumps(employee))
+
     def test_ticket_action_http_happy_path_returns_sanitized_ticket(self) -> None:
         cookie, _ = self.login()
 
@@ -275,6 +312,28 @@ class LocalHTTPProductSurfaceTest(unittest.TestCase):
         self.assertEqual(403, status)
         self.assertEqual("IDENTITY_MISMATCH", payload["reason_code"])
         self.assertNotIn("u006", json.dumps(payload))
+
+
+class _AuthenticatedTicketListExecutor:
+    rows = (
+        {"ticket_id": "IT-9001", "requester_id": "u001", "department": "it", "category": "battery", "priority": "normal", "status": "open", "updated_at": "2026-02-07T09:00:00+00:00"},
+        {"ticket_id": "IT-9002", "requester_id": "u002", "department": "it", "category": "vpn", "priority": "high", "status": "in_progress", "updated_at": "2026-02-08T09:00:00+00:00"},
+        {"ticket_id": "HR-9003", "requester_id": "u003", "department": "hr", "category": "payroll", "priority": "normal", "status": "open", "updated_at": "2026-02-09T09:00:00+00:00"},
+    )
+
+    def fetch_one(self, query, parameters):
+        return None
+
+    def fetch_all(self, query, parameters, max_rows):
+        user_id = parameters["user_id"]
+        requesters = {"u001"} if user_id == "u001" else {"u001", "u002"} if user_id == "u002" else {user_id}
+        visible = [row for row in self.rows if row["requester_id"] in requesters]
+        return SQLExecutionResult(
+            columns=tuple(visible[0].keys()) if visible else ("ticket_id", "status", "updated_at"),
+            rows=tuple(visible[:max_rows]),
+            row_count=len(visible[:max_rows]),
+            elapsed_ms=1,
+        )
 
 
 class _ExplodingComposer:

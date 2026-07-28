@@ -45,10 +45,16 @@ body {
 /* Auth: make the demo entry point feel like a trustworthy internal product. */
 .auth-view {
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr);
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
   min-height: 100dvh;
+  padding: 28px;
   background: var(--canvas);
+}
+
+.auth-frame {
+  width: min(560px, 100%);
+  min-height: min(720px, calc(100dvh - 56px));
 }
 
 .auth-copy {
@@ -109,10 +115,10 @@ body {
 }
 
 .login-panel {
-  width: min(100%, 580px);
-  align-self: center;
+  width: 100%;
+  align-self: stretch;
   justify-self: center;
-  padding: clamp(32px, 5vw, 64px);
+  padding: clamp(32px, 7vw, 72px);
 }
 
 .panel-heading h2 {
@@ -399,7 +405,6 @@ body {
     box-shadow: 0 16px 44px rgba(16, 42, 67, 0.18);
   }
   .inspector.open { transform: translateX(0); }
-  #mobileInspectorButton,
   #closeInspectorButton { display: inline-flex; }
 }
 
@@ -461,6 +466,35 @@ body {
     grid-template-columns: 258px minmax(0, 1fr) 0;
   }
 
+  .app-shell.left-sidebar-collapsed {
+    grid-template-columns: 0 minmax(0, 1fr) 320px;
+  }
+
+  .conversation-rail.is-collapsed {
+    min-width: 0;
+    width: 0;
+    overflow: hidden;
+    padding-right: 0;
+    padding-left: 0;
+    border-right: 0;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .conversation-rail.is-collapsed > *:not(.sidebar-toggle) {
+    visibility: hidden;
+    opacity: 0;
+  }
+
+  .app-shell.left-sidebar-collapsed .sidebar-toggle {
+    position: fixed;
+    z-index: 50;
+    top: 17px;
+    left: 8px;
+    pointer-events: auto;
+    opacity: 1;
+  }
+
   .inspector {
     position: static;
     inset: auto;
@@ -473,7 +507,6 @@ body {
     display: none;
   }
 
-  #mobileInspectorButton,
   #closeInspectorButton {
     display: inline-flex;
   }

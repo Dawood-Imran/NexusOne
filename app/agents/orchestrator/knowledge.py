@@ -90,6 +90,14 @@ def build_local_general_answer(question: str) -> str | None:
     """
 
     lowered = _normalize(question)
+    if "create a ticket" in lowered and any(
+        marker in lowered
+        for marker in ("i can create", "please provide", "what information", "which team", "what category")
+    ):
+        return (
+            "To create a ticket, explicitly ask me to create or submit it. Then provide the team "
+            "(IT, HR, or Admin), the category, and a short description."
+        )
     if "machine learning" in lowered:
         return (
             "Machine learning is a way to build software that learns patterns from examples and uses those patterns "

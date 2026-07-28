@@ -52,6 +52,23 @@ class IntentClassifierContractTest(unittest.TestCase):
         self.assertEqual("ticket_create", route_from_intent(creation))
         self.assertEqual("sql", route_from_intent(status))
 
+    def test_ticket_guidance_is_general_and_never_routes_to_ticket_action(self) -> None:
+        guidance = "I can create a ticket for your battery issue. Please provide which team should handle it: IT, HR, or Admin, and specify the category that fits your request"
+        classifier = FakeIntentClassifier(
+            {
+                guidance: {"intent": "general_question", "confidence": 0.99, "needs_clarification": False},
+                "Create an IT ticket for a battery issue that blocks work.": {"intent": "ticket_create", "confidence": 0.99, "needs_clarification": False},
+                "List my ticket statuses.": {"intent": "ticket_status", "confidence": 0.99, "needs_clarification": False},
+                "What is a REST API?": {"intent": "general_question", "confidence": 0.99, "needs_clarification": False},
+            }
+        )
+
+        self.assertEqual("general_question", classify_request(classifier, guidance).intent)
+        self.assertEqual("GENERAL_KNOWLEDGE", route_from_intent(classify_request(classifier, guidance)))
+        self.assertEqual("ticket_create", classify_request(classifier, "Create an IT ticket for a battery issue that blocks work.").intent)
+        self.assertEqual("sql", route_from_intent(classify_request(classifier, "List my ticket statuses.")))
+        self.assertEqual("general_question", classify_request(classifier, "What is a REST API?").intent)
+
     def test_context_and_active_draft_can_be_consumed_by_injected_classifier(self) -> None:
         class ContextClassifier:
             def __init__(self):

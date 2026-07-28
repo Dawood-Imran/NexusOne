@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
+import re
 from typing import Any, Mapping
 
 from app.agents.sql_subgraph.state import SQLSubgraphOutput
@@ -153,6 +155,55 @@ def safe_summary_payload(question: str, output: SQLSubgraphOutput) -> dict[str, 
     }
 
 
+def format_timestamp_for_user(value: Any) -> str:
+    """Format server timestamps in a stable, explicitly UTC user contract.
+
+    Postgres timestamps can arrive as aware datetimes or strings with either
+    ISO or display-oriented separators. Naive server values are treated as UTC
+    by contract; invalid values never fall through as misleading raw text.
+    """
+
+    if value is None:
+        return "Timestamp unavailable"
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return f"{_month_name(value.month)} {value.day}, {value.year} UTC"
+
+    parsed: datetime
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        raw = str(value).strip()
+        if not raw:
+            return "Timestamp unavailable"
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+            try:
+                parsed_date = date.fromisoformat(raw)
+            except ValueError:
+                return "Timestamp unavailable"
+            return f"{_month_name(parsed_date.month)} {parsed_date.day}, {parsed_date.year} UTC"
+        normalized = re.sub(r"\s+(?:UT|UTC)$", "+00:00", raw, flags=re.IGNORECASE)
+        if " " in normalized and "T" not in normalized:
+            normalized = normalized.replace(" ", "T", 1)
+        try:
+            parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return "Timestamp unavailable"
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    parsed = parsed.astimezone(UTC)
+    hour = parsed.hour % 12 or 12
+    suffix = "AM" if parsed.hour < 12 else "PM"
+    return (
+        f"{_month_name(parsed.month)} {parsed.day}, {parsed.year}, "
+        f"{hour}:{parsed.minute:02d} {suffix} UTC"
+    )
+
+
+def _month_name(month: int) -> str:
+    return ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")[month - 1]
+
+
 def _format_assignment_row(row: Mapping[str, Any]) -> str:
     ticket = row.get("ticket_id")
     assignee = row.get("assignee_name") or row.get("support_team")
@@ -172,7 +223,7 @@ def _format_assignment_row(row: Mapping[str, Any]) -> str:
 
     parts = [f"Ticket {ticket} is assigned to {identity}"]
     if row.get("updated_at") is not None:
-        parts.append(f"Last updated {row['updated_at']}")
+        parts.append(f"Last updated {format_timestamp_for_user(row['updated_at'])}")
     if row.get("priority") is not None:
         parts.append(f"Priority {row['priority']}")
     if row.get("status") is not None:
@@ -190,7 +241,7 @@ def _format_ticket_row(row: Mapping[str, Any]) -> str:
     else:
         parts = ["A matching ticket was found"]
     if row.get("updated_at") is not None:
-        parts.append(f"Last updated {row['updated_at']}")
+        parts.append(f"Last updated {format_timestamp_for_user(row['updated_at'])}")
     if row.get("priority") is not None:
         parts.append(f"Priority {row['priority']}")
     return ". ".join(parts) + "."
@@ -249,7 +300,7 @@ def format_safe_terminal_answer(output: SQLSubgraphOutput, question: str | None 
             if row.get("priority") is not None:
                 details.append(f"priority {row['priority']}")
             if row.get("updated_at") is not None:
-                details.append(f"updated {row['updated_at']}")
+                details.append(f"updated {format_timestamp_for_user(row['updated_at'])}")
             suffix = f" ({', '.join(details)})" if details else ""
             lines.append(f"- {row.get('ticket_id')}: {row.get('status')}{suffix}")
         return "\n".join(lines)

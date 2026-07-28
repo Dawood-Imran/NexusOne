@@ -11,6 +11,11 @@ finite labels to graph routes and does not inspect message keywords.
 `combined_lookup`, `ticket_create`, `ticket_status`, `history_lookup`, `feedback`,
 `clarification`, and `unsupported` are the complete classifier label set.
 
+`general_question` includes basic questions and ticket-creation guidance. Guidance
+such as “I can create a ticket … please provide …” is not a command and must not
+invoke the ticket action. `ticket_create` requires an explicit user request to
+create, submit, raise, open, or generate a ticket.
+
 The server maps these labels as follows:
 
 - casual -> `CASUAL` deterministic response

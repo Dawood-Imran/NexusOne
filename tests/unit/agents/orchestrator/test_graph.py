@@ -256,6 +256,24 @@ class NexusOneOrchestratorTest(unittest.TestCase):
         self.assertNotIn("retrieve_rag_context", nodes)
         self.assertNotIn("Q4 Revenue Risk Register", response["message"])
 
+    def test_ticket_creation_guidance_is_general_and_does_not_write(self) -> None:
+        response = self.orchestrator.invoke(
+            {
+                "user_id": "u001",
+                "message": "I can create a ticket for your battery issue. Please provide which team should handle it: IT, HR, or Admin, and specify the category that fits your request",
+                "include_trace": True,
+            }
+        )
+
+        self.assertEqual("answered", response["status"])
+        self.assertEqual("general_question", response["intent"])
+        self.assertEqual("GENERAL_KNOWLEDGE", response["route"])
+        self.assertIn("explicitly ask me to create or submit", response["message"])
+        nodes = [step["node"] for step in response["trace"]]
+        self.assertNotIn("run_ticket_action", nodes)
+        self.assertNotIn("run_sql_subgraph", nodes)
+        self.assertEqual([], self.ticket_repository.tickets)
+
     def test_ticket_creation_uses_action_route_without_rag_or_sql(self) -> None:
         response = self.orchestrator.invoke(
             {

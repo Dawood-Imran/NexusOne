@@ -5,6 +5,7 @@ const AUTH_ENDPOINTS = {
   logout: "/api/auth/logout",
 };
 const MAX_COMPOSER_HEIGHT = 168;
+const DISPLAY_TIME_ZONE = "UTC";
 
 const state = {
   account: null,
@@ -26,6 +27,8 @@ const loginForm = document.querySelector("#loginForm");
 const usernameInput = document.querySelector("#usernameInput");
 const passwordInput = document.querySelector("#passwordInput");
 const loginButton = document.querySelector("#loginButton");
+const loginButtonLabel = document.querySelector(".login-button-label");
+const loginButtonLoader = document.querySelector(".login-button-loader");
 const authError = document.querySelector("#authError");
 const authStatus = document.querySelector("#authStatus");
 const authServiceStatus = document.querySelector("#authServiceStatus");
@@ -46,6 +49,8 @@ const accountDetailDepartment = document.querySelector("#accountDetailDepartment
 const accountDetailLocation = document.querySelector("#accountDetailLocation");
 const accountDetailEmail = document.querySelector("#accountDetailEmail");
 const newChatButton = document.querySelector("#newChatButton");
+const conversationRail = document.querySelector("#conversationRail");
+const leftSidebarToggle = document.querySelector("#leftSidebarToggle");
 const conversationList = document.querySelector("#conversationList");
 const conversationEmpty = document.querySelector("#conversationEmpty");
 const conversationTitle = document.querySelector("#conversationTitle");
@@ -59,7 +64,6 @@ const conversationStatus = document.querySelector("#conversationStatus");
 const suggestions = document.querySelector("#suggestions");
 const inspector = document.querySelector("#inspector");
 const inspectorContent = document.querySelector("#inspectorContent");
-const mobileInspectorButton = document.querySelector("#mobileInspectorButton");
 const closeInspectorButton = document.querySelector("#closeInspectorButton");
 let skipNextAccountFocus = false;
 
@@ -217,6 +221,7 @@ function enterWorkspace(account, sessionToken = null) {
   renderConversationList();
   renderActiveConversation();
   setConversationStatus("");
+  setSidebarExpanded(true);
   if (window.matchMedia("(min-width: 981px)").matches) openInspector();
   else closeInspector();
   setComposerAvailability();
@@ -261,9 +266,9 @@ async function logout() {
   showLogin();
   usernameInput.value = "";
   passwordInput.value = "";
-  setAuthServiceState(logoutFailed ? "Sign-in service did not confirm sign out" : "Signed out", logoutFailed ? "error" : "live");
-  setAuthStatus(logoutFailed ? "You were signed out on this device. The service could not confirm the server session; try again before sharing this device." : "You are signed out.");
-  if (logoutFailed) setAuthError("The server did not confirm sign out. Sign in again only when you are ready.");
+  setAuthServiceState(logoutFailed ? "Sign-in service did not confirm the session change" : "Sign in to continue", logoutFailed ? "error" : "live");
+  setAuthStatus(logoutFailed ? "Try signing in again when the service is available." : "Sign in to continue.");
+  if (logoutFailed) setAuthError("The server did not confirm the session change. Try again before sharing this device.");
   usernameInput.focus();
 }
 
@@ -535,6 +540,7 @@ function selectAssistantMessage(messageId) {
   }
   state.selectedAssistantMessageId = messageId;
   renderInspector();
+  if (window.matchMedia("(max-width: 980px)").matches) openInspector();
   messages.querySelectorAll(".message.assistant").forEach((node) => node.classList.remove("selected"));
   messages.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)?.classList.add("selected");
 }
@@ -742,7 +748,7 @@ function renderTicketSummary(ticket) {
   const title = document.createElement("h3");
   title.textContent = safeTicket.status === "error" || safeTicket.status === "unavailable" ? "Ticket status" : "Ticket details";
   const list = document.createElement("dl");
-  [["ID", safeTicket.ticket_id], ["Status", safeTicket.status], ["Team", safeTicket.department], ["Category", safeTicket.category], ["Priority", safeTicket.priority], ["Updated", safeTicket.updated_at]].forEach(([label, value]) => {
+  [["ID", safeTicket.ticket_id], ["Status", safeTicket.status], ["Team", safeTicket.department], ["Category", safeTicket.category], ["Priority", safeTicket.priority], ["Updated", safeTicket.updated_at ? formatTimestamp(safeTicket.updated_at) : null]].forEach(([label, value]) => {
     if (!value) return;
     const row = document.createElement("div");
     const term = document.createElement("dt");
@@ -777,17 +783,35 @@ function renderFeedbackControls(payload) {
   [["helpful", "Helpful"], ["not_helpful", "Not helpful"], ["missing_source", "Source issue"]].forEach(([rating, label]) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = payload.feedback === rating ? "Saved" : label;
+    button.className = "feedback-button";
+    button.dataset.rating = rating;
+    button.dataset.actionLabel = label;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.innerHTML = `${feedbackIcon(rating)}<span class="sr-only">${label}</span>`;
     button.addEventListener("click", () => sendFeedback(button, payload, rating));
     section.appendChild(button);
   });
   return section;
 }
 
+function feedbackIcon(rating, saved = false) {
+  if (saved) {
+    return '<svg class="feedback-icon" data-icon="saved" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" /></svg>';
+  }
+  const icons = {
+    helpful: '<svg class="feedback-icon" data-icon="thumbs-up" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10v10H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h3Zm0 10h9.4a2 2 0 0 0 1.94-1.52l1.2-4.8A2 2 0 0 0 17.6 11H14l.76-3.8A2.6 2.6 0 0 0 12.22 4L7 10v10Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.7" /></svg>',
+    not_helpful: '<svg class="feedback-icon" data-icon="thumbs-down" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14V4H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3Zm0-10h9.4a2 2 0 0 1 1.94 1.52l1.2 4.8A2 2 0 0 1 17.6 13H14l.76 3.8A2.6 2.6 0 0 1 12.22 20L7 14V4Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.7" /></svg>',
+    missing_source: '<svg class="feedback-icon" data-icon="source-issue" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.7" /><path d="M14 3v5h5M12 11v4M12 18h.01" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" /></svg>',
+  };
+  return icons[rating] || icons.missing_source;
+}
+
 async function sendFeedback(button, payload, rating) {
+  const actionLabel = button.dataset.actionLabel || rating;
   button.disabled = true;
-  const original = button.textContent;
-  button.textContent = "Saving";
+  button.setAttribute("aria-label", `${actionLabel} saving`);
+  button.title = `${actionLabel} saving`;
   try {
     const response = await fetch("/api/feedback", {
       method: "POST",
@@ -806,17 +830,37 @@ async function sendFeedback(button, payload, rating) {
     }
     if (response.ok && result.status === "stored") {
       payload.feedback = rating;
-      button.textContent = "Saved";
+      button.innerHTML = `${feedbackIcon(rating, true)}<span class="sr-only">${actionLabel} saved</span>`;
+      button.title = `${actionLabel} saved`;
+      button.setAttribute("aria-label", `${actionLabel} saved`);
+      button.classList.add("is-saved");
       saveConversations();
       renderInspector();
     } else {
-      button.textContent = result.message || "Could not save";
+      const errorLabel = `${actionLabel}: ${result.message || "Could not save"}`;
+      button.innerHTML = `${feedbackIcon(rating)}<span class="sr-only">${errorLabel}</span>`;
+      button.title = errorLabel;
+      button.setAttribute("aria-label", errorLabel);
     }
   } catch (error) {
-    button.textContent = "Could not save";
+    const errorLabel = `${actionLabel}: Could not save`;
+    button.innerHTML = `${feedbackIcon(rating)}<span class="sr-only">${errorLabel}</span>`;
+    button.title = errorLabel;
+    button.setAttribute("aria-label", errorLabel);
   } finally {
     window.setTimeout(() => {
-      button.textContent = payload.feedback === rating ? "Saved" : original;
+      if (payload.feedback === rating) {
+        const savedLabel = `${actionLabel} saved`;
+        button.innerHTML = `${feedbackIcon(rating, true)}<span class="sr-only">${savedLabel}</span>`;
+        button.title = savedLabel;
+        button.setAttribute("aria-label", savedLabel);
+        button.classList.add("is-saved");
+      } else {
+        button.innerHTML = `${feedbackIcon(rating)}<span class="sr-only">${actionLabel}</span>`;
+        button.title = actionLabel;
+        button.setAttribute("aria-label", actionLabel);
+        button.classList.remove("is-saved");
+      }
       button.disabled = false;
     }, 1200);
   }
@@ -866,23 +910,24 @@ function closeInspector() {
   inspector.classList.remove("open");
   inspector.classList.add("is-collapsed");
   appView.classList.add("right-inspector-collapsed");
-  mobileInspectorButton.setAttribute("aria-expanded", "false");
-  setIconControlLabel(mobileInspectorButton, "Show conversation details");
-  mobileInspectorButton.querySelector(".panel-toggle-icon").textContent = ">";
   setIconControlLabel(closeInspectorButton, "Expand conversation details");
   closeInspectorButton.querySelector(".panel-toggle-icon").textContent = ">";
-  if (document.activeElement !== mobileInspectorButton && document.activeElement !== messageInput) mobileInspectorButton.focus();
 }
 
 function openInspector() {
   inspector.classList.remove("is-collapsed");
   inspector.classList.add("open");
   appView.classList.remove("right-inspector-collapsed");
-  mobileInspectorButton.setAttribute("aria-expanded", "true");
-  setIconControlLabel(mobileInspectorButton, "Hide conversation details");
-  mobileInspectorButton.querySelector(".panel-toggle-icon").textContent = ">";
   setIconControlLabel(closeInspectorButton, "Collapse conversation details");
   closeInspectorButton.querySelector(".panel-toggle-icon").textContent = ">";
+}
+
+function setSidebarExpanded(expanded) {
+  conversationRail.classList.toggle("is-collapsed", !expanded);
+  appView.classList.toggle("left-sidebar-collapsed", !expanded);
+  leftSidebarToggle.setAttribute("aria-expanded", String(expanded));
+  setIconControlLabel(leftSidebarToggle, expanded ? "Collapse navigation" : "Expand navigation");
+  leftSidebarToggle.querySelector(".sidebar-toggle-icon").textContent = expanded ? "‹" : "›";
 }
 
 function renderInspector() {
@@ -944,6 +989,14 @@ function latestAssistantMessage(conversation) {
   return [...conversation.messages].reverse().find((message) => message.role === "assistant") || null;
 }
 
+function displayStructuredValue(column, value) {
+  if (value == null) return "—";
+  if (["created_at", "updated_at", "last_updated"].includes(String(column).toLowerCase())) {
+    return formatTimestamp(value);
+  }
+  return String(value);
+}
+
 function renderStructuredRows(message) {
   const section = document.createElement("section");
   section.className = "structured-results";
@@ -971,7 +1024,7 @@ function renderStructuredRows(message) {
     columns.forEach((column) => {
       const cell = document.createElement("td");
       const value = row && row[column] != null ? row[column] : "—";
-      cell.textContent = String(value);
+      cell.textContent = displayStructuredValue(column, value);
       tableRow.appendChild(cell);
     });
     body.appendChild(tableRow);
@@ -1027,12 +1080,46 @@ function renderSourceCard(item) {
   return card;
 }
 
+function formatTimestamp(value) {
+  if (value == null) return "Timestamp unavailable";
+  const raw = String(value).trim();
+  if (!raw) return "Timestamp unavailable";
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+  let normalized = raw.replace(/\s+(?:UT|UTC)$/i, "Z");
+  if (normalized.includes(" ") && !normalized.includes("T")) normalized = normalized.replace(" ", "T");
+  if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized)) normalized += "Z";
+  if (!isValidIsoCalendarDate(normalized)) return "Timestamp unavailable";
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return "Timestamp unavailable";
+  const locale = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en-US";
+  const options = dateOnly
+    ? { year: "numeric", month: "short", day: "numeric", timeZone: DISPLAY_TIME_ZONE, timeZoneName: "short" }
+    : { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: DISPLAY_TIME_ZONE, timeZoneName: "short" };
+  try {
+    const formatted = new Intl.DateTimeFormat(locale, options).format(parsed);
+    return /\bUTC\b/.test(formatted) ? formatted : `${formatted} UTC`;
+  } catch (error) {
+    return "Timestamp unavailable";
+  }
+}
+
+function isValidIsoCalendarDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return true;
+  const candidate = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00Z`);
+  return candidate.getUTCFullYear() === Number(match[1])
+    && candidate.getUTCMonth() + 1 === Number(match[2])
+    && candidate.getUTCDate() === Number(match[3]);
+}
+
+if (typeof window !== "undefined") window.NexusOneTimeDisplay = { formatTimestamp };
+
 function sourceMeta(item) {
   if (!item.title) return `${item.kind || "structured source"}${item.domain ? ` · ${item.domain}` : ""}`;
   const details = [item.source_type || "document"];
   if (item.page_number) details.push(`page ${item.page_number}`);
   if (item.section_heading) details.push(item.section_heading);
-  if (item.updated_at) details.push(`updated ${item.updated_at}`);
+  if (item.updated_at) details.push(`updated ${formatTimestamp(item.updated_at)}`);
   if (item.source_path) details.push(item.source_path);
   return details.join(" · ");
 }
@@ -1115,10 +1202,12 @@ function renderRetry(text, titleText = "Connection issue") {
 function setAuthenticating(value) {
   state.authenticating = value;
   loginButton.disabled = value;
+  loginButton.setAttribute("aria-busy", String(value));
+  loginButton.classList.toggle("is-loading", value);
+  loginButtonLoader.hidden = !value;
   usernameInput.disabled = value;
   passwordInput.disabled = value;
-  const label = loginButton.querySelector("span");
-  if (label) label.textContent = value ? "Signing in…" : "Sign in";
+  loginButtonLabel.textContent = value ? "Signing in…" : "Sign in";
 }
 
 function setSending(value) {
@@ -1414,10 +1503,10 @@ accountButton.addEventListener("click", toggleAccountPopover);
 accountButton.addEventListener("focus", openAccountPopover);
 logoutButton.addEventListener("click", logout);
 newChatButton.addEventListener("click", startNewChat);
-mobileInspectorButton.addEventListener("click", () => {
-  const expanded = mobileInspectorButton.getAttribute("aria-expanded") === "true";
-  if (expanded) closeInspector();
-  else openInspector();
+leftSidebarToggle.addEventListener("click", () => {
+  const expanded = leftSidebarToggle.getAttribute("aria-expanded") === "true";
+  setSidebarExpanded(!expanded);
+  leftSidebarToggle.focus();
 });
 closeInspectorButton.addEventListener("click", closeInspector);
 chatForm.addEventListener("submit", (event) => {
@@ -1457,7 +1546,6 @@ document.addEventListener("keydown", (event) => {
       }
     } else if (inspector.classList.contains("open")) {
       closeInspector();
-      mobileInspectorButton.focus();
     }
   }
 });
