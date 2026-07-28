@@ -4,7 +4,7 @@
 
 - State: in-progress
 - Active phase: Phase 4 - Ticket Actions and Feedback / integration validation
-- Last run: centered the reference-inspired split authentication card while preserving the server-owned username/password flow, then verified the `u001` demo sign-in through the browser. Focused frontend/auth/API contracts, JavaScript syntax, and the full 107-test suite pass; repository `.env` was absent, so OpenAI/Postgres live paths were not exercised.
+- Last run: added the local-only test/evaluation matrix, 14-case deterministic dataset/evaluator, HTTP product-surface contracts, role/route/SQL/retrieval/auth boundaries, frontend event/security contracts, and live-evaluator opt-in refusal. The branch now passes 164 tests and the offline evaluation; repository `.env` was absent, so OpenAI/Postgres live paths were not exercised.
 - Integration note: `docs/requirements-coverage.md` is retained as the frontend/audit branch's durable R1-R14 evidence matrix; the integrated UI preserves the action-aware conversation inspector and adds loading, denied, no-answer, error/retry, responsive, auto-growing composer, and authenticated account-session states. The frontend no longer exposes a demo profile picker or post-login role switcher; it consumes `/api/auth/session`, `/api/auth/login`, and `/api/auth/logout`.
 - Main risks:
   - FastAPI/React production adapters are not wired yet; the app still uses a framework-independent service layer plus stdlib dev server.
@@ -32,7 +32,7 @@
 | Prompt-injection resistance | Backend | partial | `tests/unit/services/test_guardrail_policy.py`, `tests/unit/services/test_chat_service.py`, `tests/unit/agents/orchestrator/test_graph.py` | Main graph denies before retrieval, SQL, or model/tool work. |
 | Feedback capture | Backend/Frontend | partial | `app/actions/feedback_service.py`, `app/api/dev_server.py`, `frontend/static/app.js`, `tests/unit/actions/test_feedback_service.py`, `scripts/smoke_phase4_actions.py` | `/api/feedback` stores validated feedback through service layer; live Postgres and HTTP API smokes passed. Browser E2E remains. |
 | Audit metadata | Backend | partial | `app/actions/audit_service.py`, `app/services/chat_service.py`, `tests/unit/actions/test_audit_service.py`, `tests/unit/services/test_chat_service.py`, `scripts/smoke_phase4_actions.py` | Chat service writes safe metadata with redacted query text; live Postgres smoke passed. |
-| Evaluation tests | Testing | partial | Existing SQL unit tests | Broader role/RAG/E2E tests pending. |
+| Evaluation tests | Testing | complete (offline) | `docs/test-coverage-matrix.md`, `tests/evaluation/dataset.json`, `tests/evaluation/evaluator.py`, `scripts/run_evaluation.py`, `tests/unit/evaluation/test_evaluator.py` | 14 deterministic cases cover public, role-scoped, executive allow/deny, retrieval, SQL, ticket, casual, injection, malformed, and no-provider paths. Live provider scoring and browser E2E remain opt-in/follow-up. |
 | Responsive frontend | Frontend/Testing | partial | `frontend/static/styles.css`, static frontend contract tests, `docs/requirements-coverage.md` | Integrated action-aware conversation workspace retains authenticated session handling, immutable account control, profile-scoped history, inspector, tickets, and feedback while adding loading/denied/no-answer/error-retry states, source metadata, focus/touch treatment, auto-growing composer behavior, and reduced-motion support. Browser E2E remains. |
 | Observability hooks | Backend | partial | `app/observability/langsmith.py`, `app/agents/orchestrator/graph.py`, graph trace response fields | Graph invocations now include LangSmith-compatible run name, tags, and safe metadata. Hosted LangSmith verification depends on env credentials. |
 
@@ -102,6 +102,19 @@
 | `./.venv/bin/python -m unittest tests.unit.frontend.test_static_chat_ui` | pass | 24 focused contracts covering conversation deletion confirmation/re-homing, icon-only controls and labels, inspector-only trace placement, removed shell copy/workspace action, and suggestion visibility. |
 | `./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 121-test full suite after authenticated-chat UI updates. |
 | `./.venv/bin/python -m compileall -q app scripts tests` + `node --check frontend/static/app.js` + `git diff --check` | pass | Python compilation, JavaScript syntax, and diff whitespace validation. |
+| `./.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 164 deterministic unit, integration, auth/HTTP, orchestration, SQL, retrieval, action, streaming, and frontend contract tests. |
+| `./.venv/bin/python scripts/run_evaluation.py` | pass | 14 offline cases; authorization, route, grounding/facts, citations, safety/no-leakage, and response-shape dimensions all passed. |
+| `./.venv/bin/python scripts/run_live_evaluation.py` | expected refusal | Refused because explicit `NEXUSONE_ENABLE_LIVE_EVAL=1` and configured credentials were absent; no provider was contacted. |
+| `./.venv/bin/python -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` | pass | Syntax/compile and whitespace checks after coverage additions. |
+
+## Test coverage evaluation update
+
+- Baseline inventory and risk matrix: `docs/test-coverage-matrix.md`.
+- The versioned offline dataset contains 14 stable cases. The deterministic evaluator reports authorization, route, grounding/facts, citations, safety/no-leakage, and response-shape dimensions without printing raw answers.
+- Added local HTTP contracts for happy/denied/malformed/no-provider/ticket/feedback retry paths, plus auth expiry, all-role guardrail matrix, route/action boundaries, SQL execution boundaries, retrieval default-deny, frontend event/security contracts, and live-evaluator opt-in refusal.
+- Streaming was present in the launch checkout (`fed93e9`) and was not modified; existing SSE unit/HTTP tests remain in scope. No separate streaming implementation was merged by this branch.
+- Latest local-only validation for this branch is recorded after implementation below. No Postgres, OpenAI, LangSmith, or browser service is required by the default commands.
+- Coverage found and fixed two real safety boundary defects: malformed non-string password verifiers could raise instead of failing closed, and inactive profiles were allowed through the general guardrail policy. Regression tests are in `tests/unit/auth/test_auth_boundaries.py` and `tests/unit/services/test_guardrail_matrix.py`.
 
 ## Open Issues
 

@@ -91,6 +91,14 @@ def check_message_access(profile: UserProfile, message: str) -> AccessDecision:
             message="I cannot follow instructions that try to bypass role rules or reveal hidden system information.",
         )
 
+    if profile.status != "active":
+        return AccessDecision(
+            allowed=False,
+            category=category,
+            reason_code="INACTIVE_USER",
+            message="I cannot access that information for an inactive user profile.",
+        )
+
     allowed_categories = ROLE_ALLOWED_CATEGORIES.get(profile.role, set())
     if category in allowed_categories:
         return AccessDecision(

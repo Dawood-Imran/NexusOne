@@ -97,6 +97,8 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, encoded_hash: str) -> bool:
     """Constant-time verification for a stored PBKDF2 password verifier."""
 
+    if not isinstance(encoded_hash, str):
+        return False
     try:
         algorithm, iterations_text, salt_text, digest_text = encoded_hash.split("$", 3)
         if algorithm != PASSWORD_HASH_ALGORITHM:
