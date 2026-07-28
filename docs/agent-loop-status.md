@@ -2,9 +2,9 @@
 
 ## Current Summary
 
-- State: in-progress
-- Active phase: Phase 4 - Ticket Actions and Feedback / integration validation
-- Last run: retrieval threshold implementation passed the focused retrieval/graph/composer/service checks, the 196-test offline suite, Python compilation, JavaScript syntax, git diff checks, and 13-test local HTTP/SSE contracts; repository `.env` was absent, so OpenAI/Postgres live paths were not exercised.
+- State: integration-ready
+- Active phase: Phase 4 - Ticket Actions and Feedback / integration branch validation complete
+- Last run: the three captain-approved branches were merged from clean `daud_dev`; 155 focused contracts, the 230-test deterministic suite, the 20-case offline evaluator, Python compilation, JavaScript syntax, diff checks, and actual local HTTP/SSE smoke passed. OpenAI/Postgres live paths were intentionally not exercised.
 - Integration note: `docs/requirements-coverage.md` is retained as the frontend/audit branch's durable R1-R14 evidence matrix; the integrated UI preserves the action-aware conversation inspector and adds loading, denied, no-answer, error/retry, responsive, auto-growing composer, and authenticated account-session states. The frontend no longer exposes a demo profile picker or post-login role switcher; it consumes `/api/auth/session`, `/api/auth/login`, and `/api/auth/logout`. The current UI polish keeps ticket cards structured-only, adds independent keyboard-accessible left/right panel toggles, stores a per-answer expandable trace, collapses prior traces on new questions, and removes provider/fallback diagnostics and obsolete shell copy.
 - Main risks:
   - FastAPI/React production adapters are not wired yet; the app still uses a framework-independent service layer plus stdlib dev server.
@@ -15,6 +15,7 @@
   - LangSmith hosted upload can fail noisily in restricted-network shells when tracing is enabled in the environment; graph execution still succeeds and safe metadata config is covered by unit tests.
 - The local authentication contract now uses salted password verifiers, opaque server-side sessions, and cookie-authenticated chat/feedback; the static UI uses that contract and omits client identity from chat/feedback requests.
 - Server memory phase: `docs/conversation-memory.md` records the pre-change inventory and official LangChain references. `SQLiteConversationStore` now owns server conversation IDs/turns, and JSON user memory/tools own bounded per-user durable facts/preferences; frontend history now reloads from authenticated conversation endpoints instead of browser persistence.
+- Integration branch: merged `ecc62fc`, `583abad`, and `4a30982` from clean `daud_dev` with memory, retrieval threshold/citation, ticket ownership/security, frontend, routing, and streaming contracts retained; `docs/intent-routing.md` and the offline history fixture were aligned to the server-memory contract.
 
 ## Memory Coverage
 
@@ -113,6 +114,13 @@
 | `.venv/bin/python -m unittest tests.unit.api.test_local_http_surface tests.unit.api.test_streaming` | pass | 13 local HTTP/SSE contract tests passed with injected deterministic classifier/composer; cited AWS response, trace safety, auth, denied paths, and streaming remained green without OpenAI/Postgres/network. |
 | `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 196-test full offline suite passed. |
 | `.venv/bin/python -m compileall -q app scripts tests` + `node --check frontend/static/app.js` + `git diff --check` | pass | Python compilation, JavaScript syntax, and whitespace validation passed after retrieval threshold changes. |
+| `git merge --no-ff ecc62fc`, `583abad`, `4a30982` | pass | Three captain-approved commits are ancestors of the integration branch; only the deliberate memory/retrieval prompt and memory/retriever constructor conflicts were resolved. No source branch was changed. |
+| `.venv/bin/python -m unittest` focused memory/retrieval/ticket/routing/frontend/API/streaming contracts | pass | 155 focused tests passed with empty provider/database credentials. |
+| `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` | pass | 230 deterministic tests passed locally without production credentials or network services. |
+| `.venv/bin/python scripts/run_evaluation.py` | pass | All 20 offline evaluation cases and all six dimensions passed after aligning the history case with server memory. |
+| Local `ThreadingHTTPServer` JSON and SSE smoke with temporary runtime data | pass | Auth/session, cited RAG, restricted denial without title leakage, SSE event ordering, and delta/completion consistency passed; no OpenAI/Postgres/network. |
+| `.venv/bin/python -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` | pass | Final Python compilation, JavaScript syntax, and whitespace validation passed; generated runtime data was removed and tracked bytecode restored. |
+| Combined diff/reference audit | pass | No newly introduced secrets, duplicate files, untracked runtime data, or unauthorized broad changes found; `.env.example` values remain placeholders/synthetic. |
 
 ## Open Issues
 
