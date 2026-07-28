@@ -9,7 +9,7 @@ from langgraph.config import get_stream_writer
 
 from app.actions.ticket_service import TicketService
 from app.agents.orchestrator.action_routing import extract_ticket_request
-from app.agents.orchestrator.answer_composer import AnswerComposer, compose_with_streaming
+from app.agents.orchestrator.answer_composer import AnswerComposer, AnswerComposition, compose_with_streaming
 from app.agents.orchestrator.intent_classifier import IntentClassifier, classify_request
 from app.agents.orchestrator.knowledge import build_local_general_answer, casual_response
 from app.agents.orchestrator.routing import route_from_intent
@@ -23,8 +23,8 @@ from app.agents.sql_subgraph.presentation import (
 from app.agents.sql_subgraph.state import SQLExecutor, SQLPlanner
 from app.auth.profiles import UserProfile, get_profile
 from app.guardrails.policy import check_message_access
-from app.retrieval.chunk_index import MetadataChunkRetriever, build_answer_from_chunks
-from app.retrieval.chunk_index import ChunkSearchResult
+from app.retrieval.chunk_index import ChunkSearchResult, MetadataChunkRetriever, build_answer_from_chunks
+from app.retrieval.config import NO_REFERENCE_MESSAGE, SOURCE_SIMILARITY_THRESHOLD
 from app.retrieval.local_kb import LocalKBRetriever, build_answer_from_results
 from app.retrieval.local_kb import RetrievalResult
 
@@ -356,29 +356,41 @@ def make_retrieve_rag_node(
         if chunks.available():
             backend = chunks.backend_name()
             results = chunks.search(state["clean_message"], profile, max_results=4)
-            message = build_answer_from_chunks(state["clean_message"], results)
-            citations = _chunk_source_refs(results)
+            threshold = chunks.config.source_similarity_threshold
+            message = build_answer_from_chunks(state["clean_message"], results, threshold=threshold)
+            citations = _chunk_source_refs(results, threshold=threshold)
         else:
             backend = "local_kb"
             results = local.search(state["clean_message"], profile, max_results=3)
-            message = build_answer_from_results(state["clean_message"], results)
-            citations = _local_source_refs(results)
+            threshold = local.similarity_threshold
+            message = build_answer_from_results(state["clean_message"], results, threshold=threshold)
+            citations = _local_source_refs(results, threshold=threshold)
 
+        # Count only the retained citation set. This defensive second filter
+        # keeps custom retrievers from smuggling below-threshold context into
+        # composition even if their search implementation is misconfigured.
+        reference_status = "sufficient" if citations else "none_reached_threshold"
         next_state: OrchestratorState = {
             **state,
             "rag_message": message,
             "rag_citations": citations,
-            "rag_result_count": len(results),
+            "rag_result_count": len(citations),
             "rag_backend": backend,
+            "rag_threshold": threshold,
+            "rag_reference_status": reference_status,
         }
         next_state["trace"] = append_trace(
             next_state,
             "retrieve_rag_context",
             {
-                "status": "answered" if results else "no_answer",
+                "status": "answered" if results else "no_reference",
                 "backend": backend,
-                "result_count": len(results),
+                "result_count": len(citations),
+                "reference_status": reference_status,
+                "source_similarity_threshold": threshold,
+                "score_scale": "0-100",
                 "citation_titles": [citation["title"] for citation in citations],
+                "sources": _bounded_source_metadata(citations),
             },
         )
         return next_state
@@ -433,7 +445,7 @@ def make_validate_answer_node() -> Any:
         safe = True
         reason = None
         if route == "rag" and not has_rag_answer:
-            reason = "NO_ACCESSIBLE_CONTEXT"
+            reason = "NO_SUFFICIENTLY_RELEVANT_REFERENCE"
         elif route == "sql" and not has_sql_answer:
             reason = "SQL_NOT_ANSWERED"
         elif route == "combined" and not (has_sql_answer or has_rag_answer):
@@ -457,6 +469,8 @@ def make_validate_answer_node() -> Any:
             "route": route,
             "has_sql_answer": has_sql_answer,
             "has_rag_answer": has_rag_answer,
+            "reference_status": state.get("rag_reference_status", "not_used"),
+            "reference_threshold": state.get("rag_threshold"),
             "has_casual_answer": bool(state.get("casual_message")),
             "has_feedback_answer": bool(state.get("feedback_message")),
             "has_clarification_answer": bool(state.get("clarification_message")),
@@ -475,6 +489,8 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
         route = state.get("route", "rag")
         profile = state["profile"]
         sql_output = state.get("sql_output")
+        rag_result_count = int(state.get("rag_result_count", 0))
+        reference_status = state.get("rag_reference_status", "not_used")
         if route == "GENERAL_KNOWLEDGE":
             local_answer = build_local_general_answer(state.get("clean_message", ""))
         else:
@@ -488,7 +504,11 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             "category": state.get("category"),
             "validation": state.get("validation", {}),
             "sql_answer": state.get("sql_message", ""),
-            "rag_answer": state.get("rag_message", ""),
+            # A below-threshold result is never passed as factual context.
+            "rag_answer": state.get("rag_message", "") if rag_result_count else "",
+            "reference_status": reference_status,
+            "reference_threshold": state.get("rag_threshold"),
+            "reference_note": NO_REFERENCE_MESSAGE if reference_status == "none_reached_threshold" else "",
             "action_answer": state.get("ticket_message", ""),
             "general_answer": local_answer or "",
             "citations": state.get("rag_citations", []),
@@ -496,19 +516,29 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             "sql_status": sql_output.sql_status if sql_output is not None else None,
         }
         writer = _safe_stream_writer()
-        composition = compose_with_streaming(
-            composer,
-            context,
-            lambda delta: writer({"type": "response.delta", "delta": delta}),
-            lambda message: writer(
-                {
-                    "type": "response.error",
-                    "reason_code": "ANSWER_PROVIDER_FALLBACK",
-                    "message": message,
-                    "recoverable": True,
-                }
-            ),
-        )
+        if route == "rag" and rag_result_count == 0:
+            # Do not invoke an LLM with an empty evidence set: it could answer
+            # from general knowledge and accidentally imply document grounding.
+            composition = AnswerComposition(
+                answer=NO_REFERENCE_MESSAGE,
+                backend="deterministic_no_reference",
+                fallback_reason="NO_SUFFICIENTLY_RELEVANT_REFERENCE",
+            )
+            writer({"type": "response.delta", "delta": composition.answer})
+        else:
+            composition = compose_with_streaming(
+                composer,
+                context,
+                lambda delta: writer({"type": "response.delta", "delta": delta}),
+                lambda message: writer(
+                    {
+                        "type": "response.error",
+                        "reason_code": "ANSWER_PROVIDER_FALLBACK",
+                        "message": message,
+                        "recoverable": True,
+                    }
+                ),
+            )
         next_state: OrchestratorState = {
             **state,
             "final_answer": composition.answer,
@@ -526,11 +556,12 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             next_state,
             "compose_final_answer",
             {
-                "status": "composed",
+                "status": "no_reference" if route == "rag" and rag_result_count == 0 else "composed",
                 "backend": composition.backend,
                 "error": composition.error,
                 "fallback_reason": composition.fallback_reason,
                 "answer_chars": len(composition.answer),
+                "reference_status": reference_status,
             },
         )
         return next_state
@@ -654,6 +685,7 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
             "sources": state.get("sql_sources", []),
             "profile": profile.to_public_dict(),
             "latency_ms": _elapsed_ms(started_at),
+            **_reference_response_fields(state),
             **_turn_context(state),
         }
 
@@ -732,7 +764,7 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
     has_results = int(state.get("rag_result_count", 0)) > 0
     return {
         "status": "answered" if has_results else "no_answer",
-        "reason_code": "ANSWERED_FROM_GRAPH_RAG" if has_results else "NO_ACCESSIBLE_CONTEXT",
+        "reason_code": "ANSWERED_FROM_GRAPH_RAG" if has_results else "NO_SUFFICIENTLY_RELEVANT_REFERENCE",
         "route": route,
         "model_backend": state.get("composer_backend"),
         "sql_execution": {"status": "not_run", "row_count": 0},
@@ -741,6 +773,7 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
         "citations": state.get("rag_citations", []),
         "profile": profile.to_public_dict(),
         "latency_ms": _elapsed_ms(started_at),
+        **_reference_response_fields(state),
         **_turn_context(state),
     }
 
@@ -797,6 +830,16 @@ def _response_status_for_success(state: OrchestratorState) -> str:
     return "answered" if int(state.get("rag_result_count", 0)) > 0 else "no_answer"
 
 
+def _reference_response_fields(state: OrchestratorState) -> dict[str, Any]:
+    status = state.get("rag_reference_status", "not_used")
+    if status == "not_used":
+        return {"reference_status": "not_used"}
+    return {
+        "reference_status": status,
+        "source_similarity_threshold": state.get("rag_threshold"),
+    }
+
+
 def _turn_context(state: OrchestratorState) -> dict[str, str]:
     return {
         "conversation_id": str(state.get("conversation_id", "web-chat")),
@@ -815,9 +858,14 @@ def _safe_stream_writer() -> Any:
         return lambda _event: None
 
 
-def _chunk_source_refs(results: tuple[ChunkSearchResult, ...]) -> list[dict[str, Any]]:
+def _chunk_source_refs(
+    results: tuple[ChunkSearchResult, ...],
+    *,
+    threshold: float = SOURCE_SIMILARITY_THRESHOLD,
+) -> list[dict[str, Any]]:
     refs: list[dict[str, Any]] = []
-    for index, result in enumerate(results, start=1):
+    retained = tuple(result for result in results if result.score >= threshold)
+    for index, result in enumerate(retained, start=1):
         payload = result.chunk.citation.to_dict()
         payload.update(
             {
@@ -836,9 +884,14 @@ def _chunk_source_refs(results: tuple[ChunkSearchResult, ...]) -> list[dict[str,
     return refs
 
 
-def _local_source_refs(results: tuple[RetrievalResult, ...]) -> list[dict[str, Any]]:
+def _local_source_refs(
+    results: tuple[RetrievalResult, ...],
+    *,
+    threshold: float = SOURCE_SIMILARITY_THRESHOLD,
+) -> list[dict[str, Any]]:
     refs: list[dict[str, Any]] = []
-    for index, result in enumerate(results, start=1):
+    retained = tuple(result for result in results if result.score >= threshold)
+    for index, result in enumerate(retained, start=1):
         payload = result.document.citation.to_dict()
         payload.update(
             {
@@ -846,7 +899,32 @@ def _local_source_refs(results: tuple[RetrievalResult, ...]) -> list[dict[str, A
                 "label": f"[{index}]",
                 "excerpt": result.snippet,
                 "text": result.document.body,
+                "score": result.score,
+                "lexical_score": result.score,
+                "semantic_score": 0.0,
             }
         )
         refs.append(payload)
     return refs
+
+
+def _bounded_source_metadata(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return trace-safe metadata without source text or grant metadata."""
+
+    return [
+        {
+            key: source[key]
+            for key in (
+                "reference_id",
+                "doc_id",
+                "title",
+                "source_type",
+                "source_path",
+                "score",
+                "lexical_score",
+                "semantic_score",
+            )
+            if key in source
+        }
+        for source in citations[:20]
+    ]

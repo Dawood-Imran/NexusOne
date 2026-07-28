@@ -49,7 +49,9 @@ class ChatService:
         # as scripts/run_web_app.py without overriding explicit shell values.
         load_dotenv()
         self.runtime_config = RuntimeConfig.from_env()
-        self.retriever = retriever or LocalKBRetriever()
+        self.retriever = retriever or LocalKBRetriever(
+            similarity_threshold=self.runtime_config.retrieval_config.source_similarity_threshold
+        )
         self.chunk_retriever = chunk_retriever or MetadataChunkRetriever(config=self.runtime_config.retrieval_config)
 
         self._database_init_error: str | None = None

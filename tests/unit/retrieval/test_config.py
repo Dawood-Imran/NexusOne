@@ -1,6 +1,6 @@
 import unittest
 
-from app.retrieval.config import HybridRetrievalConfig
+from app.retrieval.config import SOURCE_SIMILARITY_THRESHOLD, HybridRetrievalConfig
 
 
 class HybridRetrievalConfigTest(unittest.TestCase):
@@ -12,7 +12,12 @@ class HybridRetrievalConfigTest(unittest.TestCase):
         self.assertEqual(32, config.lexical_candidate_count)
         self.assertEqual(32, config.semantic_candidate_count)
         self.assertEqual(20, config.max_results)
-        self.assertEqual("lexical_max_and_positive_cosine", config.safe_metadata()["score_normalization"])
+        self.assertEqual(SOURCE_SIMILARITY_THRESHOLD, config.source_similarity_threshold)
+        self.assertEqual("0-100", config.safe_metadata()["score_scale"])
+        self.assertEqual(
+            "100 * weighted(normalized_lexical_max, positive_cosine)",
+            config.safe_metadata()["score_normalization"],
+        )
 
     def test_environment_values_are_parsed(self) -> None:
         config = HybridRetrievalConfig.from_env(
@@ -22,6 +27,7 @@ class HybridRetrievalConfigTest(unittest.TestCase):
                 "NEXUSONE_RETRIEVAL_LEXICAL_CANDIDATES": "9",
                 "NEXUSONE_RETRIEVAL_SEMANTIC_CANDIDATES": "11",
                 "NEXUSONE_RETRIEVAL_MAX_RESULTS": "5",
+                "NEXUSONE_RETRIEVAL_SOURCE_SIMILARITY_THRESHOLD": "50.01",
             }
         )
 
@@ -30,6 +36,7 @@ class HybridRetrievalConfigTest(unittest.TestCase):
         self.assertEqual(9, config.lexical_candidate_count)
         self.assertEqual(11, config.semantic_candidate_count)
         self.assertEqual(5, config.max_results)
+        self.assertEqual(50.01, config.source_similarity_threshold)
 
     def test_invalid_values_fail_validation(self) -> None:
         invalid = (
@@ -38,6 +45,7 @@ class HybridRetrievalConfigTest(unittest.TestCase):
             {"NEXUSONE_RETRIEVAL_LEXICAL_WEIGHT": "0", "NEXUSONE_RETRIEVAL_SEMANTIC_WEIGHT": "0"},
             {"NEXUSONE_RETRIEVAL_LEXICAL_CANDIDATES": "0"},
             {"NEXUSONE_RETRIEVAL_MAX_RESULTS": "not-an-int"},
+            {"NEXUSONE_RETRIEVAL_SOURCE_SIMILARITY_THRESHOLD": "100.01"},
         )
 
         for environment in invalid:

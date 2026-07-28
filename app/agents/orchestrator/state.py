@@ -52,6 +52,8 @@ class OrchestratorState(TypedDict, total=False):
     rag_citations: list[dict[str, Any]]
     rag_result_count: int
     rag_backend: str
+    rag_threshold: float
+    rag_reference_status: str
 
     casual_message: str
     feedback_message: str

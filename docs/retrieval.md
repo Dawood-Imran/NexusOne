@@ -53,22 +53,37 @@ The retriever makes two candidate pools over accessible chunks:
   an injected provider's) vectors. Negative cosine values are treated as zero.
 
 Raw lexical relevance is normalized by the highest lexical score in the
-accessible corpus. Positive semantic cosine is already normalized to `[0, 1]`.
-The final score is:
+**authorized** corpus for that query. Positive semantic cosine is clamped to
+zero for negative values and is already normalized to `[0, 1]`. These are
+incomparable raw signals, so they are normalized before combination. The
+public component scores and final `score` are percentages on a stable `0-100`
+scale:
 
 ```text
-lexical_weight * normalized_lexical
-+ semantic_weight * positive_cosine
-------------------------------------
-lexical_weight + semantic_weight
+normalized_lexical = lexical_raw / max(authorized_lexical_raw)
+positive_cosine = max(0, cosine(query, chunk))
+normalized_hybrid = (
+    lexical_weight * normalized_lexical
+    + semantic_weight * positive_cosine
+) / (lexical_weight + semantic_weight)
+score = 100 * normalized_hybrid
 ```
 
 Defaults are lexical `0.55`, semantic `0.45`, and 32 candidates from each
 pool. Scores are combined over the union of both pools, then sorted by final
-score, normalized lexical score, semantic score, `doc_id`, `chunk_index`, and
-`chunk_id`. This makes ties repeatable. Results are de-duplicated by document
-using the strongest surviving chunk and bounded by the requested `max_results`
-and the configured cap (default 20).
+score descending, normalized lexical score descending, semantic score
+descending, `doc_id`, `chunk_index`, and `chunk_id`. This makes ties repeatable.
+Results are de-duplicated by document after sorting; the strongest surviving
+chunk represents each document. The result is then bounded by the requested
+`max_results` and the configured cap (default 20).
+
+`SOURCE_SIMILARITY_THRESHOLD` is `50` by default (configurable as
+`NEXUSONE_RETRIEVAL_SOURCE_SIMILARITY_THRESHOLD`). A source is retained only
+when `score >= 50`, so `49.99` is rejected, `50` is retained, and `50.01` is
+retained. Thresholding happens after authorization and score calculation. It
+is a product relevance policy, **not an authorization control**: it cannot
+grant access to an otherwise forbidden document, and it must never replace
+`can_access_chunk()`.
 
 Configuration is explicit and validated at startup:
 
@@ -79,6 +94,7 @@ Configuration is explicit and validated at startup:
 | `NEXUSONE_RETRIEVAL_LEXICAL_CANDIDATES` | `32` | Lexical pool size |
 | `NEXUSONE_RETRIEVAL_SEMANTIC_CANDIDATES` | `32` | Semantic pool size |
 | `NEXUSONE_RETRIEVAL_MAX_RESULTS` | `20` | Hard result cap |
+| `NEXUSONE_RETRIEVAL_SOURCE_SIMILARITY_THRESHOLD` | `50` | Minimum public score (inclusive) for a source reference |
 
 Weights must be finite, non-negative, and not both zero. Candidate counts and
 caps must be positive integers; invalid values raise `ValueError` rather than
@@ -104,9 +120,26 @@ embeddings are not silently selected by default.
 The response keeps existing `citations` fields (`doc_id`, title, source type,
 source path, updated date, chunk identifiers, excerpt, and text). New score
 fields are additive: `score`, `lexical_score`, and `semantic_score` are
-included for source inspection and diagnostics. Restricted chunks are never
-included in these fields. Existing document de-duplication, source metadata,
-inline `[n]` citation labels, and bounded top-k behavior remain unchanged.
+included as bounded `0-100` values for source inspection and diagnostics.
+Restricted chunks are never included in these fields. Citation `[n]` labels
+are assigned only after thresholding and document de-duplication, so they map
+exactly to the retained ranked list. Trace metadata contains only bounded
+source identity/path/score fields for already-authorized sources; it does not
+include grants, confidentiality internals, or hidden source text. Matching
+excerpts are treated as untrusted data: instruction-like source passages are
+not copied into the answer excerpt, and the composer is explicitly told never
+to follow commands embedded in a source.
+
+When no authorized candidate reaches the threshold, retrieval returns no
+reference context or citations. The graph returns status `no_answer`, reason
+code `NO_SUFFICIENTLY_RELEVANT_REFERENCE`, and the clear message:
+
+> No sufficiently relevant reference found. Try rephrasing the question or
+> ask for a general explanation.
+
+The answer composer is not invoked as a factual fallback for this empty RAG
+result, and it cannot invent a citation or imply document grounding. The
+lexical-only `LocalKBRetriever` fallback uses the same 0-100 threshold policy.
 
 A representative local result (illustrative synthetic fixture) is:
 
@@ -115,9 +148,9 @@ A representative local result (illustrative synthetic fixture) is:
   "chunk_id": "kb-aws-access:0",
   "doc_id": "kb-aws-access",
   "title": "AWS Access Request",
-  "score": 0.82,
-  "lexical_score": 0.91,
-  "semantic_score": 0.71,
+  "score": 82.0,
+  "lexical_score": 91.0,
+  "semantic_score": 71.0,
   "source_type": "markdown",
   "source_path": "data/docs/markdown_kb/it/aws-access.md",
   "updated_at": "2026-01-20"

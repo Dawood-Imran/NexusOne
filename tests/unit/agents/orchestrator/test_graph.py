@@ -1,9 +1,14 @@
 import json
+import math
+import tempfile
 import unittest
+from pathlib import Path
 
 from app.actions.ticket_service import InMemoryTicketRepository, TicketService
 from app.agents.orchestrator import NexusOneOrchestrator
 from app.agents.orchestrator.answer_composer import AnswerComposition, DeterministicAnswerComposer
+from app.retrieval.chunk_index import MetadataChunkRetriever
+from app.retrieval.config import HybridRetrievalConfig
 from tests.unit.agents.orchestrator.intent_fixtures import fixture_classifier
 
 
@@ -175,6 +180,64 @@ class NexusOneOrchestratorTest(unittest.TestCase):
         self.assertIn("retrieve_rag_context", [step["node"] for step in response["trace"]])
         self.assertIn("compose_final_answer", [step["node"] for step in response["trace"]])
 
+    def test_no_sufficiently_relevant_reference_skips_composer_and_citations(self) -> None:
+        source_text = "fixture source without matching terms"
+        provider = _GraphEmbeddingProvider(
+            {source_text: (0.4999, math.sqrt(1.0 - 0.4999**2))},
+            (1.0, 0.0),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            metadata_path = Path(directory) / "chunks.jsonl"
+            metadata_path.write_text(
+                json.dumps(
+                    {
+                        "chunk_id": "fixture:0",
+                        "doc_id": "fixture",
+                        "chunk_index": 0,
+                        "title": "Fixture source",
+                        "source_type": "markdown",
+                        "source_path": "fixture/source.md",
+                        "department": "engineering",
+                        "confidentiality": "public_internal",
+                        "allowed_roles": ["employee"],
+                        "allowed_groups": [],
+                        "allowed_users": [],
+                        "updated_at": "2026-01-01",
+                        "text": source_text,
+                        "token_estimate": 5,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            retriever = MetadataChunkRetriever(
+                metadata_path=metadata_path,
+                embedding_provider=provider,
+                config=HybridRetrievalConfig(lexical_weight=0.0, semantic_weight=1.0),
+            )
+            composer = _SpyComposer()
+            orchestrator = NexusOneOrchestrator(
+                chunk_retriever=retriever,
+                answer_composer=composer,
+                intent_classifier=fixture_classifier(),
+            )
+
+            response = orchestrator.invoke(
+                {"user_id": "u001", "message": "How does NexusOne's ticket system work?", "include_trace": True}
+            )
+
+        self.assertEqual("no_answer", response["status"])
+        self.assertEqual("NO_SUFFICIENTLY_RELEVANT_REFERENCE", response["reason_code"])
+        self.assertIn("No sufficiently relevant reference found", response["message"])
+        self.assertEqual([], response["citations"])
+        self.assertEqual(0, composer.calls)
+        self.assertEqual("none_reached_threshold", response["reference_status"])
+        self.assertEqual(50.0, response["source_similarity_threshold"])
+        retrieve_trace = next(step for step in response["trace"] if step["node"] == "retrieve_rag_context")
+        self.assertEqual("no_reference", retrieve_trace["status"])
+        self.assertEqual([], retrieve_trace["details"]["sources"])
+        self.assertNotIn(source_text, json.dumps(response["trace"]))
+
     def test_denied_question_stops_before_retrieval_or_sql(self) -> None:
         response = self.orchestrator.invoke(
             {
@@ -308,6 +371,20 @@ class NexusOneOrchestratorTest(unittest.TestCase):
         nodes = [step["node"] for step in response["trace"]]
         self.assertNotIn("run_ticket_action", nodes)
         self.assertEqual([], self.ticket_repository.tickets)
+
+
+class _GraphEmbeddingProvider:
+    name = "graph_fixture_semantic"
+
+    def __init__(self, vectors, query_vector) -> None:
+        self.vectors = vectors
+        self.query_vector = query_vector
+
+    def embed_query(self, text):
+        return self.query_vector
+
+    def embed_documents(self, texts):
+        return tuple(self.vectors[text] for text in texts)
 
 
 class _ExplodingComposer:

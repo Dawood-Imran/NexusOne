@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from app.auth.profiles import UserProfile
 from app.retrieval.access import can_access_metadata
+from app.retrieval.config import NO_REFERENCE_MESSAGE, SOURCE_SIMILARITY_THRESHOLD
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -59,33 +61,54 @@ class KBDocument:
 
 @dataclass(frozen=True)
 class RetrievalResult:
+    """A retained lexical fallback source on the public 0-100 score scale."""
+
     document: KBDocument
-    score: int
+    score: float
     snippet: str
 
 
 class LocalKBRetriever:
-    """Permission-aware lexical retriever over generated Markdown KB files."""
+    """Permission-aware lexical fallback with the shared relevance policy."""
 
-    def __init__(self, kb_root: Path = DEFAULT_KB_ROOT) -> None:
+    def __init__(
+        self,
+        kb_root: Path = DEFAULT_KB_ROOT,
+        *,
+        similarity_threshold: float = SOURCE_SIMILARITY_THRESHOLD,
+    ) -> None:
+        if not math.isfinite(similarity_threshold) or not 0.0 <= similarity_threshold <= 100.0:
+            raise ValueError("similarity_threshold must be between 0 and 100")
         self.kb_root = kb_root
+        self.similarity_threshold = similarity_threshold
         self.documents = tuple(load_markdown_documents(kb_root))
 
     def search(self, query: str, profile: UserProfile, max_results: int = 3) -> tuple[RetrievalResult, ...]:
         terms = _tokenize(query)
-        if not terms:
+        if not terms or max_results <= 0:
+            return ()
+        accessible = [document for document in self.documents if can_access_document(profile, document)]
+        raw_scores = {
+            document.doc_id: float(sum(f"{document.title}\n{document.body}".lower().count(term) for term in terms))
+            for document in accessible
+        }
+        maximum = max(raw_scores.values(), default=0.0)
+        if maximum <= 0.0:
             return ()
         results: list[RetrievalResult] = []
-        for document in self.documents:
-            if not can_access_document(profile, document):
+        for document in accessible:
+            normalized_score = 100.0 * raw_scores[document.doc_id] / maximum
+            if normalized_score < self.similarity_threshold:
                 continue
-            haystack = f"{document.title}\n{document.body}".lower()
-            score = sum(haystack.count(term) for term in terms)
-            if score <= 0:
-                continue
-            results.append(RetrievalResult(document=document, score=score, snippet=_best_snippet(document.body, terms)))
-        results.sort(key=lambda item: (item.score, item.document.updated_at), reverse=True)
-        return tuple(results[:max_results])
+            results.append(
+                RetrievalResult(
+                    document=document,
+                    score=normalized_score,
+                    snippet=_best_snippet(document.body, terms),
+                )
+            )
+        results.sort(key=lambda item: (-item.score, item.document.doc_id, item.document.updated_at))
+        return tuple(_dedupe_documents(results)[:max_results])
 
 
 def load_markdown_documents(kb_root: Path = DEFAULT_KB_ROOT) -> list[KBDocument]:
@@ -126,20 +149,23 @@ def can_access_document(profile: UserProfile, document: KBDocument) -> bool:
     )
 
 
-def build_answer_from_results(query: str, results: tuple[RetrievalResult, ...]) -> str:
-    if not results:
-        return (
-            "I do not have enough accessible source context to answer that confidently. "
-            "Try asking about a public policy, an internal process, or your own support tickets."
-        )
+def build_answer_from_results(
+    query: str,
+    results: tuple[RetrievalResult, ...],
+    *,
+    threshold: float = SOURCE_SIMILARITY_THRESHOLD,
+) -> str:
+    retained = tuple(result for result in results if result.score >= threshold)
+    if not retained:
+        return NO_REFERENCE_MESSAGE
 
-    top = results[0]
+    top = retained[0]
     lines = [f"From {top.document.title}:"]
     snippet = top.snippet.strip()
     if snippet:
         lines.append(snippet)
-    if len(results) > 1:
-        related = ", ".join(result.document.title for result in results[1:])
+    if len(retained) > 1:
+        related = ", ".join(result.document.title for result in retained[1:])
         lines.append(f"Related accessible sources: {related}.")
     return "\n\n".join(lines)
 
@@ -211,8 +237,31 @@ def _tokenize(query: str) -> tuple[str, ...]:
     return tuple(tokens)
 
 
+def _dedupe_documents(results: list[RetrievalResult]) -> list[RetrievalResult]:
+    seen: set[str] = set()
+    deduped: list[RetrievalResult] = []
+    for result in results:
+        if result.document.doc_id in seen:
+            continue
+        seen.add(result.document.doc_id)
+        deduped.append(result)
+    return deduped
+
+
+_SOURCE_INSTRUCTION_PATTERN = re.compile(
+    r"(?:ignore|disregard|override|bypass)\s+(?:all\s+|previous\s+|the\s+)?"
+    r"(?:instructions?|rules?|guardrails?)|"
+    r"(?:reveal|dump|expose)\s+(?:the\s+)?(?:hidden|secret|system|private)",
+    re.IGNORECASE,
+)
+
+
 def _best_snippet(body: str, terms: tuple[str, ...]) -> str:
-    paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", body) if paragraph.strip()]
+    paragraphs = [
+        paragraph.strip()
+        for paragraph in re.split(r"\n\s*\n", body)
+        if paragraph.strip() and not _SOURCE_INSTRUCTION_PATTERN.search(paragraph)
+    ]
     if not paragraphs:
         return ""
     scored: list[tuple[int, str]] = []
