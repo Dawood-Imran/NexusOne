@@ -450,11 +450,11 @@ CLASSIFIER_SYSTEM_PROMPT = """You are NexusOne Copilot's bounded intent classifi
 Classify the request into exactly one allowed intent and return only the structured schema.
 Allowed intents:
 - casual: greetings, thanks, small talk, or goodbye with no work request
-- general_question: a general educational question answerable directly without company sources
+- general_question: a basic/general question or ticket-creation guidance answerable directly without company sources; guidance is not an action request
 - knowledge_lookup: a NexusOne/company policy, process, or knowledge-base lookup
 - structured_lookup: an allowlisted structured-data lookup such as holidays, directory, budget, or metrics
 - combined_lookup: one request that clearly needs both knowledge lookup and structured lookup
-- ticket_create: create, raise, open, or generate a support ticket; distinguish this from status lookup
+- ticket_create: the user explicitly asks Copilot to create, submit, raise, open, or generate a support ticket; distinguish this from status lookup and from guidance phrased as "I can create" or "what information do you need"
 - ticket_status: inspect, check, or show an existing ticket or ticket status
 - history_lookup: ask for prior conversation/history that is not an existing ticket status
 - feedback: report that an answer was helpful, wrong, unclear, or needs feedback

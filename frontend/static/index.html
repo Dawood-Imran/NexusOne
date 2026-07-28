@@ -13,77 +13,44 @@
 
     <section id="authView" class="auth-view" aria-labelledby="authTitle">
       <div class="auth-frame">
-        <aside class="auth-brand" aria-label="NexusOne Copilot">
-          <div class="brand-lockup brand-lockup-on-dark">
-            <div class="brand-mark" aria-hidden="true">N1</div>
-            <div>
-              <p class="eyebrow">NexusOne Technologies</p>
-              <p class="brand-name">NexusOne Copilot</p>
-            </div>
-          </div>
-          <div class="auth-brand-copy">
-            <p class="auth-kicker">A clearer path to the answer.</p>
-            <h1>Company knowledge, with the right guardrails.</h1>
-            <p>
-              Ask about policies, processes, or tickets in plain language. Copilot checks your
-              server-assigned access before it searches or takes action.
-            </p>
-          </div>
-          <ul class="auth-proof" aria-label="NexusOne Copilot capabilities">
-            <li><span class="proof-mark" aria-hidden="true">01</span><span>Answers grounded in approved sources</span></li>
-            <li><span class="proof-mark" aria-hidden="true">02</span><span>Role permissions enforced before retrieval</span></li>
-            <li><span class="proof-mark" aria-hidden="true">03</span><span>Support actions with a clear audit trail</span></li>
-          </ul>
-        </aside>
-
         <div class="login-panel">
           <div class="service-banner" role="status" aria-live="polite">
             <span id="authServiceIndicator" class="status-dot is-neutral" aria-hidden="true"></span>
             <span id="authServiceStatus">Connecting to sign-in service…</span>
           </div>
           <form id="loginForm" class="login-form" novalidate>
-            <p class="eyebrow">Secure sign in</p>
             <h2 id="authTitle">Welcome back</h2>
-            <p class="login-intro">
-              Use your NexusOne username and password. Your account and access scope come from the
-              authenticated session—there is no profile or role switcher here.
-            </p>
 
-            <div class="form-field">
-              <label for="usernameInput">Username or work email</label>
+            <div class="form-field floating-field">
               <input
                 id="usernameInput"
                 name="username"
                 type="text"
                 inputmode="email"
                 autocomplete="username"
-                placeholder="you@nexusone.example"
+                placeholder=" "
                 required
               />
+              <label for="usernameInput">Username or work email</label>
             </div>
-            <div class="form-field">
-              <div class="field-label-row">
-                <label for="passwordInput">Password</label>
-              </div>
+            <div class="form-field floating-field">
               <input
                 id="passwordInput"
                 name="password"
                 type="password"
                 autocomplete="current-password"
-                placeholder="Enter your password"
+                placeholder=" "
                 required
               />
+              <label for="passwordInput">Password</label>
             </div>
-            <button id="loginButton" class="login-button" type="submit">
-              <span>Sign in</span>
+            <button id="loginButton" class="login-button" type="submit" aria-busy="false">
+              <span class="login-button-label">Sign in</span>
+              <span class="login-button-loader" aria-hidden="true" hidden></span>
               <span class="button-arrow" aria-hidden="true">→</span>
             </button>
             <p id="authError" class="form-message is-error" role="alert" aria-live="assertive"></p>
             <p id="authStatus" class="form-message" role="status" aria-live="polite"></p>
-            <p class="login-note">
-              Access is assigned by your NexusOne account. If your account is not working, contact
-              your administrator rather than trying another role.
-            </p>
           </form>
         </div>
       </div>
@@ -91,6 +58,18 @@
 
     <div id="appView" class="app-shell hidden" aria-label="NexusOne Copilot workspace">
       <aside id="conversationRail" class="conversation-rail" aria-label="Workspace navigation and conversations">
+        <button
+          id="leftSidebarToggle"
+          class="sidebar-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="conversationRail"
+          aria-label="Collapse navigation"
+          title="Collapse navigation"
+        >
+          <span class="sidebar-toggle-icon" aria-hidden="true">‹</span>
+          <span class="sr-only">Collapse navigation</span>
+        </button>
         <header class="rail-header">
           <a class="brand-mini" href="#pageTitle" aria-label="NexusOne Copilot home">
             <span class="brand-mark small" aria-hidden="true">N1</span>
@@ -165,10 +144,6 @@
               <input id="traceToggle" type="checkbox" />
               <span>Trace</span>
             </label>
-            <button id="mobileInspectorButton" class="secondary-action icon-control" type="button" aria-expanded="false" aria-controls="inspector" aria-label="Show conversation details" title="Show conversation details">
-              <span class="panel-toggle-icon" aria-hidden="true">></span>
-              <span class="sr-only">Show conversation details</span>
-            </button>
           </div>
         </header>
 

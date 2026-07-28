@@ -1,10 +1,23 @@
 import unittest
 
-from app.agents.sql_subgraph.presentation import format_safe_terminal_answer, safe_summary_payload, sanitized_rows
+from app.agents.sql_subgraph.presentation import (
+    format_safe_terminal_answer,
+    format_timestamp_for_user,
+    safe_summary_payload,
+    sanitized_rows,
+)
 from app.agents.sql_subgraph.state import SQLSubgraphOutput
 
 
 class PresentationTest(unittest.TestCase):
+    def test_timestamp_formatter_preserves_utc_contract_across_inputs(self) -> None:
+        self.assertEqual("Feb 7, 2026, 9:00 AM UTC", format_timestamp_for_user("2026-02-07T09:00:00Z"))
+        self.assertEqual("Feb 7, 2026, 3:30 AM UTC", format_timestamp_for_user("2026-02-07T09:00:00+05:30"))
+        self.assertEqual("Feb 7, 2026, 9:00 AM UTC", format_timestamp_for_user("2026-02-07 09:00:00 UT"))
+        self.assertEqual("Timestamp unavailable", format_timestamp_for_user("not-a-timestamp"))
+        self.assertEqual("Timestamp unavailable", format_timestamp_for_user("2026-02-30"))
+        self.assertEqual("Timestamp unavailable", format_timestamp_for_user(""))
+
     def test_ticket_answer_hides_user_reference_columns(self) -> None:
         output = SQLSubgraphOutput(
             sql_status="answered",

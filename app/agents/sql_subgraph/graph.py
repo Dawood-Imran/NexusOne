@@ -187,14 +187,19 @@ def _coerce_input(payload: SQLSubgraphInput | Mapping[str, Any]) -> SQLSubgraphI
 
     user_context = payload.get("user_context")
     if isinstance(user_context, Mapping):
-        user_context = UserContext(
-            user_id=str(user_context["user_id"]),
-            role=str(user_context["role"]),
-            department=str(user_context["department"]),
-            location=str(user_context["location"]),
-            groups=tuple(user_context.get("groups", ())),
-            status=str(user_context.get("status", "active")),
-        )
+        try:
+            user_context = UserContext(
+                user_id=str(user_context["user_id"]),
+                role=str(user_context["role"]),
+                department=str(user_context["department"]),
+                location=str(user_context["location"]),
+                groups=tuple(user_context.get("groups", ())),
+                status=str(user_context.get("status", "active")),
+            )
+        except (KeyError, TypeError, ValueError):
+            # Treat malformed context as absent. The executor then resolves the
+            # authenticated identity by its bound parameter or refuses safely.
+            user_context = None
 
     return SQLSubgraphInput(
         conversation_id=str(payload.get("conversation_id", "standalone")),

@@ -35,7 +35,7 @@ class FrontendEventAndSecurityContractTest(unittest.TestCase):
         self.assertNotIn("graph_state", self.app_js)
 
     def test_server_payloads_are_rendered_as_text_or_escaped_html(self) -> None:
-        self.assertIn("cell.textContent = String(value);", self.app_js)
+        self.assertIn("cell.textContent = displayStructuredValue(column, value);", self.app_js)
         self.assertIn("function escapeHtml(value)", self.app_js)
         self.assertIn("container.textContent = \"\"", self.app_js)
         self.assertIn("document.createTextNode(part)", self.app_js)

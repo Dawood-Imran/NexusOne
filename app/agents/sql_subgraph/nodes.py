@@ -47,6 +47,12 @@ ASSIGNMENT_TERMS = (
 
 def load_user_context(state: SQLSubgraphState, executor: SQLExecutor | None = None) -> SQLSubgraphState:
     if state.user_context is not None:
+        # A server-owned profile is passed through this boundary by the main
+        # orchestrator. Never let a mismatched payload identity select the
+        # parameter used by an access-controlled ticket function.
+        if state.user_context.user_id != state.user_id:
+            state.output = format_refusal("Authenticated user context does not match request identity.")
+            state.sql_status = state.output.sql_status
         return state
     if executor is None:
         state.output = format_refusal("User context is required when no database executor is provided.")

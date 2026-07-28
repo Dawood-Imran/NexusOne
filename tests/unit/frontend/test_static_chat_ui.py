@@ -28,6 +28,32 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn('body: JSON.stringify({ username, password })', self.app_js)
         self.assertIn("Those credentials were not accepted.", self.app_js)
 
+    def test_signed_out_login_is_centered_minimal_and_uses_floating_labels(self) -> None:
+        self.assertNotIn("Ask about policies, processes, or tickets in plain language", self.index_html)
+        self.assertNotIn("Answers grounded in approved sources", self.index_html)
+        self.assertNotIn("Role permissions enforced before retrieval", self.index_html)
+        self.assertNotIn("Support actions with a clear audit trail", self.index_html)
+        self.assertNotIn("Use your NexusOne username and password", self.index_html)
+        self.assertNotIn("Access is assigned by your NexusOne account", self.index_html)
+        self.assertNotIn("Secure sign in", self.index_html)
+        self.assertNotIn("Signed out", self.app_js)
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", self.styles)
+        self.assertIn("floating-field", self.index_html)
+        self.assertIn('placeholder=" "', self.index_html)
+        self.assertIn("input:focus + label", self.styles)
+        self.assertIn("input:not(:placeholder-shown) + label", self.styles)
+
+    def test_login_loading_state_is_visible_disabled_and_announced(self) -> None:
+        self.assertIn('aria-busy="false"', self.index_html)
+        self.assertIn('class="login-button-loader"', self.index_html)
+        self.assertIn('aria-hidden="true" hidden', self.index_html)
+        self.assertIn('loginButton.setAttribute("aria-busy", String(value))', self.app_js)
+        self.assertIn('loginButtonLoader.hidden = !value', self.app_js)
+        self.assertIn('loginButton.classList.toggle("is-loading", value)', self.app_js)
+        self.assertIn('loginButton.disabled = value', self.app_js)
+        self.assertIn(".login-button-loader", self.styles)
+        self.assertIn("@keyframes login-spin", self.styles)
+
     def test_streaming_chat_uses_explicit_sse_events_and_progressive_message_state(self) -> None:
         self.assertIn('Accept: "text/event-stream"', self.app_js)
         self.assertIn("async function consumeStream(response, onEvent)", self.app_js)
@@ -56,7 +82,7 @@ class StaticChatUIContractTest(unittest.TestCase):
     def test_live_structured_rows_have_a_safe_inspector_table(self) -> None:
         self.assertIn("rows: Array.isArray(payload.rows) ? payload.rows : [],", self.app_js)
         self.assertIn("function renderStructuredRows(message)", self.app_js)
-        self.assertIn("cell.textContent = String(value);", self.app_js)
+        self.assertIn("cell.textContent = displayStructuredValue(column, value);", self.app_js)
         self.assertIn("Structured data", self.app_js)
 
     def test_combined_responses_render_citations_and_sql_sources(self) -> None:
@@ -129,6 +155,26 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("function renderDeniedNextStep(payload)", self.app_js)
         self.assertIn("function renderRetry(text, titleText = \"Connection issue\")", self.app_js)
 
+    def test_feedback_controls_use_icon_actions_with_accessible_names_and_tooltips(self) -> None:
+        self.assertIn('button.className = "feedback-button"', self.app_js)
+        self.assertIn('button.dataset.actionLabel = label', self.app_js)
+        self.assertIn('button.setAttribute("aria-label", label)', self.app_js)
+        self.assertIn('button.title = label', self.app_js)
+        self.assertIn('data-icon="thumbs-up"', self.app_js)
+        self.assertIn('data-icon="thumbs-down"', self.app_js)
+        self.assertIn('data-icon="source-issue"', self.app_js)
+        self.assertIn('class="feedback-icon"', self.app_js)
+        self.assertIn('.feedback-button:focus-visible', self.styles)
+        self.assertIn('width: 44px', self.styles)
+
+    def test_timestamp_display_has_explicit_utc_and_stable_invalid_fallback(self) -> None:
+        self.assertIn('const DISPLAY_TIME_ZONE = "UTC";', self.app_js)
+        self.assertIn("function formatTimestamp(value)", self.app_js)
+        self.assertIn('timeZone: DISPLAY_TIME_ZONE', self.app_js)
+        self.assertIn('return "Timestamp unavailable"', self.app_js)
+        self.assertIn('formatTimestamp(safeTicket.updated_at)', self.app_js)
+        self.assertIn('formatTimestamp(item.updated_at)', self.app_js)
+
     def test_route_metadata_is_safe_and_visible_for_new_routes(self) -> None:
         self.assertIn("route: payload.route || null,", self.app_js)
         self.assertIn('<div><dt>Route</dt><dd>${escapeHtml(message.route || "-")}</dd></div>', self.app_js)
@@ -139,12 +185,13 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("item.status || details.status", self.app_js)
 
     def test_mobile_inspector_state_is_accessible(self) -> None:
-        self.assertIn("aria-expanded=\"false\"", self.index_html)
         self.assertIn("function openInspector()", self.app_js)
         self.assertIn("function closeInspector()", self.app_js)
-        self.assertIn("mobileInspectorButton.setAttribute(\"aria-expanded\", \"true\");", self.app_js)
-        self.assertIn("mobileInspectorButton.setAttribute(\"aria-expanded\", \"false\");", self.app_js)
-        self.assertIn("mobileInspectorButton.focus();", self.app_js)
+        self.assertIn('id="closeInspectorButton"', self.index_html)
+        self.assertIn('aria-label="Collapse conversation details"', self.index_html)
+        self.assertIn('if (window.matchMedia("(max-width: 980px)").matches) openInspector();', self.app_js)
+        self.assertNotIn('id="mobileInspectorButton"', self.index_html)
+        self.assertNotIn("mobileInspectorButton", self.app_js)
 
     def test_normal_and_no_answer_messages_have_no_ready_or_match_status_label(self) -> None:
         self.assertIn("![\"error\", \"refused\", \"ready\"].includes(message.status)", self.app_js)
@@ -192,10 +239,10 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn('summary.textContent = "Trace for this answer"', self.app_js)
         self.assertIn('section.className = "trace"', self.app_js)
         self.assertIn('section.addEventListener("toggle", () => onToggle(section.open))', self.app_js)
-        self.assertNotIn("setSidebarExpanded", self.app_js)
-        self.assertNotIn("leftSidebarToggle", self.app_js)
-        self.assertNotIn('id="leftSidebarToggle"', self.index_html)
-        self.assertIn('aria-controls="inspector"', self.index_html)
+        self.assertIn("function setSidebarExpanded(expanded)", self.app_js)
+        self.assertIn('leftSidebarToggle.setAttribute("aria-expanded", String(expanded))', self.app_js)
+        self.assertIn('id="leftSidebarToggle"', self.index_html)
+        self.assertIn('aria-controls="conversationRail"', self.index_html)
 
     def test_shell_has_accessible_profile_context_and_composer_states(self) -> None:
         self.assertIn('aria-label="NexusOne Copilot workspace"', self.index_html)
@@ -239,14 +286,15 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn('aria-label", `Delete conversation ${conversation.title}`', self.app_js)
         self.assertIn("saveConversations();", self.app_js)
 
-    def test_remaining_right_control_is_a_centered_chevron_with_accessible_labels(self) -> None:
-        self.assertNotIn('title="Collapse navigation"', self.index_html)
-        self.assertNotIn('class="sidebar-toggle-label sr-only"', self.index_html)
-        self.assertIn('title="Show conversation details"', self.index_html)
+    def test_shell_controls_remove_topbar_chevron_and_keep_centered_accessible_toggles(self) -> None:
+        self.assertIn('title="Collapse navigation"', self.index_html)
+        self.assertIn('id="leftSidebarToggle"', self.index_html)
+        self.assertNotIn('id="mobileInspectorButton"', self.index_html)
+        self.assertNotIn('title="Show conversation details"', self.index_html)
         self.assertIn('title="Collapse conversation details"', self.index_html)
         self.assertIn('function setIconControlLabel(control, label)', self.app_js)
         self.assertIn("control.title = label", self.app_js)
-        self.assertIn('mobileInspectorButton.querySelector(".panel-toggle-icon").textContent = ">"', self.app_js)
+        self.assertIn('leftSidebarToggle.querySelector(".sidebar-toggle-icon").textContent = expanded ? "‹" : "›"', self.app_js)
         self.assertIn('closeInspectorButton.querySelector(".panel-toggle-icon").textContent = ">"', self.app_js)
         self.assertNotIn('textContent = "×"', self.app_js)
         self.assertIn('place-items: center', self.styles)
@@ -270,7 +318,7 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn('@media (max-width: 480px)', self.styles)
         self.assertIn('@media (prefers-reduced-motion: reduce)', self.styles)
         self.assertIn(".inspector.open", self.styles)
-        self.assertNotIn(".conversation-rail.is-collapsed", (ROOT / "frontend" / "static" / "professional.css").read_text(encoding="utf-8"))
+        self.assertIn(".conversation-rail.is-collapsed", (ROOT / "frontend" / "static" / "professional.css").read_text(encoding="utf-8"))
         self.assertIn("touch-action: manipulation", self.styles)
         self.assertIn("min-height: 46px", self.styles)
         self.assertIn(".message.denied", self.styles)
@@ -282,7 +330,7 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("Professional enterprise product layer", styles)
         self.assertIn(".message.assistant.selected", styles)
         self.assertIn(".conversation-status::before", styles)
-        self.assertIn("grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr)", styles)
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", styles)
         self.assertIn(".profile-cards .profile-card:hover", styles)
         self.assertIn(".skip-link:focus", styles)
         self.assertIn("formatRole(account.role)", self.app_js)
@@ -292,7 +340,7 @@ class StaticChatUIContractTest(unittest.TestCase):
     def test_reference_auth_card_is_centered_without_overriding_form_components(self) -> None:
         styles = (ROOT / "frontend" / "static" / "styles.css").read_text(encoding="utf-8")
         self.assertIn(".auth-frame", styles)
-        self.assertIn("width: min(1120px, 100%)", styles)
+        self.assertIn("width: min(560px, 100%)", styles)
         self.assertIn(".proof-mark", styles)
         self.assertIn("margin: auto;", styles)
         self.assertIn('id="loginForm"', self.index_html)
