@@ -13,6 +13,7 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.app_js = APP_JS.read_text(encoding="utf-8")
         self.index_html = INDEX_HTML.read_text(encoding="utf-8")
         self.styles = STYLES_CSS.read_text(encoding="utf-8")
+        self.professional_styles = (ROOT / "frontend" / "static" / "professional.css").read_text(encoding="utf-8")
 
     def test_login_uses_username_password_auth_contract(self) -> None:
         self.assertIn('id="loginForm"', self.index_html)
@@ -28,7 +29,7 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn('body: JSON.stringify({ username, password })', self.app_js)
         self.assertIn("Those credentials were not accepted.", self.app_js)
 
-    def test_signed_out_login_is_centered_minimal_and_uses_floating_labels(self) -> None:
+    def test_signed_out_login_has_branded_panel_and_floating_labels(self) -> None:
         self.assertNotIn("Ask about policies, processes, or tickets in plain language", self.index_html)
         self.assertNotIn("Answers grounded in approved sources", self.index_html)
         self.assertNotIn("Role permissions enforced before retrieval", self.index_html)
@@ -37,11 +38,29 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertNotIn("Access is assigned by your NexusOne account", self.index_html)
         self.assertNotIn("Secure sign in", self.index_html)
         self.assertNotIn("Signed out", self.app_js)
-        self.assertIn("grid-template-columns: minmax(0, 1fr)", self.styles)
+        self.assertIn('class="auth-brand"', self.index_html)
+        self.assertIn('class="auth-brand-lockup"', self.index_html)
+        self.assertIn('class="auth-brand-mark"', self.index_html)
+        self.assertIn('aria-hidden="true" focusable="false"', self.index_html)
+        self.assertIn('class="auth-wordmark">NexusOne</span>', self.index_html)
+        self.assertIn("Answers for the work ahead.", self.index_html)
+        self.assertIn("grid-template-columns: minmax(0, 0.92fr) minmax(400px, 1.08fr)", self.professional_styles)
+        self.assertIn("@media (max-width: 700px)", self.professional_styles)
         self.assertIn("floating-field", self.index_html)
         self.assertIn('placeholder=" "', self.index_html)
-        self.assertIn("input:focus + label", self.styles)
-        self.assertIn("input:not(:placeholder-shown) + label", self.styles)
+        self.assertIn("input:focus + label", self.professional_styles)
+        self.assertIn("input:not(:placeholder-shown) + label", self.professional_styles)
+
+    def test_login_form_labels_errors_and_responsive_state_are_accessible(self) -> None:
+        self.assertIn('aria-labelledby="authTitle"', self.index_html)
+        self.assertIn('aria-describedby="authError authStatus"', self.index_html)
+        self.assertIn('for="usernameInput"', self.index_html)
+        self.assertIn('for="passwordInput"', self.index_html)
+        self.assertIn('role="alert" aria-live="assertive"', self.index_html)
+        self.assertIn('role="status" aria-live="polite"', self.index_html)
+        self.assertIn("@media (max-width: 820px)", self.professional_styles)
+        self.assertIn("@media (max-width: 390px)", self.professional_styles)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", self.styles)
 
     def test_login_loading_state_is_visible_disabled_and_announced(self) -> None:
         self.assertIn('aria-busy="false"', self.index_html)
@@ -330,21 +349,22 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertIn("Professional enterprise product layer", styles)
         self.assertIn(".message.assistant.selected", styles)
         self.assertIn(".conversation-status::before", styles)
-        self.assertIn("grid-template-columns: minmax(0, 1fr)", styles)
-        self.assertIn(".profile-cards .profile-card:hover", styles)
+        self.assertIn("grid-template-columns: 272px minmax(480px, 1fr) 336px", styles)
+        self.assertIn(".conversation-item.active", styles)
         self.assertIn(".skip-link:focus", styles)
         self.assertIn("formatRole(account.role)", self.app_js)
         self.assertIn("@media (max-width: 1400px)", styles)
         self.assertIn(".inspector.open", styles)
 
-    def test_reference_auth_card_is_centered_without_overriding_form_components(self) -> None:
-        styles = (ROOT / "frontend" / "static" / "styles.css").read_text(encoding="utf-8")
-        self.assertIn(".auth-frame", styles)
-        self.assertIn("width: min(560px, 100%)", styles)
-        self.assertIn(".proof-mark", styles)
-        self.assertIn("margin: auto;", styles)
+    def test_auth_brand_uses_local_mark_and_form_remains_prominent(self) -> None:
+        self.assertIn('href="/professional.css"', self.index_html)
+        self.assertIn(".auth-brand-mark", self.professional_styles)
+        self.assertIn(".login-panel-inner", self.professional_styles)
+        self.assertIn(".login-button", self.professional_styles)
+        self.assertIn("min-height: 54px", self.professional_styles)
         self.assertIn('id="loginForm"', self.index_html)
         self.assertNotIn('id="profileSelect"', self.index_html)
+        self.assertNotIn('class="auth-copy"', self.index_html)
 
 
 if __name__ == "__main__":

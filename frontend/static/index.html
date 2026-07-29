@@ -13,45 +13,73 @@
 
     <section id="authView" class="auth-view" aria-labelledby="authTitle">
       <div class="auth-frame">
-        <div class="login-panel">
-          <div class="service-banner" role="status" aria-live="polite">
-            <span id="authServiceIndicator" class="status-dot is-neutral" aria-hidden="true"></span>
-            <span id="authServiceStatus">Connecting to sign-in service…</span>
+        <div class="auth-brand">
+          <div class="auth-brand-lockup">
+            <svg class="auth-brand-mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+              <path d="M8 30V10h5l14 14V10h5v20h-5L13 16v14H8Z" fill="currentColor" />
+            </svg>
+            <span class="auth-wordmark">NexusOne</span>
           </div>
-          <form id="loginForm" class="login-form" novalidate>
-            <h2 id="authTitle">Welcome back</h2>
 
-            <div class="form-field floating-field">
-              <input
-                id="usernameInput"
-                name="username"
-                type="text"
-                inputmode="email"
-                autocomplete="username"
-                placeholder=" "
-                required
-              />
-              <label for="usernameInput">Username or work email</label>
+          <div class="auth-brand-copy">
+            <p class="auth-kicker">Internal knowledge desk</p>
+            <h1>Answers for the work ahead.</h1>
+            <p>Find the right policy, process, or support path without losing your place in the work.</p>
+          </div>
+
+          <ul class="auth-proof" aria-label="NexusOne Copilot capabilities">
+            <li><span class="auth-proof-icon" aria-hidden="true">01</span><span>Approved company sources</span></li>
+            <li><span class="auth-proof-icon" aria-hidden="true">02</span><span>Role-aware answers</span></li>
+            <li><span class="auth-proof-icon" aria-hidden="true">03</span><span>Support when you need it</span></li>
+          </ul>
+          <p class="auth-footnote">NexusOne Technologies · Internal use</p>
+        </div>
+
+        <div class="login-panel">
+          <div class="login-panel-inner">
+            <div class="service-banner" role="status" aria-live="polite">
+              <span id="authServiceIndicator" class="status-dot is-neutral" aria-hidden="true"></span>
+              <span id="authServiceStatus">Connecting to sign-in service…</span>
             </div>
-            <div class="form-field floating-field">
-              <input
-                id="passwordInput"
-                name="password"
-                type="password"
-                autocomplete="current-password"
-                placeholder=" "
-                required
-              />
-              <label for="passwordInput">Password</label>
+            <div class="login-form-heading">
+              <p class="eyebrow">NexusOne Copilot</p>
+              <h2 id="authTitle">Welcome back</h2>
+              <p>Sign in to continue to your company knowledge desk.</p>
             </div>
-            <button id="loginButton" class="login-button" type="submit" aria-busy="false">
-              <span class="login-button-label">Sign in</span>
-              <span class="login-button-loader" aria-hidden="true" hidden></span>
-              <span class="button-arrow" aria-hidden="true">→</span>
-            </button>
-            <p id="authError" class="form-message is-error" role="alert" aria-live="assertive"></p>
-            <p id="authStatus" class="form-message" role="status" aria-live="polite"></p>
-          </form>
+            <form id="loginForm" class="login-form" aria-describedby="authError authStatus" novalidate>
+              <div class="form-field floating-field">
+                <input
+                  id="usernameInput"
+                  name="username"
+                  type="text"
+                  inputmode="email"
+                  autocomplete="username"
+                  placeholder=" "
+                  required
+                />
+                <label for="usernameInput">Username or work email</label>
+              </div>
+              <div class="form-field floating-field">
+                <input
+                  id="passwordInput"
+                  name="password"
+                  type="password"
+                  autocomplete="current-password"
+                  placeholder=" "
+                  required
+                />
+                <label for="passwordInput">Password</label>
+              </div>
+              <button id="loginButton" class="login-button" type="submit" aria-busy="false">
+                <span class="login-button-label">Sign in</span>
+                <span class="login-button-loader" aria-hidden="true" hidden></span>
+                <span class="button-arrow" aria-hidden="true">→</span>
+              </button>
+              <p id="authError" class="form-message is-error" role="alert" aria-live="assertive"></p>
+              <p id="authStatus" class="form-message" role="status" aria-live="polite"></p>
+            </form>
+            <p class="login-footnote">Use your NexusOne account to continue.</p>
+          </div>
         </div>
       </div>
     </section>
