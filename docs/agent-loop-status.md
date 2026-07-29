@@ -14,7 +14,7 @@
   - Playwright MCP is now available in this session and was used for manual desktop/mobile UI inspection. Committed Playwright E2E coverage is still pending.
   - LangSmith hosted upload can fail noisily in restricted-network shells when tracing is enabled in the environment; graph execution still succeeds and safe metadata config is covered by unit tests.
 - The local authentication contract now uses salted password verifiers, opaque server-side sessions, and cookie-authenticated chat/feedback; the static UI uses that contract and omits client identity from chat/feedback requests.
-- Server memory phase: `docs/conversation-memory.md` records the pre-change inventory and official LangChain references. `SQLiteConversationStore` now owns server conversation IDs/turns, and JSON user memory/tools own bounded per-user durable facts/preferences; frontend history now reloads from authenticated conversation endpoints instead of browser persistence.
+- Server memory phase: `docs/conversation-memory.md` documents the owner-scoped conversation store and the Markdown long-term profile contract. `SQLiteConversationStore` owns server conversation IDs/turns; one atomic locked Markdown profile per authenticated user owns bounded name/nickname, profession, preference, activity, and other durable facts. LangChain `get_user_memory`/`update_user_memory` tools close over server runtime identity and expose no user/path selector.
 - Integration branch: merged `ecc62fc`, `583abad`, and `4a30982` from clean `daud_dev` with memory, retrieval threshold/citation, ticket ownership/security, frontend, routing, and streaming contracts retained; `docs/intent-routing.md` and the offline history fixture were aligned to the server-memory contract.
 
 ## Memory Coverage
@@ -22,9 +22,16 @@
 | Layer | Evidence | Status |
 |---|---|---|
 | Short-term owner-scoped threads | `app/memory/conversation_store.py`, `app/services/chat_service.py`, authenticated `/api/conversations`, `tests/unit/memory/test_conversation_store.py`, `tests/unit/services/test_memory_integration.py`, `tests/unit/api/test_conversation_memory_http.py` | complete locally |
-| Long-term per-user profiles/tools | `app/memory/user_memory.py`, `app/memory/tools.py`, `app/memory/extraction.py`, `tests/unit/memory/test_user_memory.py`, memory integration tests | complete locally |
+| Long-term per-user profiles/tools | `app/memory/user_memory.py`, `app/memory/tools.py`, `app/memory/extraction.py`, `tests/unit/memory/test_user_memory.py`, `tests/unit/memory/test_model_memory_tools.py`, memory integration tests | complete locally; full graph suite environment-limited |
 | LangGraph thread/config bridge | `app/observability/langsmith.py`, `app/agents/orchestrator/graph.py`, `docs/conversation-memory.md` | repository-owned checkpointer equivalent; replaceable for production |
 | Frontend/API lifecycle | `frontend/static/app.js`, `app/api/dev_server.py`, `docs/authentication.md` | complete locally |
+
+## Current task validation
+
+- `OPENAI_API_KEY='' DATABASE_URL='' .venv/bin/python -m unittest tests.unit.memory.test_user_memory tests.unit.memory.test_model_memory_tools tests.unit.memory.test_conversation_store` — pass, 15 tests with 2 model-tool tests skipped because this worktree has no usable `langgraph` installation.
+- `.venv/bin/python -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` — pass.
+- Direct injected fake-model check through `LangChainOpenAIAnswerComposer` — pass using `langchain-core`: `update_user_memory` executed only with explicit server runtime input, persisted `nickname`, and returned safe tool outcomes.
+- Full `unittest discover` was attempted once after the dependency install failure: 171 tests collected, 9 modules could not import because `langgraph` is missing. No network installs will be retried; the deterministic storage/tool tests above remain the authoritative local validation.
 
 ## Requirement Coverage
 

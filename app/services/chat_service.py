@@ -88,6 +88,9 @@ class ChatService:
         self.audit_service = audit_service or defaults["audit_service"]
         self.sql_planner = sql_planner if sql_planner is not None else build_default_sql_planner()
         self.answer_composer = answer_composer if answer_composer is not None else build_default_answer_composer()
+        configure_memory = getattr(self.answer_composer, "set_memory_store", None)
+        if callable(configure_memory):
+            configure_memory(self.user_memory_store)
         self.intent_classifier = intent_classifier if intent_classifier is not None else build_default_intent_classifier()
         self.orchestrator = NexusOneOrchestrator(
             chunk_retriever=self.chunk_retriever,
@@ -132,6 +135,7 @@ class ChatService:
             conversation_context=conversation_context,
             active_ticket_draft=active_ticket_draft,
             memory_opt_in=memory_opt_in,
+            memory_session=None,
         )
 
     def handle_authenticated_message(
@@ -159,6 +163,7 @@ class ChatService:
             conversation_context=conversation_context,
             active_ticket_draft=active_ticket_draft,
             memory_opt_in=memory_opt_in,
+            memory_session=session,
         )
 
     def stream_authenticated_message(
@@ -186,6 +191,7 @@ class ChatService:
             conversation_context=conversation_context,
             active_ticket_draft=active_ticket_draft,
             memory_opt_in=memory_opt_in,
+            memory_session=session,
         )
 
     def stream_message(
@@ -201,6 +207,7 @@ class ChatService:
         conversation_context: Any = None,
         active_ticket_draft: Any = None,
         memory_opt_in: bool = False,
+        memory_session: AuthenticatedSession | None = None,
     ) -> Iterator[Mapping[str, Any]]:
         payload, reservation, memory_update = self._prepare_request(
             user_id,
@@ -213,6 +220,7 @@ class ChatService:
             conversation_context=conversation_context,
             active_ticket_draft=active_ticket_draft,
             memory_opt_in=memory_opt_in,
+            memory_session=memory_session,
         )
         if reservation.is_replay:
             yield {"type": "response.start", "conversation_id": reservation.conversation_id, "turn_id": reservation.turn_id}
@@ -272,6 +280,7 @@ class ChatService:
         conversation_context: Any = None,
         active_ticket_draft: Any = None,
         memory_opt_in: bool = False,
+        memory_session: AuthenticatedSession | None = None,
     ) -> dict[str, Any]:
         payload, reservation, memory_update = self._prepare_request(
             user_id,
@@ -284,6 +293,7 @@ class ChatService:
             conversation_context=conversation_context,
             active_ticket_draft=active_ticket_draft,
             memory_opt_in=memory_opt_in,
+            memory_session=memory_session,
         )
         if reservation.is_replay:
             return dict(reservation.replay_response or {})
@@ -322,30 +332,69 @@ class ChatService:
         conversation_context: Any,
         active_ticket_draft: Any,
         memory_opt_in: bool,
+        memory_session: AuthenticatedSession | None,
     ) -> tuple[dict[str, Any], TurnReservation, dict[str, Any] | None]:
         if persist_memory:
             reservation = self.conversation_store.begin_turn(user_id, conversation_id, turn_id, message)
         else:
             reservation = TurnReservation(conversation_id or "web-chat", turn_id or "web-turn", ())
         resolved_profile = profile if profile is not None else get_profile(user_id)
-        user_memory: dict[str, Any] = {"schema_version": 1, "facts": {}, "preferences": {}}
-        if resolved_profile is not None:
+        candidate = extract_explicit_memory_update(message, preference_opt_in=memory_opt_in)
+        supports_memory_tools = bool(getattr(self.answer_composer, "supports_memory_tools", False))
+        if resolved_profile is None:
+            memory_runtime = None
+        elif memory_session is not None:
+            memory_runtime = MemoryRuntimeContext.from_session(
+                memory_session,
+                preference_opt_in=bool(candidate and candidate.preference_opt_in) or memory_opt_in,
+                explicit_user_input=candidate is not None,
+            )
+        else:
+            memory_runtime = MemoryRuntimeContext(
+                user_id,
+                preference_opt_in=bool(candidate and candidate.preference_opt_in) or memory_opt_in,
+                explicit_user_input=candidate is not None,
+                runtime_source="trusted_graph_call",
+            )
+        user_memory: dict[str, Any] = {
+            "schema_version": 2,
+            "name_and_nickname": {},
+            "profession": None,
+            "preferences": {},
+            "current_activities": [],
+            "other_facts": {},
+            "facts": {},
+        }
+        if memory_runtime is not None:
             try:
-                user_memory = self.memory_tools.get_user_memory(MemoryRuntimeContext(user_id))
+                user_memory = self.memory_tools.get_user_memory(memory_runtime)
             except Exception:
                 # Memory is context, never an availability or authorization boundary.
-                user_memory = {"schema_version": 1, "facts": {}, "preferences": {}}
-        memory_update = self._apply_explicit_memory_update(
-            user_id,
-            message,
-            resolved_profile,
-            memory_opt_in=memory_opt_in,
-        )
-        if memory_update and memory_update.get("status") == "updated":
-            try:
-                user_memory = self.memory_tools.get_user_memory(MemoryRuntimeContext(user_id))
-            except Exception:
                 pass
+        # A configured model-capable composer performs the update through the
+        # bound server tool. Deterministic/offline paths retain a conservative
+        # server fallback so local tests and no-provider deployments still save
+        # explicit user facts without pretending a prompt is a tool call.
+        if candidate is not None and not supports_memory_tools:
+            memory_update = self._apply_explicit_memory_update(
+                user_id,
+                message,
+                resolved_profile,
+                memory_opt_in=memory_opt_in,
+            )
+            if memory_update and memory_update.get("status") == "updated" and memory_runtime is not None:
+                try:
+                    user_memory = self.memory_tools.get_user_memory(memory_runtime)
+                except Exception:
+                    pass
+        elif candidate is not None:
+            memory_update = {
+                "status": "pending_model_tool",
+                "reason_code": "EXPLICIT_USER_MEMORY",
+                "fields": list(candidate.fields)[:8],
+            }
+        else:
+            memory_update = None
         context = dict(conversation_context) if isinstance(conversation_context, Mapping) else {}
         if reservation.history:
             context["recent_user_messages"] = [item["user_message"] for item in reservation.history[-3:]]
@@ -361,6 +410,7 @@ class ChatService:
             short_term_history=list(reservation.history),
             user_memory=user_memory,
             memory_update=memory_update,
+            memory_runtime=memory_runtime,
         )
         return payload, reservation, memory_update
 
@@ -378,6 +428,7 @@ class ChatService:
         short_term_history: list[dict[str, str]] | None = None,
         user_memory: dict[str, Any] | None = None,
         memory_update: dict[str, Any] | None = None,
+        memory_runtime: MemoryRuntimeContext | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "conversation_id": conversation_id or "web-chat",
@@ -389,7 +440,16 @@ class ChatService:
             "conversation_context": conversation_context,
             "active_ticket_draft": active_ticket_draft,
             "short_term_history": short_term_history or [],
-            "user_memory": user_memory or {"schema_version": 1, "facts": {}, "preferences": {}},
+            "user_memory": user_memory or {
+                "schema_version": 2,
+                "name_and_nickname": {},
+                "profession": None,
+                "preferences": {},
+                "current_activities": [],
+                "other_facts": {},
+                "facts": {},
+            },
+            "memory_runtime": memory_runtime,
         }
         if memory_update:
             payload["memory_update"] = memory_update
@@ -404,7 +464,29 @@ class ChatService:
         memory_update: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if memory_update:
-            response["memory"] = dict(memory_update)
+            result = dict(memory_update)
+            if result.get("status") == "pending_model_tool":
+                tool_info = response.get("memory_tools")
+                called = tool_info.get("called", []) if isinstance(tool_info, Mapping) else []
+                outcomes = tool_info.get("outcomes", []) if isinstance(tool_info, Mapping) else []
+                if "update_user_memory" in called and any(
+                    str(item).startswith("update_user_memory:ok") for item in outcomes
+                ):
+                    result.update({"status": "updated", "reason_code": "EXPLICIT_USER_MEMORY"})
+                else:
+                    result.update({"status": "not_updated", "reason_code": "MODEL_DID_NOT_SAVE"})
+            response["memory"] = result
+        memory_tools = response.get("memory_tools")
+        if not isinstance(memory_tools, Mapping):
+            memory_tools = {"called": [], "outcomes": []}
+        called = list(memory_tools.get("called", [])) if isinstance(memory_tools.get("called"), list) else []
+        if "get_user_memory" not in called:
+            called.insert(0, "get_user_memory")
+        response["memory_tools"] = {
+            "called": list(dict.fromkeys(item for item in called if item in {"get_user_memory", "update_user_memory"}))[:4],
+            "outcomes": list(memory_tools.get("outcomes", []))[:4] if isinstance(memory_tools.get("outcomes"), list) else [],
+            "server_identity": "authenticated_runtime",
+        }
         response["capabilities"] = self._capabilities_for_response(response)
         self._record_audit(response)
         return response
@@ -432,7 +514,13 @@ class ChatService:
                     preference_opt_in=candidate.preference_opt_in or memory_opt_in,
                     explicit_user_input=True,
                 ),
-                {"facts": candidate.facts, "preferences": candidate.preferences},
+                {
+                    "name_and_nickname": candidate.name_and_nickname,
+                    "profession": candidate.profession,
+                    "preferences": candidate.preferences,
+                    "current_activities": candidate.current_activities or None,
+                    "other_facts": candidate.other_facts,
+                },
             )
         except MemoryValidationError:
             return {"status": "not_updated", "reason_code": "MEMORY_VALUE_REJECTED", "fields": []}
@@ -506,11 +594,19 @@ class ChatService:
     def _record_audit(self, response: dict[str, Any]) -> None:
         profile = response.get("profile") or {}
         trace = response.get("trace") or []
-        tools_called = tuple(
+        graph_tools = tuple(
             step.get("node")
             for step in trace
-            if isinstance(step, dict) and step.get("node") in {"retrieve_rag_context", "run_sql_subgraph", "run_ticket_action"}
+            if isinstance(step, dict)
+            and step.get("node") in {"retrieve_rag_context", "run_sql_subgraph", "run_ticket_action", "memory_tools"}
         )
+        memory_tools = response.get("memory_tools")
+        memory_tool_names = tuple(
+            str(item)
+            for item in (memory_tools.get("called", []) if isinstance(memory_tools, Mapping) else [])
+            if str(item) in {"get_user_memory", "update_user_memory"}
+        )
+        tools_called = tuple(dict.fromkeys([*graph_tools, *memory_tool_names]))
         citations = response.get("citations") or []
         doc_ids = tuple(
             str(citation.get("doc_id"))
@@ -601,7 +697,9 @@ class ChatService:
             "retrieval": self.chunk_retriever.safe_metadata(),
             "memory": {
                 "short_term": "sqlite_local",
-                "long_term": "json_profile_local",
+                "long_term": "markdown_profile_local",
+                "profile_schema_version": 2,
+                "memory_tools": ["get_user_memory", "update_user_memory"],
                 "history_turn_limit": 8,
             },
             "tracing": {

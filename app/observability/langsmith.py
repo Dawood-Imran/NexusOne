@@ -17,6 +17,7 @@ SAFE_ROUTE_NAMES = frozenset(
         "feedback",
         "clarification",
         "unsupported",
+        "memory",
         "deny",
         "error",
     }

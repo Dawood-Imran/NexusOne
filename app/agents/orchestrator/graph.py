@@ -72,6 +72,7 @@ def build_orchestrator_graph(
     composer = answer_composer or build_default_answer_composer()
     graph.add_node("compose_final_answer", make_compose_final_answer_node(composer))
     graph.add_node("compose_general_knowledge", make_compose_final_answer_node(composer))
+    graph.add_node("compose_memory", make_compose_final_answer_node(composer))
     graph.add_node("finalize_response", make_finalize_response_node())
 
     graph.add_edge(START, "load_user_context")
@@ -90,6 +91,7 @@ def build_orchestrator_graph(
             "ticket_create": "run_ticket_action",
             "CASUAL": "respond_casual",
             "GENERAL_KNOWLEDGE": "compose_general_knowledge",
+            "memory": "compose_memory",
             "feedback": "respond_feedback",
             "clarification": "respond_clarification",
             "unsupported": "respond_unsupported",
@@ -120,6 +122,7 @@ def build_orchestrator_graph(
         },
     )
     graph.add_edge("compose_general_knowledge", "validate_answer")
+    graph.add_edge("compose_memory", "finalize_response")
     graph.add_edge("compose_final_answer", "finalize_response")
     graph.add_edge("finalize_response", END)
     return graph.compile()
@@ -210,12 +213,30 @@ def _state_from_payload(payload: Mapping[str, Any]) -> OrchestratorState:
         "active_ticket_draft": payload.get("active_ticket_draft"),
         "short_term_history": _bounded_short_term_history(payload.get("short_term_history")),
         "user_memory": _bounded_user_memory(payload.get("user_memory")),
+        "memory_update": _bounded_memory_update(payload.get("memory_update")),
+        # This is an internal server closure input. It is never serialized into
+        # LangSmith metadata or exposed as a model tool argument.
+        "memory_runtime": payload.get("memory_runtime"),
     }
     # Authenticated API callers may pass the immutable server-resolved profile
     # so the graph does not reconstruct identity from client data.
     if payload.get("profile") is not None:
         state["profile"] = payload["profile"]
     return state
+
+
+def _bounded_memory_update(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    status = value.get("status")
+    fields = value.get("fields")
+    return {
+        "status": status if status in {"updated", "pending_model_tool", "not_updated"} else "not_updated",
+        "reason_code": str(value.get("reason_code", ""))[:80],
+        "fields": [str(item)[:48] for item in fields[:8] if isinstance(item, str)]
+        if isinstance(fields, list)
+        else [],
+    }
 
 
 def _bounded_short_term_history(value: Any) -> list[dict[str, str]]:
@@ -240,17 +261,38 @@ def _bounded_short_term_history(value: Any) -> list[dict[str, str]]:
 
 def _bounded_user_memory(value: Any) -> dict[str, Any]:
     if not isinstance(value, Mapping):
-        return {"schema_version": 1, "facts": {}, "preferences": {}}
-    result: dict[str, Any] = {"schema_version": 1, "facts": {}, "preferences": {}}
-    for group in ("facts", "preferences"):
+        return {
+            "schema_version": 2,
+            "name_and_nickname": {},
+            "profession": None,
+            "preferences": {},
+            "current_activities": [],
+            "other_facts": {},
+            "facts": {},
+        }
+    result: dict[str, Any] = {"schema_version": 2}
+    for group in ("name_and_nickname", "preferences", "other_facts"):
         source = value.get(group)
         if not isinstance(source, Mapping):
+            result[group] = {}
             continue
         result[group] = {
             str(field)[:48]: str(item)[:120]
             for field, item in list(source.items())[:8]
             if isinstance(field, str) and isinstance(item, str) and item.strip()
         }
+    profession = value.get("profession")
+    result["profession"] = profession[:120] if isinstance(profession, str) else None
+    activities = value.get("current_activities")
+    result["current_activities"] = [
+        item[:120] for item in activities[:5] if isinstance(item, str) and item.strip()
+    ] if isinstance(activities, (list, tuple)) else []
+    legacy = value.get("facts")
+    result["facts"] = {
+        str(field)[:48]: str(item)[:120]
+        for field, item in list(legacy.items())[:8]
+        if isinstance(field, str) and isinstance(item, str) and item.strip()
+    } if isinstance(legacy, Mapping) else {}
     return result
 
 

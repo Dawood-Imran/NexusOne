@@ -220,12 +220,12 @@ def make_respond_clarification_node() -> Any:
     def respond_clarification(state: OrchestratorState) -> OrchestratorState:
         memory_message = _memory_lookup_answer(state)
         message = memory_message or state.get("clarification_question") or "Could you clarify what you would like me to help with?"
-        answered_from_memory = memory_message is not None
+        answered_from_memory = memory_message is not None and not memory_message.startswith("I do not have that detail")
         next_state: OrchestratorState = {
             **state,
             "clarification_message": message,
-            "status": "answered" if answered_from_memory else "needs_clarification",
-            "reason_code": "LONG_TERM_MEMORY" if answered_from_memory else state.get("intent_reason_code") or "INTENT_NEEDS_CLARIFICATION",
+            "status": "answered" if answered_from_memory else ("no_answer" if memory_message else "needs_clarification"),
+            "reason_code": "LONG_TERM_MEMORY" if answered_from_memory else ("LONG_TERM_MEMORY_EMPTY" if memory_message else state.get("intent_reason_code") or "INTENT_NEEDS_CLARIFICATION"),
         }
         next_state["trace"] = append_trace(
             next_state,
@@ -502,6 +502,10 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
         reference_status = state.get("rag_reference_status", "not_used")
         if route == "GENERAL_KNOWLEDGE":
             local_answer = build_local_general_answer(state.get("clean_message", ""))
+        elif route == "memory":
+            local_answer = _memory_lookup_answer(state)
+            if local_answer is None and state.get("memory_update", {}).get("status") in {"updated", "pending_model_tool"}:
+                local_answer = "I saved that explicit detail to your personal profile memory."
         else:
             local_answer = None
         status = _response_status_for_success(state)
@@ -520,8 +524,13 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             "reference_note": NO_REFERENCE_MESSAGE if reference_status == "none_reached_threshold" else "",
             "action_answer": state.get("ticket_message", ""),
             "general_answer": local_answer or "",
+            "memory_answer": local_answer or "",
+            "memory_update": state.get("memory_update", {}),
             "conversation_history": state.get("short_term_history", []),
             "user_memory": state.get("user_memory", {}),
+            # Internal server closure used only to construct authenticated
+            # memory tools. It is intentionally omitted by _compact_context.
+            "_memory_runtime": state.get("memory_runtime"),
             "citations": state.get("rag_citations", []),
             "sources": state.get("sql_sources", []),
             "sql_status": sql_output.sql_status if sql_output is not None else None,
@@ -556,7 +565,18 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             "composer_backend": composition.backend,
             "general_answer": local_answer or "",
             "general_answer_available": bool(local_answer),
+            "memory_tool_calls": list(composition.tool_calls),
+            "memory_tool_outcomes": list(composition.tool_outcomes),
         }
+        if composition.tool_calls:
+            next_state["trace"] = append_trace(
+                next_state,
+                "memory_tools",
+                {
+                    "status": "called",
+                    "tools": list(composition.tool_calls),
+                },
+            )
         if route == "GENERAL_KNOWLEDGE" and composition.backend.startswith("openai"):
             next_state["general_answer_available"] = True
         if composition.error:
@@ -622,6 +642,12 @@ def make_finalize_response_node() -> Any:
         if state.get("sql_output") is not None:
             response["sql_planner_backend"] = state.get("sql_planner_backend", "deterministic")
             response["sql_planner_fallback_reason"] = state.get("sql_planner_fallback_reason")
+        if state.get("memory_tool_calls"):
+            response["memory_tools"] = {
+                "called": list(dict.fromkeys(state["memory_tool_calls"]))[:4],
+                "outcomes": list(dict.fromkeys(state.get("memory_tool_outcomes", [])))[:4],
+                "server_identity": "authenticated_runtime",
+            }
 
         if state.get("include_trace"):
             response["trace"] = list(state.get("trace", []))
@@ -746,6 +772,22 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
             **_turn_context(state),
         }
 
+    if route == "memory":
+        memory_message = state.get("final_answer") or state.get("memory_answer", "")
+        answered = bool(memory_message) and not str(memory_message).startswith("I do not have that detail")
+        return {
+            "status": "answered" if answered else "no_answer",
+            "reason_code": "LONG_TERM_MEMORY" if answered else "LONG_TERM_MEMORY_EMPTY",
+            "route": route,
+            "model_backend": state.get("composer_backend", "none"),
+            "category": category,
+            "message": memory_message,
+            "sql_execution": {"status": "not_run", "row_count": 0},
+            "profile": profile.to_public_dict(),
+            "latency_ms": _elapsed_ms(started_at),
+            **_turn_context(state),
+        }
+
     if route in {"feedback", "clarification", "unsupported"}:
         if route == "feedback":
             message = state.get("feedback_message", "")
@@ -826,23 +868,43 @@ def _memory_lookup_answer(state: OrchestratorState) -> str | None:
     if not isinstance(memory, dict):
         return None
     field_labels = {
-        "preferred_name": ("preferred name", "your name"),
+        "nickname": ("nickname", "preferred name"),
+        "name": ("full name", "your name", "my name"),
+        "profession": ("profession", "job", "occupation"),
         "working_timezone": ("working timezone", "timezone"),
         "office_location": ("office location",),
         "language": ("preferred language", "language"),
         "response_style": ("response style",),
         "date_format": ("date format",),
         "communication_channel": ("communication channel",),
+        "current_activities": ("current activit", "working on"),
     }
-    if not (message.startswith("what is my ") or message.startswith("what's my ") or message.startswith("do you remember my ")):
+    if not (
+        message.startswith("what is my ")
+        or message.startswith("what's my ")
+        or message.startswith("do you remember my ")
+        or message.startswith("what am i working on")
+    ):
         return None
     for field, labels in field_labels.items():
         if not any(label in message for label in labels):
             continue
-        for group in ("facts", "preferences"):
-            values = memory.get(group)
-            if isinstance(values, dict) and isinstance(values.get(field), str) and values[field]:
-                return f"You asked me to remember that your {field.replace('_', ' ')} is {values[field]}."
+        if field == "profession":
+            value = memory.get("profession")
+            if isinstance(value, str) and value:
+                return f"You asked me to remember that your profession is {value}."
+        elif field == "current_activities":
+            values = memory.get("current_activities")
+            if isinstance(values, list) and values:
+                return "You asked me to remember that you are currently working on " + ", ".join(values) + "."
+        else:
+            groups = ("name_and_nickname", "preferences", "other_facts", "facts")
+            for group in groups:
+                values = memory.get(group)
+                candidate = "preferred_name" if field == "nickname" and group == "facts" else field
+                if isinstance(values, dict) and isinstance(values.get(candidate), str) and values[candidate]:
+                    label = "nickname" if field == "nickname" else field.replace("_", " ")
+                    return f"You asked me to remember that your {label} is {values[candidate]}."
         return "I do not have that detail in your saved profile memory."
     return None
 
@@ -889,6 +951,8 @@ def _response_status_for_success(state: OrchestratorState) -> str:
         return "answered"
     if route == "GENERAL_KNOWLEDGE":
         return "answered" if state.get("general_answer_available") else "no_answer"
+    if route == "memory":
+        return "answered" if state.get("memory_answer") else "no_answer"
     return "answered" if int(state.get("rag_result_count", 0)) > 0 else "no_answer"
 
 

@@ -1,142 +1,145 @@
 # NexusOne conversation and user memory
 
-## Baseline inventory (before server memory)
+NexusOne has two separate server-owned memory boundaries:
 
-The launch checkout did not have durable conversation memory. The important
-boundaries were:
+- **Short-term conversation memory** is an owner-scoped SQLite conversation and
+  turn store. It is bounded context for the current conversation only.
+- **Long-term personal memory** is one bounded Markdown profile per authenticated
+  user. It is shared across that user's conversations, never across users, and
+  is not an authority for roles, permissions, retrieval, SQL, tickets, or
+  safety policy.
 
-- `app/api/dev_server.py` accepted `POST /api/chat` but did not accept a
-  conversation identifier. SSE `response.start` always advertised
-  `conversation_id: "web-chat"` and `turn_id: "web-turn"`.
-- `ChatService._request_payload` supplied those same constant identifiers and
-  passed only an optional, caller-provided `conversation_context`. It did not
-  read or write a server conversation store. Direct callers could therefore
-  discard all turns between invocations.
-- `app/agents/orchestrator/graph.py` compiled a `StateGraph` without a
-  checkpointer. Its LangSmith config carried metadata only; no checkpoint was
-  resumed. The graph branches already present were RAG, SQL, combined SQL/RAG,
-  ticket creation, `CASUAL`, `GENERAL_KNOWLEDGE`, feedback, clarification,
-  unsupported, denial, and error. The existing `history_lookup` classifier
-  label intentionally mapped to `unsupported` because history was unavailable.
-- `app/agents/orchestrator/intent_classifier.py` bounded optional recent user
-  hints, but those hints were not durable state. `answer_composer.py` received
-  only the current graph drafts and approved sources.
-- The browser stored complete conversations in `localStorage` under
-  `nexusone.conversations.<user_id>`. Those IDs were browser-generated and did
-  not identify server records. Deleting a conversation explicitly removed it
-  only from that browser. Browser storage was not treated as server memory.
-- Existing action/feedback/audit repositories may use an injected SQLAlchemy
-  engine, but that persistence was unrelated to chat turns. The default local
-  path had no Postgres requirement and no conversation table.
+## Long-term profile format
 
-This document records the baseline so a migration does not accidentally treat
-browser history or audit rows as a checkpointer.
+Profiles are written under `NEXUSONE_USER_MEMORY_DIR` (or
+`NEXUSONE_RUNTIME_DIR/user_memory`) as `<authenticated-user-id>.md`. The file
+name is created only after the server validates the ID against the synthetic
+server manifest (`u001` through `u008`); neither a browser nor a model can
+provide a path or namespace.
 
-## Design and current implementation
+Each file is Markdown with server-parsed front matter and these bounded
+sections:
 
-### Short-term memory
+```markdown
+---
+schema_version: 2
+user_id: "u001"
+created_at: "2026-01-01T00:00:00+00:00"
+updated_at: "2026-01-01T00:00:00+00:00"
+---
+# NexusOne personal memory
 
-`app/memory/conversation_store.py` defines a replaceable `ConversationStore`
-interface and a local `SQLiteConversationStore` implementation. It stores
-owner-scoped conversations and turns in `data/runtime/nexusone_conversations.sqlite3`
-by default (override with `NEXUSONE_RUNTIME_DIR`). A transaction atomically:
+## Name and nickname
+- nickname: {"source":"explicit_user","updated_at":"...","value":"Davis"}
 
-1. creates a UUID conversation when the authenticated request omits
-   `conversation_id`, or verifies the supplied ID belongs to the authenticated
-   owner;
-2. reserves a UUID turn (or validates a supplied `turn_id`);
-3. loads at most eight completed prior turns, bounded to 600 characters per
-   message; and
-4. completes the pending turn with the sanitized public response. Local
-   retention compacts a conversation to the newest 100 completed turns; the
-   prompt window is always the smaller eight-turn bound.
+## Profession
+- profession: {"source":"explicit_user","updated_at":"...","value":"Designer"}
 
-A repeated `(owner, conversation_id, turn_id)` with identical user text returns
-the stored response (replay/idempotency). Reusing the turn ID with different
-text is a conflict, and a concurrently pending duplicate is rejected. Unknown
-or another-owner IDs have the same generic not-found behavior. The API exposes
-`GET/POST/DELETE /api/conversations` and `GET /api/conversations/{id}` for
-reload, reconnect, and explicit server deletion.
+## Preferences
+- response_style: {"source":"explicit_user","updated_at":"...","value":"concise"}
 
-The orchestrator receives the conversation ID as `configurable.thread_id` in
-its LangGraph config. Since this graph is not an agent created with a
-checkpointer, the SQLite store is the repository-owned equivalent boundary;
-a production LangGraph checkpointer can replace it without changing the API.
-History is marked as untrusted context in classifier and answer prompts. It is
-context only and never supplies authorization, policy, retrieval scope, SQL,
-or tool authority.
+## Current activities
+- {"source":"explicit_user","updated_at":"...","value":"billing migration"}
 
-### Long-term memory
-
-`app/memory/user_memory.py` stores versioned per-user JSON profiles under the
-configured runtime directory (`data/runtime/user_memory/u001.json` by default).
-The path component is accepted only after validating a known authenticated
-manifest ID; arbitrary paths and traversal strings cannot select a file.
-Profile values are bounded, allowlisted facts/preferences with provenance and
-UTC timestamps in the file. Passwords, tokens, credentials, health, salary,
-banking, and similar sensitive fields are rejected. Writes use per-file
-thread/process locking and atomic `os.replace`.
-
-Preferences require an explicit user `remember`/`save`/`store` request (or an
-explicit server runtime opt-in); ordinary conversation is never inferred into
-memory. `app/memory/tools.py` provides server-controlled equivalents of
-`get_user_memory` and `update_user_memory`. They receive an injected
-`MemoryRuntimeContext`; the callable schema has no user ID selector, rejects
-identity fields, and requires explicit user input for updates. Audit events
-record action, owner, field names, and outcome only—never raw prompts or stored
-values.
-
-ChatService loads sanitized memory at the start of an authenticated turn and
-passes only bounded values to classification and answer composition. An
-explicitly recognized update is validated before it is persisted and the
-response reports only the changed field names. Memory is never an authority
-for roles, permissions, retrieval, SQL, tools, or safety policy.
-
-## Official design references
-
-The implementation adapts the current Python concepts rather than importing a
-JS-only agent pattern:
-
-- [Short-term memory](https://docs.langchain.com/oss/python/langchain/short-term-memory)
-  describes graph state persisted by a checkpointer and resumed with
-  `configurable.thread_id`.
-- [Long-term memory](https://docs.langchain.com/oss/python/langchain/long-term-memory)
-  describes user-scoped store namespaces and server-provided runtime context
-  for tools such as `get_user_memory` and `update_user_memory`.
-
-The current graph's SQLite boundary is intentionally replaceable with a
-LangGraph SQLite/Postgres checkpointer when the repository upgrades its graph
-construction and deployment dependencies.
-
-## Browser migration and cleanup
-
-The frontend no longer treats `localStorage` as conversation authority. After
-login it loads server conversations, creates a server conversation for **New
-conversation**, sends its `conversation_id` on every turn, and uses the server
-response/SSE metadata as canonical. Browser state is only a rendering cache
-for the active view; reloads recover from `/api/conversations`. Conversation
-delete calls the server endpoint and is no longer described as device-only.
-Existing `nexusone.conversations.*` keys from older builds are ignored and may
-be removed by a later cleanup release; they are not migrated into server
-memory because their ownership and integrity cannot be established.
-
-## HTTP examples
-
-Two turns in the same conversation use the ID returned by the first request:
-
-```text
-POST /api/chat {"message":"How do I request AWS access?"}
-<- {"conversation_id":"<server UUID>","turn_id":"<turn UUID>", ...}
-POST /api/chat {"conversation_id":"<server UUID>","message":"What did I ask earlier?"}
-<- message: "Earlier in this conversation, you asked: ...AWS access..."
+## Other durable facts
+- office_location: {"source":"explicit_user","updated_at":"...","value":"Lahore"}
 ```
 
-A different server conversation has a different ID and cannot read those
-turns. A long-term example is:
+The implementation bounds the profile to eight total entries, five current
+activities, and 120 characters per value (80 for a name/nickname). Field names
+are allowlisted, values are normalized to one line, and secret/credential,
+health, financial, prompt-instruction, role, permission, and similar sensitive
+content is rejected. Every entry has a server timestamp and provenance; audit
+records contain only user ID, action, outcome, and field names, never values or
+raw prompts.
+
+Writes use a per-profile in-process lock, an advisory process lock, a flushed
+temporary file, and `os.replace`. Readers therefore see either the previous
+complete Markdown profile or the next complete profile. Malformed or old-schema
+files fail closed to an empty sanitized profile rather than becoming model
+context.
+
+## Tool contract
+
+The server exposes exactly two model tools through the LangChain/OpenAI answer
+path:
+
+### `get_user_memory`
+
+- Input: `{}` only; additional properties are forbidden.
+- Output: sanitized profile values and schema version, with no provenance,
+  timestamp, user ID, path, secret, or hidden field.
+- Identity: captured by a server-created `MemoryRuntimeContext` from the
+  authenticated session.
+
+### `update_user_memory`
+
+- Input properties: `name_and_nickname`, `profession`, `preferences`,
+  `current_activities`, and `other_facts`; additional properties are
+  forbidden. User IDs, paths, roles, permissions, credentials, and policy
+  changes are never part of the schema.
+- The server validates sections and values again at execution time.
+- The tool executes only with `explicit_user_input=True`, which the server sets
+  only when the current authenticated user has made a supported explicit
+  statement. The model cannot set this flag or choose another identity.
+- Tool calls are limited to a bounded loop and produce safe tool outcomes in
+  traces. Raw tool arguments and profile values are not placed in audit logs.
+
+`app/memory/tools.py` also provides a provider-independent contract for tests
+and builds LangChain `StructuredTool` instances with the same strict schemas.
+Offline tests inject a fake model that returns a tool call followed by a final
+model message; no OpenAI or network is required.
+
+## Update policy
+
+The profile is updated only from a current user-authored explicit durable
+statement, for example:
+
+- `My nickname is Davis`
+- `Remember that my profession is designer`
+- `I prefer concise responses`
+- `I am currently working on the billing migration`
+
+Ordinary conversation, assistant prose, conversation history, retrieved
+Markdown/PDF text, and SQL rows are never passed to the update extractor. A
+prompt-injection request is denied by the existing guardrail precheck or the
+value validator and cannot update memory. Unsupported fields, line breaks,
+oversized values, sensitive markers, and invalid enumerated preferences are
+rejected. Preference updates require the explicit statement to count as the
+user opt-in; a model cannot manufacture that opt-in.
+
+The deterministic no-provider path uses the same server validator as a safe
+fallback for explicit statements. When a configured model-capable composer is
+used, the model is bound to the two server-owned tools and must decide whether
+to call `update_user_memory` or `get_user_memory`; a static prompt alone does
+not write memory.
+
+## Conversation behavior
+
+At the start of every authenticated turn, `ChatService` reads the sanitized
+profile and passes bounded values to the classifier/answer path. A new server
+conversation therefore has access to a profile saved in an earlier
+conversation:
 
 ```text
-POST /api/chat {"conversation_id":"<id>","message":"Remember that my preferred name is Ada"}
-<- {"memory":{"status":"updated","fields":["preferred_name"]}, ...}
-POST /api/chat {"conversation_id":"<id>","message":"What is my preferred name?"}
-<- the bounded sanitized profile is available to the classifier/answer path
+POST /api/chat {"message":"My nickname is Davis"}
+<- {"memory":{"status":"updated","fields":["nickname"]}, ...}
+
+POST /api/chat {"message":"What is my nickname?"}
+<- message: "You asked me to remember that your nickname is Davis."
 ```
+
+Short-term history remains limited to the current authenticated conversation
+and is marked untrusted context. A different user, a traversal-like ID, or an
+unknown conversation receives a generic owner-safe error. The normal JSON and
+SSE response contracts, retrieval scope, SQL scope, ticket authority, and
+pre-model guardrails remain unchanged.
+
+## Limitations
+
+The local implementation uses Markdown files and SQLite for the repository's
+dev/runtime boundary. A production deployment should replace these with a
+shared encrypted store and deployment-grade locking/retention while keeping
+the same server-owned namespace and tool contract. Long-term memory is
+intentionally not a general knowledge base: it stores only bounded personal
+facts/preferences and does not infer facts from behavior.
