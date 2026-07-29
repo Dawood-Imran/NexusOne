@@ -7,21 +7,23 @@ finite labels to graph routes and does not inspect message keywords.
 
 ## Intent labels
 
-`casual`, `general_question`, `knowledge_lookup`, `structured_lookup`,
-`combined_lookup`, `ticket_create`, `ticket_status`, `history_lookup`, `memory_lookup`,
-`memory_update`, `feedback`, `clarification`, and `unsupported` are the complete
-classifier label set.
+`casual`, `general_question`, `knowledge_lookup`, `ticket_guidance`,
+`structured_lookup`, `combined_lookup`, `ticket_create`, `ticket_status`,
+`history_lookup`, `memory_lookup`, `memory_update`, `feedback`, `clarification`,
+and `unsupported` are the complete classifier label set.
 
-`general_question` includes basic questions and ticket-creation guidance. Guidance
-such as “I can create a ticket … please provide …” is not a command and must not
-invoke the ticket action. `ticket_create` requires an explicit user request to
-create, submit, raise, open, or generate a ticket.
+`ticket_guidance` covers direct and paraphrased questions about how to create,
+submit, route, or prepare a ticket, including required information, categories,
+and next steps. Guidance such as “I can create a ticket … please provide …” is
+not a command and must not invoke the ticket action. `ticket_create` requires an
+explicit user request to create, submit, raise, open, or generate a ticket.
 
 The server maps these labels as follows:
 
 - casual -> `CASUAL` deterministic response
 - general_question -> `GENERAL_KNOWLEDGE` safe composer path
 - knowledge_lookup -> permission-filtered RAG
+- ticket_guidance -> permission-filtered RAG with the approved ticket-process composer; it never writes a ticket
 - structured_lookup or ticket_status -> constrained SQL subgraph
 - combined_lookup -> SQL followed by permission-filtered RAG
 - ticket_create -> validated ticket action service
@@ -33,10 +35,13 @@ The server maps these labels as follows:
 
 A ticket-status label is never treated as ticket creation. A ticket-create label may
 carry missing context; the existing ticket service then asks for department,
-category, or description without writing a partial ticket. The authenticated
-conversation store supplies at most the bounded recent user-message context used
-for history lookup and follow-up classification; it does not grant authorization,
-retrieval, SQL, or action authority.
+category, or description without writing a partial ticket. If the approved KB has
+no retained ticket-guidance source, the guidance route returns a bounded
+“no approved reference is available” answer and offers the explicit create action
+without inventing department or category rules. The authenticated conversation
+store supplies at most the bounded recent user-message context used for history
+lookup and follow-up classification; it does not grant authorization, retrieval,
+SQL, or action authority.
 
 ## Public response additions
 

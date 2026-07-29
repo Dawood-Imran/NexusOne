@@ -620,7 +620,10 @@ class ChatService:
                     turn_id=str(response.get("turn_id", "web-turn")),
                     user_id=str(profile.get("user_id")) if profile.get("user_id") else None,
                     role=str(profile.get("role")) if profile.get("role") else None,
-                    route=response.get("reason_code"),
+                    # Audit intent/route metadata must reflect the graph route,
+                    # not the terminal reason code (for example, ticket_guidance
+                    # must not be recorded as GENERAL_KNOWLEDGE).
+                    route=response.get("route"),
                     category=response.get("category"),
                     tools_called=tools_called,
                     final_answer_status=str(response.get("status", "error")),

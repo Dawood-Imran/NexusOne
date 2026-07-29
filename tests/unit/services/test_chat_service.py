@@ -56,6 +56,17 @@ class ChatServiceTest(unittest.TestCase):
         self.assertIn("capabilities", response)
         self.assertEqual(1, len(self.audit_repository.rows))
 
+    def test_ticket_guidance_uses_guidance_route_and_audit_intent_without_writing(self) -> None:
+        response = self.service.handle_message("u001", "How can I create a ticket?", include_trace=True)
+
+        self.assertEqual("answered", response["status"])
+        self.assertEqual("ticket_guidance", response["intent"])
+        self.assertEqual("ticket_guidance", response["route"])
+        self.assertTrue(response["citations"])
+        self.assertIn("guidance is informational", response["message"])
+        self.assertNotIn("Created ticket", response["message"])
+        self.assertEqual("ticket_guidance", self.audit_repository.rows[-1]["intent"])
+
     def test_allowed_public_kb_question_returns_citation(self) -> None:
         response = self.service.handle_message("u001", "How do I request AWS access?")
 

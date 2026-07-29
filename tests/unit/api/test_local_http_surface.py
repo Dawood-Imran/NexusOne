@@ -113,6 +113,26 @@ class LocalHTTPProductSurfaceTest(unittest.TestCase):
         self.assertEqual("deterministic", payload["capabilities"]["answer_composer"]["provider"])
         self.assertNotIn("fixture-secret", json.dumps(payload))
 
+    def test_ticket_guidance_http_returns_route_intent_and_citations_without_creation(self) -> None:
+        cookie, _ = self.login()
+
+        status, _, payload = self.request(
+            "POST",
+            "/api/chat",
+            payload={"message": "What information do I need to create a ticket?", "include_trace": True},
+            cookie=cookie,
+        )
+
+        self.assertEqual(200, status)
+        self.assertEqual("answered", payload["status"])
+        self.assertEqual("ticket_guidance", payload["intent"])
+        self.assertEqual("ticket_guidance", payload["route"])
+        self.assertTrue(payload["citations"])
+        self.assertIn("guidance is informational", payload["message"])
+        self.assertNotIn("Created ticket", payload["message"])
+        retrieve_trace = next(step for step in payload["trace"] if step["node"] == "retrieve_rag_context")
+        self.assertEqual("ticket_guidance", retrieve_trace["details"]["route"])
+
     def test_denied_http_chat_stops_before_retrieval_and_does_not_leak_title(self) -> None:
         cookie, _ = self.login()
 

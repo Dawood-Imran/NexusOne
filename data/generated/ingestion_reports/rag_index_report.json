@@ -1,5 +1,5 @@
 {
-  "chunk_count": 106,
+  "chunk_count": 107,
   "chunks_by_confidentiality": {
     "ceo_only": 3,
     "department_internal": 6,
@@ -8,13 +8,13 @@
     "hr_sensitive": 10,
     "it_sensitive": 9,
     "manager_only": 14,
-    "public_internal": 38
+    "public_internal": 39
   },
   "chunks_by_source_type": {
-    "markdown": 39,
+    "markdown": 40,
     "pdf": 67
   },
-  "document_count": 71,
+  "document_count": 72,
   "embedding_provider": "local_lsa",
   "faiss_path": "data/faiss/nexusone_chunks.index",
   "faiss_status": "not_installed",
