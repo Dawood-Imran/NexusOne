@@ -3,8 +3,8 @@
 ## Current Summary
 
 - State: integration-ready
-- Active phase: Phase 4 - Ticket Actions and Feedback / integration branch validation complete
-- Last run: the three captain-approved branches were merged from clean `daud_dev`; 155 focused contracts, the 230-test deterministic suite, the 20-case offline evaluator, Python compilation, JavaScript syntax, diff checks, and actual local HTTP/SSE smoke passed. OpenAI/Postgres live paths were intentionally not exercised.
+- Active phase: Phase 4 - Ticket Actions and Feedback / full integration validation complete with dependency-limited checks recorded below
+- Last run: the branch was based on clean `daud_dev` at `dc16ea1`, and the three follow-ups were merged at `1e05c66`, `550cba8`, and `b2cb083`; focused local suites, syntax checks, diff audits, and HTTP/SSE adapter smoke passed. Full graph/evaluation execution is environment-limited because this worktree has no usable `langgraph` or `langchain_core` installation; OpenAI/Postgres live paths were not exercised.
 - Integration note: `docs/requirements-coverage.md` is retained as the frontend/audit branch's durable R1-R14 evidence matrix; the integrated UI preserves the action-aware conversation inspector and adds loading, denied, no-answer, error/retry, responsive, auto-growing composer, and authenticated account-session states. The frontend no longer exposes a demo profile picker or post-login role switcher; it consumes `/api/auth/session`, `/api/auth/login`, and `/api/auth/logout`. The current UI polish keeps ticket cards structured-only, adds independent keyboard-accessible left/right panel toggles, stores a per-answer expandable trace, collapses prior traces on new questions, and removes provider/fallback diagnostics and obsolete shell copy.
 - Main risks:
   - FastAPI/React production adapters are not wired yet; the app still uses a framework-independent service layer plus stdlib dev server.
@@ -15,7 +15,7 @@
   - LangSmith hosted upload can fail noisily in restricted-network shells when tracing is enabled in the environment; graph execution still succeeds and safe metadata config is covered by unit tests.
 - The local authentication contract now uses salted password verifiers, opaque server-side sessions, and cookie-authenticated chat/feedback; the static UI uses that contract and omits client identity from chat/feedback requests.
 - Server memory phase: `docs/conversation-memory.md` documents the owner-scoped conversation store and the Markdown long-term profile contract. `SQLiteConversationStore` owns server conversation IDs/turns; one atomic locked Markdown profile per authenticated user owns bounded name/nickname, profession, preference, activity, and other durable facts. LangChain `get_user_memory`/`update_user_memory` tools close over server runtime identity and expose no user/path selector.
-- Integration branch: merged `ecc62fc`, `583abad`, and `4a30982` from clean `daud_dev` with memory, retrieval threshold/citation, ticket ownership/security, frontend, routing, and streaming contracts retained; `docs/intent-routing.md` and the offline history fixture were aligned to the server-memory contract.
+- Integration branch: based on clean `daud_dev`/`fm/nexusone-memory-ticket-retrieval-integration-7m1` at `dc16ea1`, then merged the long-term profile-memory (`1e05c66`), ticket-ownership (`550cba8`), and approved ticket-guidance (`b2cb083`) follow-ups. The guidance conflict was resolved by retaining both server-bound memory routes and the newer approved-source `ticket_guidance` retrieval/action boundary.
 - Ticket ownership follow-up: `requester_id` is explicitly immutable and server-owned, ticket creation is fixed to creator scope, and the database predicate now limits ordinary users to creator-owned rows while IT/HR/Finance/Admin queue roles receive only assigned rows within role/department/group scope; all ticket helper functions reuse that predicate and seed CSVs declare `visibility_scope=own`.
 
 ## Memory Coverage
@@ -29,10 +29,16 @@
 
 ## Current task validation
 
-- `OPENAI_API_KEY='' DATABASE_URL='' .venv/bin/python -m unittest tests.unit.memory.test_user_memory tests.unit.memory.test_model_memory_tools tests.unit.memory.test_conversation_store` — pass, 15 tests with 2 model-tool tests skipped because this worktree has no usable `langgraph` installation.
-- `.venv/bin/python -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` — pass.
-- Direct injected fake-model check through `LangChainOpenAIAnswerComposer` — pass using `langchain-core`: `update_user_memory` executed only with explicit server runtime input, persisted `nickname`, and returned safe tool outcomes.
-- Full `unittest discover` was attempted once after the dependency install failure: 171 tests collected, 9 modules could not import because `langgraph` is missing. No network installs will be retried; the deterministic storage/tool tests above remain the authoritative local validation.
+- `OPENAI_API_KEY='' DATABASE_URL='' python3 -m unittest tests.unit.auth.test_auth_service tests.unit.auth.test_auth_boundaries tests.unit.runtime.test_config` — pass, 12 tests.
+- `OPENAI_API_KEY='' DATABASE_URL='' python3 -m unittest tests.unit.actions.test_ticket_service tests.unit.actions.test_feedback_service tests.unit.actions.test_audit_service tests.unit.agents.sql_subgraph.test_ticket_scope tests.unit.agents.sql_subgraph.test_scope_selection tests.unit.agents.sql_subgraph.test_sql_validator tests.unit.agents.sql_subgraph.test_presentation tests.unit.agents.sql_subgraph.test_execution_boundaries` — pass, 47 tests.
+- `OPENAI_API_KEY='' DATABASE_URL='' python3 -m unittest tests.unit.retrieval.test_chunk_index tests.unit.retrieval.test_hybrid_retrieval tests.unit.retrieval.test_permission_boundaries tests.unit.retrieval.test_config tests.unit.services.test_local_kb tests.unit.ingestion.test_build_index` — pass, 29 tests.
+- `OPENAI_API_KEY='' DATABASE_URL='' python3 -m unittest tests.unit.frontend.test_static_chat_ui tests.unit.frontend.test_frontend_security_contract tests.unit.api.test_dev_server_auth` — pass, 43 tests.
+- `OPENAI_API_KEY='' DATABASE_URL='' python3 -m unittest [six storage/memory methods] tests.unit.memory.test_conversation_store tests.unit.memory.test_model_memory_tools` — pass, 14 tests; 2 provider-tool tests skipped because `langchain_core` is unavailable. The broader memory selection ran 22 tests with one expected dependency error in the tool-schema assertion for the same missing package.
+- `python3 -m unittest discover -s tests -p 'test_*.py'` — environment-limited: 176 tests collected, 10 import/runtime errors and 2 skips. The graph, service, HTTP, observability, evaluation, and model-tool modules requiring `langgraph`/`langchain_core` could not import; no source assertion failure was observed before collection stopped.
+- `python3 -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` — pass. Validation-created tracked bytecode was restored before the final clean-status check.
+- Offline evaluator and live-evaluation refusal commands were attempted but could not reach their gates because `tests.evaluation.evaluator` imports the unavailable `langgraph`; no provider, database, or network call was made.
+- Local in-process HTTP/SSE adapter smoke — pass, 7 assertions: static asset, login/session/logout, authenticated JSON response, identity mismatch rejection, and ordered SSE start/delta/complete events using an injected deterministic fake service. A real graph-backed HTTP/SSE smoke is dependency-limited by missing `langgraph`.
+- Combined diff audit — pass: all five requested refs are ancestors, no conflict markers, secrets, `.env`, SQLite, or new runtime files are present; the indexed ticket guidance metadata is 107 unique chunks / 72 documents and `faiss_status=not_installed`.
 
 ## Requirement Coverage
 
