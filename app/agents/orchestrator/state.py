@@ -19,6 +19,7 @@ RouteName = Literal[
     "feedback",
     "clarification",
     "unsupported",
+    "memory",
     "deny",
     "error",
 ]
@@ -35,6 +36,9 @@ class OrchestratorState(TypedDict, total=False):
     active_ticket_draft: Any
     short_term_history: list[dict[str, str]]
     user_memory: dict[str, Any]
+    memory_runtime: Any
+    memory_tool_calls: list[str]
+    memory_tool_outcomes: list[str]
 
     profile: Any
     clean_message: str

@@ -92,18 +92,31 @@ class ChatMemoryIntegrationTest(unittest.TestCase):
             "Remember that my preferred name is Ada",
         )
         self.assertEqual("updated", updated["memory"]["status"])
-        self.assertEqual(["preferred_name"], updated["memory"]["fields"])
-        conversation_id = updated["conversation_id"]
+        self.assertEqual(["nickname"], updated["memory"]["fields"])
+        separate_conversation = self.service.create_authenticated_conversation(self.session)
         recalled = self.service.handle_authenticated_message(
             self.session,
-            "What is my preferred name?",
-            conversation_id=conversation_id,
+            "What is my nickname?",
+            conversation_id=separate_conversation["conversation_id"],
         )
         self.assertEqual("LONG_TERM_MEMORY", recalled["reason_code"])
         self.assertIn("Ada", recalled["message"])
         memory_context = self.classifier.contexts[-1]["user_memory"]
+        self.assertEqual("Ada", memory_context["name_and_nickname"]["nickname"])
         self.assertEqual({"preferred_name": "Ada"}, memory_context["facts"])
         self.assertNotIn("updated_at", str(memory_context))
+
+    def test_direct_nickname_statement_is_available_in_a_new_conversation(self) -> None:
+        first = self.service.handle_authenticated_message(self.session, "My nickname is Davis")
+        second_conversation = self.service.create_authenticated_conversation(self.session)
+        second = self.service.handle_authenticated_message(
+            self.session,
+            "What is my nickname?",
+            conversation_id=second_conversation["conversation_id"],
+        )
+        self.assertEqual("updated", first["memory"]["status"])
+        self.assertEqual("LONG_TERM_MEMORY", second["reason_code"])
+        self.assertIn("Davis", second["message"])
 
     def test_prompt_injection_cannot_update_memory(self) -> None:
         response = self.service.handle_authenticated_message(

@@ -14,6 +14,7 @@ from app.memory.user_memory import (
     MemoryValidationError,
     UserMemoryStore,
     JSONUserMemoryStore,
+    MarkdownUserMemoryStore,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "MemoryValidationError",
     "UserMemoryStore",
     "JSONUserMemoryStore",
+    "MarkdownUserMemoryStore",
 ]

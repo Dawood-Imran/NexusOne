@@ -8,8 +8,9 @@ finite labels to graph routes and does not inspect message keywords.
 ## Intent labels
 
 `casual`, `general_question`, `knowledge_lookup`, `structured_lookup`,
-`combined_lookup`, `ticket_create`, `ticket_status`, `history_lookup`, `feedback`,
-`clarification`, and `unsupported` are the complete classifier label set.
+`combined_lookup`, `ticket_create`, `ticket_status`, `history_lookup`, `memory_lookup`,
+`memory_update`, `feedback`, `clarification`, and `unsupported` are the complete
+classifier label set.
 
 `general_question` includes basic questions and ticket-creation guidance. Guidance
 such as “I can create a ticket … please provide …” is not a command and must not
@@ -28,6 +29,7 @@ The server maps these labels as follows:
 - clarification -> clarifying response with no tool call
 - unsupported -> supported-options explanation with no tool call
 - history_lookup -> bounded server-owned short-term history response; an empty conversation returns a safe unsupported response
+- memory_lookup or memory_update -> server-bound long-term profile tool/composer path; the model can call only the authenticated user's memory tools
 
 A ticket-status label is never treated as ticket creation. A ticket-create label may
 carry missing context; the existing ticket service then asks for department,

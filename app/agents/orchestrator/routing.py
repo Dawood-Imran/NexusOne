@@ -25,6 +25,8 @@ _INTENT_TO_ROUTE: dict[str, RouteName] = {
     "feedback": "feedback",
     "clarification": "clarification",
     "unsupported": "unsupported",
+    "memory_lookup": "memory",
+    "memory_update": "memory",
 }
 
 

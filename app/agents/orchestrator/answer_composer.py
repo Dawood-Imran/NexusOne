@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -16,6 +17,8 @@ class AnswerComposition:
     backend: str
     error: str | None = None
     fallback_reason: str | None = None
+    tool_calls: tuple[str, ...] = ()
+    tool_outcomes: tuple[str, ...] = ()
 
 
 class AnswerComposer(Protocol):
@@ -59,6 +62,8 @@ class DeterministicAnswerComposer:
             answer = sql_answer
         elif route == "ticket_create":
             answer = str(context.get("action_answer") or "").strip()
+        elif route == "memory":
+            answer = str(context.get("memory_answer") or "").strip()
         elif route == "GENERAL_KNOWLEDGE":
             answer = str(context.get("general_answer") or "").strip()
         else:
@@ -102,22 +107,50 @@ class DeterministicAnswerComposer:
 
 
 class LangChainOpenAIAnswerComposer:
-    """LLM-backed answer composer using LangChain's OpenAI integration."""
+    """LLM-backed answer composer with server-bound personal-memory tools.
+
+    ``model`` is injectable for offline tests. In production it is a
+    ``ChatOpenAI`` instance and is bound to per-turn tool closures only after
+    the authenticated runtime context has been supplied by the server.
+    """
 
     provider_name = "openai"
+    supports_memory_tools = True
 
-    def __init__(self, model_name: str | None = None, temperature: float | None = None) -> None:
-        try:
-            from langchain_openai import ChatOpenAI
-        except ImportError as exc:  # pragma: no cover - depends on optional package install.
-            raise RuntimeError(
-                "langchain-openai is required for OpenAI answer composition. "
-                'Install with: pip install -U "langchain[openai]"'
-            ) from exc
-
+    def __init__(
+        self,
+        model_name: str | None = None,
+        temperature: float | None = None,
+        *,
+        model: Any | None = None,
+        memory_store: Any | None = None,
+    ) -> None:
         self.model_name = model_name or os.getenv("OPENAI_ANSWER_MODEL", "gpt-4.1-mini")
-        self.temperature = temperature if temperature is not None else float(os.getenv("OPENAI_ANSWER_TEMPERATURE", "0"))
-        self.model = ChatOpenAI(model=self.model_name, temperature=self.temperature)
+        try:
+            configured_temperature = float(
+                os.getenv("OPENAI_ANSWER_TEMPERATURE", "0")
+                if temperature is None
+                else temperature
+            )
+        except (TypeError, ValueError):
+            configured_temperature = 0.0
+        self.temperature = max(0.0, min(2.0, configured_temperature))
+        if model is None:
+            try:
+                from langchain_openai import ChatOpenAI
+            except ImportError as exc:  # pragma: no cover - optional provider dependency.
+                raise RuntimeError(
+                    "langchain-openai is required for OpenAI answer composition. "
+                    'Install with: pip install -U "langchain[openai]"'
+                ) from exc
+            model = ChatOpenAI(model=self.model_name, temperature=self.temperature)
+        self.model = model
+        self.memory_store = memory_store
+
+    def set_memory_store(self, store: Any) -> None:
+        """Inject the server-owned store; never accepts a model/user value."""
+
+        self.memory_store = store
 
     @classmethod
     def from_env(cls) -> "LangChainOpenAIAnswerComposer":
@@ -130,10 +163,15 @@ class LangChainOpenAIAnswerComposer:
                 backend=f"openai:{self.model_name}",
                 fallback_reason="NO_SUFFICIENTLY_RELEVANT_REFERENCE",
             )
-        response = self.model.invoke(self._messages(context))
+        response, tool_calls, tool_outcomes = self._invoke_with_memory_tools(context)
         content = getattr(response, "content", "")
         answer = _ensure_minimum_citation(str(content).strip(), context)
-        return AnswerComposition(answer=answer, backend=f"openai:{self.model_name}")
+        return AnswerComposition(
+            answer=answer,
+            backend=f"openai:{self.model_name}",
+            tool_calls=tool_calls,
+            tool_outcomes=tool_outcomes,
+        )
 
     def stream(
         self,
@@ -151,6 +189,14 @@ class LangChainOpenAIAnswerComposer:
                 fallback_reason="NO_SUFFICIENTLY_RELEVANT_REFERENCE",
             )
 
+        # Tool calls are intentionally completed through the non-streaming
+        # invoke loop first. Only sanitized final text is emitted to SSE.
+        if self._memory_tools_for_context(context):
+            composition = self.compose(context)
+            if composition.answer:
+                emit(composition.answer)
+            return composition
+
         chunks: list[str] = []
         for chunk in self.model.stream(self._messages(context)):
             text = _model_chunk_text(chunk)
@@ -163,6 +209,55 @@ class LangChainOpenAIAnswerComposer:
         if answer:
             emit(answer)
         return AnswerComposition(answer=answer, backend=f"openai:{self.model_name}")
+
+    def _memory_tools_for_context(self, context: Mapping[str, Any]) -> list[Any]:
+        runtime = context.get("_memory_runtime")
+        if runtime is None or self.memory_store is None:
+            return []
+        from app.memory.tools import build_langchain_memory_tools
+
+        return build_langchain_memory_tools(runtime, store=self.memory_store)
+
+    def _invoke_with_memory_tools(self, context: Mapping[str, Any]) -> tuple[Any, tuple[str, ...], tuple[str, ...]]:
+        tools = self._memory_tools_for_context(context)
+        model = self.model
+        tool_map = {getattr(item, "name", ""): item for item in tools}
+        if tools:
+            binder = getattr(model, "bind_tools", None)
+            if not callable(binder):
+                raise RuntimeError("memory-capable model does not support tool binding")
+            model = binder(tools)
+        messages: list[Any] = list(self._messages(context))
+        called: list[str] = []
+        outcomes: list[str] = []
+        for _ in range(4):
+            response = model.invoke(messages)
+            calls = _model_tool_calls(response)
+            if not calls:
+                return response, tuple(called), tuple(outcomes)
+            messages.append(response)
+            for call in calls:
+                name = call["name"]
+                if name not in tool_map:
+                    # Unknown provider tool names never become executable
+                    # authority. Return only a bounded generic tool result.
+                    result: Mapping[str, Any] = {"status": "rejected", "reason_code": "UNKNOWN_MEMORY_TOOL"}
+                    outcomes.append(f"{name}:rejected")
+                else:
+                    called.append(name)
+                    args = call["args"] if isinstance(call["args"], Mapping) else {}
+                    try:
+                        result = tool_map[name].invoke(dict(args))
+                        outcomes.append(f"{name}:ok")
+                    except Exception as exc:  # noqa: BLE001 - tool boundary is fail-closed.
+                        outcomes.append(f"{name}:rejected")
+                        result = {
+                            "status": "rejected",
+                            "reason_code": "MEMORY_TOOL_REJECTED",
+                            "error_type": type(exc).__name__,
+                        }
+                messages.append(_tool_result_message(result, call["id"]))
+        raise RuntimeError("memory tool call limit exceeded")
 
     @staticmethod
     def _messages(context: Mapping[str, Any]) -> list[tuple[str, str]]:
@@ -183,6 +278,8 @@ class LangChainOpenAIAnswerComposer:
                 "For every factual sentence that uses knowledge/document context, add an inline citation marker like [1].\n"
                 "Use only citation markers that appear in the sanitized source list. If no source list is present, do not cite or imply document grounding.\n"
                 "If reference_status is none_reached_threshold, say that no sufficiently relevant reference was found and do not answer from memory.\n"
+                "If the user clearly states a durable non-sensitive personal fact or preference, use update_user_memory; do not save ordinary conversation, assistant text, or document text.\n"
+                "Use get_user_memory when the answer depends on a personal fact not already available in the sanitized context. Never pass a user ID, path, role, or permission to a memory tool.\n"
                 "Keep the answer concise, direct, and useful. Preserve important dates, statuses, and policy steps.\n"
                 "Do not invent citations or source numbers.",
             ),
@@ -202,6 +299,12 @@ class FallbackAnswerComposer:
     def __init__(self, primary: AnswerComposer, fallback: AnswerComposer | None = None) -> None:
         self.primary = primary
         self.fallback = fallback or DeterministicAnswerComposer()
+        self.supports_memory_tools = bool(getattr(primary, "supports_memory_tools", False))
+
+    def set_memory_store(self, store: Any) -> None:
+        setter = getattr(self.primary, "set_memory_store", None)
+        if callable(setter):
+            setter(store)
 
     def compose(self, context: Mapping[str, Any]) -> AnswerComposition:
         try:
@@ -332,6 +435,48 @@ def _emit_chunks(answer: str, emit: Callable[[str], None], *, chunk_size: int = 
         delta = answer[start : start + chunk_size]
         if delta:
             emit(delta)
+
+
+def _model_tool_calls(response: Any) -> list[dict[str, Any]]:
+    """Normalize common LangChain/OpenAI tool-call message shapes safely."""
+
+    raw_calls = getattr(response, "tool_calls", None)
+    if not raw_calls and isinstance(getattr(response, "additional_kwargs", None), Mapping):
+        raw_calls = response.additional_kwargs.get("tool_calls")
+    if not isinstance(raw_calls, (list, tuple)):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for index, raw in enumerate(raw_calls[:4]):
+        if not isinstance(raw, Mapping):
+            continue
+        function = raw.get("function") if isinstance(raw.get("function"), Mapping) else {}
+        name = raw.get("name") or function.get("name")
+        args = raw.get("args") if "args" in raw else function.get("arguments", {})
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except (TypeError, ValueError):
+                args = {}
+        if not isinstance(name, str) or not name or len(name) > 80:
+            continue
+        normalized.append(
+            {
+                "name": name,
+                "args": args if isinstance(args, Mapping) else {},
+                "id": str(raw.get("id") or f"memory-tool-{index}")[:100],
+            }
+        )
+    return normalized
+
+
+def _tool_result_message(result: Mapping[str, Any], tool_call_id: str) -> Any:
+    content = json.dumps(dict(result), ensure_ascii=False, separators=(",", ":"), default=str)[:20_000]
+    try:
+        from langchain_core.messages import ToolMessage
+
+        return ToolMessage(content=content, tool_call_id=tool_call_id)
+    except ImportError:  # pragma: no cover - only for provider-free unit isolation.
+        return {"role": "tool", "content": content, "tool_call_id": tool_call_id}
 
 
 def _model_chunk_text(chunk: Any) -> str:

@@ -47,6 +47,8 @@ IntentLabel = Literal[
     "ticket_status",
     "history_lookup",
     "feedback",
+    "memory_lookup",
+    "memory_update",
     "clarification",
     "unsupported",
 ]
@@ -457,6 +459,8 @@ Allowed intents:
 - ticket_create: the user explicitly asks Copilot to create, submit, raise, open, or generate a support ticket; distinguish this from status lookup and from guidance phrased as "I can create" or "what information do you need"
 - ticket_status: inspect, check, or show an existing ticket or ticket status
 - history_lookup: ask for prior conversation/history that is not an existing ticket status
+- memory_lookup: ask for a personal fact or preference that may be in the saved profile
+- memory_update: clearly state a durable personal fact or preference such as a nickname, profession, or preference; do not infer one
 - feedback: report that an answer was helpful, wrong, unclear, or needs feedback
 - clarification: not enough context to choose safely
 - unsupported: irrelevant, disallowed, or unsupported capability request
