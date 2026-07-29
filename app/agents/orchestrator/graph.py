@@ -211,7 +211,12 @@ def _state_from_payload(payload: Mapping[str, Any]) -> OrchestratorState:
         "include_trace": bool(payload.get("include_trace", False)),
         "execute_sql": bool(payload.get("execute_sql", False)),
         "conversation_context": payload.get("conversation_context"),
-        "active_ticket_draft": payload.get("active_ticket_draft"),
+        # Legacy client drafts are retained only for classifier compatibility;
+        # ticket persistence and approval are server-owned workflow state.
+        "active_ticket_draft": None,
+        "ticket_workflow": str(payload.get("ticket_workflow", "")),
+        "ticket_approval_id": str(payload.get("ticket_approval_id", "")),
+        "ticket_approval": str(payload.get("ticket_approval", "")),
         "short_term_history": _bounded_short_term_history(payload.get("short_term_history")),
         "user_memory": _bounded_user_memory(payload.get("user_memory")),
         "memory_update": _bounded_memory_update(payload.get("memory_update")),

@@ -536,6 +536,44 @@ AS $$
     );
 $$;
 
+CREATE OR REPLACE FUNCTION can_user_comment_ticket(p_user_id text, p_ticket_id text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT can_user_access_ticket(p_user_id, p_ticket_id);
+$$;
+
+CREATE OR REPLACE FUNCTION can_user_close_ticket(p_user_id text, p_ticket_id text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM users u
+        JOIN tickets t ON t.ticket_id = p_ticket_id
+        WHERE u.user_id = p_user_id
+          AND u.status = 'active'
+          AND t.status IN ('open', 'in_progress', 'waiting_on_user', 'resolved')
+          AND can_user_access_ticket(p_user_id, t.ticket_id)
+          AND (
+              (u.role = 'it_admin' AND u.department = 'it' AND EXISTS (
+                  SELECT 1 FROM user_groups ug
+                  WHERE ug.user_id = u.user_id AND ug.group_name = 'it_team'
+              ))
+              OR (u.role = 'hr' AND u.department = 'hr' AND EXISTS (
+                  SELECT 1 FROM user_groups ug
+                  WHERE ug.user_id = u.user_id AND ug.group_name = 'hr_team'
+              ))
+              OR (u.role = 'admin_ops' AND u.department = 'admin' AND EXISTS (
+                  SELECT 1 FROM user_groups ug
+                  WHERE ug.user_id = u.user_id AND ug.group_name = 'admin_ops_team'
+              ))
+          )
+    );
+$$;
+
 CREATE VIEW user_accessible_documents AS
 SELECT
     u.user_id,

@@ -236,12 +236,24 @@ class StaticChatUIContractTest(unittest.TestCase):
         self.assertNotIn("Session ready", self.index_html)
         self.assertNotIn("Session ready", self.app_js)
 
+    def test_ticket_preview_requires_explicit_approval_and_close_uses_required_comment(self) -> None:
+        self.assertIn("function sanitizeTicketPreview(preview)", self.app_js)
+        self.assertIn("function renderTicketPreview(preview)", self.app_js)
+        self.assertIn("This is a preview. Nothing is created until you explicitly approve it.", self.app_js)
+        self.assertIn('sendMessage(text)', self.app_js)
+        self.assertIn('body: JSON.stringify({ comment })', self.app_js)
+        self.assertIn("/api/tickets/${encodeURIComponent(ticket.ticket_id)}/close", self.app_js)
+        self.assertIn("A closing comment or details is required.", self.app_js)
+        self.assertIn("needs_approval: \"Approval needed\"", self.app_js)
+
     def test_ticket_cards_are_structured_and_error_states_are_concise(self) -> None:
         self.assertIn("function sanitizeTicket(ticket)", self.app_js)
         self.assertIn('function safeTicketStatus(value)', self.app_js)
         self.assertIn('function renderTicketStatusState()', self.app_js)
         self.assertIn('status.textContent = "Status unavailable"', self.app_js)
         self.assertIn('ticket: sanitizeTicket(payload.ticket)', self.app_js)
+        self.assertIn('ticket_preview: sanitizeTicketPreview(payload.ticket_preview)', self.app_js)
+        self.assertIn('approval_required: payload.approval_required === true', self.app_js)
         self.assertNotIn("ticket.message", self.app_js)
         self.assertNotIn("ticket.error", self.app_js)
 

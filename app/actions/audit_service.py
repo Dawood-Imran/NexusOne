@@ -158,7 +158,7 @@ class SQLAlchemyAuditRepository:
 def normalize_final_status(status: str) -> str:
     if status in {"denied", "refused"}:
         return "refused"
-    if status in {"ticket_created", "validated", "no_answer"}:
+    if status in {"ticket_created", "ticket_closed", "comment_added", "needs_approval", "validated", "no_answer"}:
         return "answered"
     if status in SAFE_FINAL_STATUSES:
         return status

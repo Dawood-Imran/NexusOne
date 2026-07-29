@@ -252,6 +252,51 @@ body {
   background: #ffffff;
 }
 
+.ticket-preview-note {
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ticket-close-action {
+  margin-top: 14px;
+}
+
+.ticket-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.ticket-preview-actions .button {
+  min-height: 36px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ticket-preview-actions .button-primary {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: #ffffff;
+}
+
+.ticket-preview-actions .button-secondary {
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.ticket-preview-actions .button:focus-visible {
+  outline: 3px solid rgba(35, 128, 152, 0.32);
+  outline-offset: 2px;
+}
+
 @media (max-width: 1400px) {
   .app-shell { grid-template-columns: 250px minmax(0, 1fr); }
   .suggestion-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

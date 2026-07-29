@@ -16,10 +16,11 @@ from tests.unit.agents.orchestrator.intent_fixtures import fixture_classifier
 class NexusOneOrchestratorTest(unittest.TestCase):
     def setUp(self) -> None:
         self.ticket_repository = InMemoryTicketRepository()
+        self.ticket_service = TicketService(self.ticket_repository)
         self.orchestrator = NexusOneOrchestrator(
             answer_composer=DeterministicAnswerComposer(),
             intent_classifier=fixture_classifier(),
-            ticket_service=TicketService(self.ticket_repository),
+            ticket_service=self.ticket_service,
         )
 
     def test_casual_greeting_uses_deterministic_route_without_composer(self) -> None:
@@ -439,15 +440,31 @@ class NexusOneOrchestratorTest(unittest.TestCase):
                 self.assertTrue(response["citations"])
         self.assertEqual([], self.ticket_repository.tickets)
 
-    def test_ticket_creation_uses_action_route_without_rag_or_sql(self) -> None:
-        response = self.orchestrator.invoke(
+    def test_ticket_creation_requires_approval_and_uses_action_route_without_rag_or_sql(self) -> None:
+        preview = self.orchestrator.invoke(
             {
                 "user_id": "u001",
+                "conversation_id": "ticket-workflow",
                 "message": "Create an IT ticket for AWS sandbox access needed for billing migration.",
                 "include_trace": True,
             }
         )
 
+        self.assertEqual("needs_approval", preview["status"])
+        self.assertEqual("TICKET_PREVIEW_READY", preview["reason_code"])
+        self.assertTrue(preview["approval_required"])
+        self.assertIsNotNone(preview["ticket_preview"])
+        self.assertEqual([], self.ticket_repository.tickets)
+
+        response = self.orchestrator.invoke(
+            {
+                "user_id": "u001",
+                "conversation_id": "ticket-workflow",
+                "message": "Approve ticket",
+                "ticket_workflow": "approve",
+                "include_trace": True,
+            }
+        )
         self.assertEqual("ticket_created", response["status"])
         self.assertEqual("TICKET_CREATED", response["reason_code"])
         self.assertEqual("IT-5001", response["ticket"]["ticket_id"])

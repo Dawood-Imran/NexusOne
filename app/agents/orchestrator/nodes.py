@@ -132,11 +132,33 @@ def make_route_question_node(classifier: IntentClassifier) -> Any:
             )
             return next_state
 
+        # Approval/edit routing is determined by server-held ticket workflow
+        # state, never by model intent or a client-provided identity.
+        workflow = state.get("ticket_workflow")
+        if workflow in {"approve", "deny", "edit", "create"}:
+            next_state: OrchestratorState = {
+                **state,
+                "route": "ticket_create",
+                "intent": "ticket_create",
+                "intent_confidence": 1.0,
+                "needs_clarification": False,
+                "clarification_question": "",
+                "missing_context": [],
+                "intent_reason_code": "SERVER_TICKET_WORKFLOW",
+                "classifier_version": "server-ticket-workflow-v1",
+            }
+            next_state["trace"] = append_trace(
+                next_state,
+                "route_question",
+                {"status": "server_workflow", "route": "ticket_create", "workflow": workflow},
+            )
+            return next_state
+
         result = classify_request(
             classifier,
             state.get("clean_message", ""),
             conversation_context=_classification_context(state),
-            active_ticket_draft=state.get("active_ticket_draft"),
+            active_ticket_draft=None,
         )
         route = route_from_intent(result)
         next_state: OrchestratorState = {
@@ -457,8 +479,19 @@ def make_run_ticket_action_node(ticket_service: TicketService | None = None) -> 
 
     def run_ticket_action(state: OrchestratorState) -> OrchestratorState:
         profile = state.get("profile")
+        workflow = state.get("ticket_workflow")
+        conversation_id = str(state.get("conversation_id", "web-chat"))
         request = extract_ticket_request(state["clean_message"])
-        result = service.create_ticket(profile, request)
+        if workflow == "approve":
+            result = service.approve_ticket(
+                profile,
+                conversation_id=conversation_id,
+                approval_id=state.get("ticket_approval_id") or None,
+            )
+        elif workflow == "deny":
+            result = service.deny_ticket(profile, conversation_id=conversation_id)
+        else:
+            result = service.preview_ticket(profile, request, conversation_id=conversation_id)
         next_state: OrchestratorState = {
             **state,
             "ticket_request": request,
@@ -466,9 +499,12 @@ def make_run_ticket_action_node(ticket_service: TicketService | None = None) -> 
             "ticket_message": result.message,
             "status": result.status,
             "reason_code": result.reason_code or "TICKET_ACTION",
+            "ticket_approval_required": result.status == "needs_approval",
         }
         if result.ticket is not None:
             next_state["ticket"] = dict(result.ticket)
+        if result.ticket_preview is not None:
+            next_state["ticket_preview"] = dict(result.ticket_preview)
         if result.missing_fields:
             next_state["missing_fields"] = list(result.missing_fields)
         next_state["trace"] = append_trace(
@@ -477,6 +513,7 @@ def make_run_ticket_action_node(ticket_service: TicketService | None = None) -> 
             {
                 "status": result.status,
                 "reason_code": result.reason_code,
+                "workflow": workflow or "preview",
                 "department": request.department,
                 "category": request.category,
                 "priority": request.priority,
@@ -506,7 +543,13 @@ def make_validate_answer_node() -> Any:
             reason = "SQL_NOT_ANSWERED"
         elif route == "combined" and not (has_sql_answer or has_rag_answer):
             reason = "NO_TOOL_ANSWER"
-        elif route == "ticket_create" and state.get("status") not in {"ticket_created", "needs_clarification"}:
+        elif route == "ticket_create" and state.get("status") not in {
+            "ticket_created",
+            "needs_approval",
+            "needs_clarification",
+            "not_created",
+            "denied",
+        }:
             reason = "TICKET_ACTION_NOT_COMPLETED"
         elif route == "CASUAL" and not state.get("casual_message"):
             reason = "CASUAL_RESPONSE_NOT_COMPLETED"
@@ -794,6 +837,8 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
             "category": category,
             "message": final_answer or state.get("ticket_message", ""),
             "ticket": state.get("ticket"),
+            "ticket_preview": state.get("ticket_preview"),
+            "approval_required": bool(state.get("ticket_approval_required", False)),
             "missing_fields": state.get("missing_fields", []),
             "profile": profile.to_public_dict(),
             "latency_ms": _elapsed_ms(started_at),
@@ -914,13 +959,13 @@ def _intent_response_fields(state: OrchestratorState) -> dict[str, Any]:
     result = state.get("intent_result")
     if result is None:
         return {
-            "intent": None,
-            "intent_confidence": None,
-            "needs_clarification": False,
-            "clarification_question": None,
-            "missing_context": [],
+            "intent": state.get("intent"),
+            "intent_confidence": state.get("intent_confidence"),
+            "needs_clarification": bool(state.get("needs_clarification", False)),
+            "clarification_question": state.get("clarification_question") or None,
+            "missing_context": list(state.get("missing_context", [])),
             "intent_contract_version": "nexusone-intent-contract-v1",
-            "intent_classifier_version": None,
+            "intent_classifier_version": state.get("classifier_version"),
         }
     return {
         "intent": state.get("intent"),

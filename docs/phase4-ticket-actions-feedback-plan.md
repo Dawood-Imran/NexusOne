@@ -6,8 +6,8 @@ Make NexusOne Copilot action-capable while keeping the same permission model use
 
 Phase 4 adds:
 
-- Ticket creation through chat for IT, HR, and Admin requests.
-- Clarification loops for missing required ticket fields.
+- Ticket creation previews through chat for IT, HR, and Admin requests, followed by explicit server-checked approval.
+- Server-held clarification/preview state for missing required ticket fields.
 - Safe ticket persistence in PostgreSQL.
 - Feedback capture from the frontend.
 - Audit metadata writes for chat turns and tool actions.
@@ -35,7 +35,8 @@ Already available:
 - `requester_id` is an immutable server-owned creator field. It is written from the authenticated profile in every create path, and is never accepted from chat, model, query, or client input.
 - Raw `requester_id`, `assigned_to`, `actor_user_id`, SQL text, and hidden parameters stay out of final answers and frontend payloads.
 - Ticket creation always starts with `visibility_scope = 'own'`; widening visibility and assignment are separate authorized support workflows, not ordinary-user request fields.
-- Read helpers apply the same `can_user_access_ticket` predicate to list, detail, event, and assignment lookups. Ordinary users receive creator-owned rows; queue roles receive only assigned rows in their role/department/group scope.
+- Read helpers apply the same `can_user_access_ticket` predicate to list, detail, event, comment, and status lookups. Ordinary users receive creator-owned rows; queue roles receive only server-routed assigned rows in their role/department/group scope.
+- Close transitions use a separate server-side eligible-status and HR/IT/Admin group predicate; status changes are persisted as ticket events.
 - Feedback and audit writes store safe metadata only.
 
 ## Ticket Creation Scope
@@ -57,7 +58,8 @@ The backend ticket tool should require:
 - `department`
 - `category`
 - `priority`
-- `description`
+- `description` / non-empty comment-details field
+- explicit approval after the preview
 - `requester_id` from the authenticated server-side profile, never from user input; the database trigger rejects later requester changes
 
 Optional fields:
@@ -134,15 +136,19 @@ load_user_context
 New response statuses:
 
 - `needs_clarification`
-- `ticket_created`
+- `needs_approval`
+- `ticket_created` (only after explicit approval)
+- `not_created` (approval denied)
+- `ticket_closed`
+- `comment_added`
 - `error`
 - existing `answered`, `validated`, `denied`, `no_answer`
 
-Clarification state can initially be stateless:
+Clarification and approval state is server-controlled:
 
-- The graph extracts what it can from the current message.
-- If required fields are missing, it returns a structured `missing_fields` list and a direct question.
-- Multi-turn memory can come later; for now the user can restate the request with missing fields.
+- The graph extracts fields, while `TicketService` stores the draft/preview against authenticated user plus conversation.
+- If required fields are missing, it returns a structured `missing_fields` list and explicitly asks for team, category, priority, and non-empty details.
+- A preview is persisted nowhere in `tickets`; only a clear approval message can consume it, and duplicate approval is idempotently rejected.
 
 ## Routing Rules
 
@@ -168,9 +174,10 @@ This separation matters because creation is a write action, while status lookup 
 Add:
 
 - Feedback controls on assistant answers: helpful, not helpful, report source issue.
+- Ticket-preview rendering with requester display name, route, details, and explicit Approve/Cancel actions.
 - Ticket-created rendering with ticket id, status, department, and next step.
 - Clarification rendering for missing fields.
-- Disabled/loading states for feedback submission.
+- Disabled/loading/error states for feedback and ticket actions.
 - Non-leaky error state if feedback or ticket creation fails.
 
 The frontend should not decide whether a user can create tickets. It only sends the current selected profile and message; backend authorizes and validates.
@@ -179,7 +186,10 @@ The frontend should not decide whether a user can create tickets. It only sends 
 
 Add endpoints to the stdlib dev server:
 
-- `POST /api/chat` remains the primary chat entry point.
+- `POST /api/chat` remains the primary chat and preview/approval entry point.
+- `GET /api/tickets` and `GET /api/tickets/{ticket_id}` use the authenticated ticket predicate.
+- `POST /api/tickets/{ticket_id}/comments` requires non-empty comment text.
+- `POST /api/tickets/{ticket_id}/close` requires non-empty resolution details and server-authorized HR/IT/Admin access.
 - `POST /api/feedback` stores answer feedback.
 
 Candidate feedback payload:
@@ -200,10 +210,10 @@ Ticket creation should be handled through `/api/chat` first so users can ask nat
 
 Backend unit tests:
 
-- Employee can create an IT ticket with required fields.
-- Employee can create an HR ticket without seeing HR queue internals.
-- Employee can create an Admin ticket.
-- Missing category or description returns `needs_clarification`.
+- Complete employee ticket details return a preview and do not write before approval.
+- Employee can approve IT/HR/Admin tickets; server routing exposes them only to the matching queue group.
+- User A versus User B list/detail isolation is enforced.
+- Missing category or non-empty comment/details returns `needs_clarification`.
 - User-supplied requester id is ignored.
 - Inactive or unknown user cannot create a ticket.
 - Ticket event is written after ticket creation.
@@ -238,8 +248,9 @@ Phase 4 is complete when:
 
 - Users can create IT, HR, and Admin tickets from chat.
 - Missing fields produce a clear clarification response.
-- Ticket creation writes both `tickets` and `ticket_events`.
+- Only approval writes both `tickets` and `ticket_events`; denial and duplicate approval do not write.
 - Ticket status lookup still uses the SQL subgraph and remains read-only.
+- Comments and authorized close transitions use the same requester/assignment predicate and persist status/events.
 - Feedback is stored through `/api/feedback`.
 - Audit metadata is written without sensitive content.
 - Restricted or malicious requests cannot trigger ticket writes.

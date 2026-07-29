@@ -43,6 +43,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--execute-sql", action="store_true", help="Execute validated SQL against local Postgres.")
     parser.add_argument("--database-url", default=None, help="SQLAlchemy database URL.")
     parser.add_argument("--trace", action="store_true", help="Print graph trace and SQL subgraph trace.")
+    parser.add_argument("--approve-ticket", action="store_true", help="After a ticket preview, send an explicit approval turn.")
+    parser.add_argument("--deny-ticket", action="store_true", help="After a ticket preview, send an explicit denial turn.")
     parser.add_argument(
         "--deterministic-composer",
         action="store_true",
@@ -62,16 +64,23 @@ def main() -> int:
 
     answer_composer = DeterministicAnswerComposer() if args.deterministic_composer else None
     orchestrator = NexusOneOrchestrator(sql_executor=executor, answer_composer=answer_composer)
-    response = orchestrator.invoke(
-        {
-            "conversation_id": args.conversation_id,
-            "turn_id": args.turn_id,
-            "user_id": args.user_id,
-            "message": args.message,
-            "include_trace": args.trace,
-            "execute_sql": args.execute_sql,
+    request_payload = {
+        "conversation_id": args.conversation_id,
+        "turn_id": args.turn_id,
+        "user_id": args.user_id,
+        "message": args.message,
+        "include_trace": args.trace,
+        "execute_sql": args.execute_sql,
+    }
+    response = orchestrator.invoke(request_payload)
+    if response.get("status") == "needs_approval" and (args.approve_ticket or args.deny_ticket):
+        request_payload = {
+            **request_payload,
+            "turn_id": f"{args.turn_id}-approval",
+            "message": "Approve ticket" if args.approve_ticket else "Cancel ticket",
+            "ticket_workflow": "approve" if args.approve_ticket else "deny",
         }
-    )
+        response = orchestrator.invoke(request_payload)
     _print_response(dict(response), include_trace=args.trace)
     return 0
 

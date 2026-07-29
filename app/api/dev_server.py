@@ -65,6 +65,9 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
         if path == "/api/conversations" or path.startswith("/api/conversations/"):
             self._handle_conversations_get(path)
             return
+        if path == "/api/tickets" or path.startswith("/api/tickets/"):
+            self._handle_tickets_get(path)
+            return
         if path == "/api/auth/session":
             session = self._current_session()
             if session is None:
@@ -107,6 +110,12 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/conversations":
             self._handle_conversation_create()
+            return
+        if path.startswith("/api/tickets/") and path.endswith("/comments"):
+            self._handle_ticket_comment(path)
+            return
+        if path.startswith("/api/tickets/") and path.endswith("/close"):
+            self._handle_ticket_close(path)
             return
         if path == "/api/feedback":
             self._handle_feedback()
@@ -193,6 +202,64 @@ class NexusOneRequestHandler(BaseHTTPRequestHandler):
                 {"status": "error", "reason_code": "CONVERSATION_STORE_ERROR", "message": "Conversation history is temporarily unavailable."},
                 HTTPStatus.SERVICE_UNAVAILABLE,
             )
+
+    def _handle_tickets_get(self, path: str) -> None:
+        session = self._current_session()
+        if session is None:
+            self._send_auth_required()
+            return
+        if path == "/api/tickets":
+            self._send_json({"status": "ok", "tickets": self._chat_service().list_authenticated_tickets(session)})
+            return
+        ticket_id = path[len("/api/tickets/") :]
+        if not ticket_id or "/" in ticket_id:
+            self._send_json({"status": "error", "reason_code": "TICKET_NOT_FOUND_OR_NOT_VISIBLE", "message": "That ticket is not available to your account."}, HTTPStatus.NOT_FOUND)
+            return
+        ticket = self._chat_service().get_authenticated_ticket(session, ticket_id)
+        if ticket is None:
+            self._send_json({"status": "error", "reason_code": "TICKET_NOT_FOUND_OR_NOT_VISIBLE", "message": "That ticket is not available to your account."}, HTTPStatus.NOT_FOUND)
+            return
+        self._send_json({"status": "ok", "ticket": dict(ticket)})
+
+    def _handle_ticket_comment(self, path: str) -> None:
+        session = self._current_session()
+        if session is None:
+            self._send_auth_required()
+            return
+        ticket_id = path[len("/api/tickets/") : -len("/comments")].strip("/")
+        try:
+            body = self._read_json()
+        except (json.JSONDecodeError, ValueError):
+            self._send_json({"status": "error", "reason_code": "INVALID_JSON", "message": "Invalid JSON payload."}, HTTPStatus.BAD_REQUEST)
+            return
+        result = self._chat_service().add_authenticated_ticket_comment(session, ticket_id, body.get("comment"))
+        self._send_ticket_action_result(result)
+
+    def _handle_ticket_close(self, path: str) -> None:
+        session = self._current_session()
+        if session is None:
+            self._send_auth_required()
+            return
+        ticket_id = path[len("/api/tickets/") : -len("/close")].strip("/")
+        try:
+            body = self._read_json()
+        except (json.JSONDecodeError, ValueError):
+            self._send_json({"status": "error", "reason_code": "INVALID_JSON", "message": "Invalid JSON payload."}, HTTPStatus.BAD_REQUEST)
+            return
+        result = self._chat_service().close_authenticated_ticket(session, ticket_id, body.get("comment"))
+        self._send_ticket_action_result(result)
+
+    def _send_ticket_action_result(self, result: Mapping[str, Any]) -> None:
+        status = result.get("status")
+        if status in {"comment_added", "ticket_closed"}:
+            http_status = HTTPStatus.OK
+        elif result.get("reason_code") == "TICKET_COMMENT_REQUIRED":
+            http_status = HTTPStatus.BAD_REQUEST
+        elif result.get("reason_code") == "TICKET_CLOSE_NOT_AUTHORIZED":
+            http_status = HTTPStatus.FORBIDDEN
+        else:
+            http_status = HTTPStatus.NOT_FOUND
+        self._send_json(dict(result), http_status)
 
     def _handle_conversation_create(self) -> None:
         session = self._current_session()
@@ -516,11 +583,10 @@ def _chat_request_kwargs(body: Mapping[str, Any]) -> dict[str, Any]:
     if "turn_id" in body and body.get("turn_id") is not None:
         kwargs["turn_id"] = body.get("turn_id")
     conversation_context = _safe_conversation_context(body.get("conversation_context"))
-    active_ticket_draft = _safe_ticket_draft(body.get("active_ticket_draft"))
     if conversation_context:
         kwargs["conversation_context"] = conversation_context
-    if active_ticket_draft:
-        kwargs["active_ticket_draft"] = active_ticket_draft
+    # Ticket drafts and approval state are held by ChatService under the
+    # authenticated session/conversation. Ignore client-provided draft JSON.
     return kwargs
 
 
@@ -544,16 +610,6 @@ def _safe_conversation_context(value: Any) -> dict[str, list[str]]:
         return {}
     return {
         "recent_user_messages": [item.strip()[:300] for item in recent if isinstance(item, str) and item.strip()][:3]
-    }
-
-
-def _safe_ticket_draft(value: Any) -> dict[str, str]:
-    if not isinstance(value, Mapping):
-        return {}
-    return {
-        key: item.strip()[:240]
-        for key in ("department", "category", "priority", "description")
-        if isinstance(item := value.get(key), str) and item.strip()
     }
 
 

@@ -44,7 +44,7 @@ def main() -> int:
     feedback_service = FeedbackService(SQLAlchemyFeedbackRepository(engine))
     audit_service = AuditService(SQLAlchemyAuditRepository(engine))
 
-    ticket_result = ticket_service.create_ticket(
+    ticket_preview = ticket_service.preview_ticket(
         profile,
         TicketRequest(
             department="it",
@@ -52,9 +52,18 @@ def main() -> int:
             priority="normal",
             description="Phase 4 smoke test ticket for AWS sandbox access verification.",
         ),
+        conversation_id="phase4-smoke",
+    )
+    if ticket_preview.status != "needs_approval":
+        print(f"Ticket preview smoke failed: {ticket_preview}", file=sys.stderr)
+        return 1
+    ticket_result = ticket_service.approve_ticket(
+        profile,
+        conversation_id="phase4-smoke",
+        approval_id=ticket_preview.approval_id,
     )
     if ticket_result.status != "ticket_created" or ticket_result.ticket is None:
-        print(f"Ticket smoke failed: {ticket_result}", file=sys.stderr)
+        print(f"Ticket approval smoke failed: {ticket_result}", file=sys.stderr)
         return 1
     ticket_id = str(ticket_result.ticket["ticket_id"])
 

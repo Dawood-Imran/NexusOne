@@ -211,19 +211,26 @@ class ChatServiceTest(unittest.TestCase):
             conversation = service.conversation_store.create_conversation("u001")
             message = "Create an IT ticket for AWS sandbox access needed for billing migration."
 
-            first = service.handle_message(
+            preview = service.handle_message(
                 "u001",
                 message,
+                conversation_id=conversation.conversation_id,
+                turn_id="ticket-replay-preview",
+            )
+            first = service.handle_message(
+                "u001",
+                "Approve ticket",
                 conversation_id=conversation.conversation_id,
                 turn_id="ticket-replay-1",
             )
             replay = service.handle_message(
                 "u001",
-                message,
+                "Approve ticket",
                 conversation_id=conversation.conversation_id,
                 turn_id="ticket-replay-1",
             )
 
+        self.assertEqual("needs_approval", preview["status"])
         self.assertEqual("ticket_created", first["status"])
         self.assertEqual(first, replay)
         self.assertEqual(1, len(repository.tickets))

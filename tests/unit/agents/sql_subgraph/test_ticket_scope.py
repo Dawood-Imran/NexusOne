@@ -204,6 +204,9 @@ class TicketScopeRegressionTest(unittest.TestCase):
         self.assertIn("u.role = 'hr'", schema)
         self.assertIn("ug.group_name = 'it_team'", schema)
         self.assertIn("ug.group_name = 'hr_team'", schema)
+        self.assertIn("can_user_comment_ticket", schema)
+        self.assertIn("can_user_close_ticket", schema)
+        self.assertIn("t.status IN ('open', 'in_progress', 'waiting_on_user', 'resolved')", schema)
         self.assertEqual(3, views.count("WHERE can_user_access_ticket(p_user_id"))
 
 

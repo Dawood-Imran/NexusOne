@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from app.actions.audit_service import AuditService, InMemoryAuditRepository
 from app.actions.feedback_service import FeedbackService, InMemoryFeedbackRepository
+from app.actions.ticket_service import InMemoryTicketRepository, TicketService
 from app.agents.orchestrator.answer_composer import DeterministicAnswerComposer
 from app.agents.sql_subgraph.state import SQLExecutionResult
 from tests.unit.agents.orchestrator.intent_fixtures import fixture_classifier
@@ -211,22 +212,92 @@ class LocalHTTPProductSurfaceTest(unittest.TestCase):
         self.assertNotIn("HR-9003", json.dumps(employee))
         self.assertNotIn("requester_id", json.dumps(employee))
 
-    def test_ticket_action_http_happy_path_returns_sanitized_ticket(self) -> None:
+    def test_ticket_action_http_requires_approval_then_returns_sanitized_ticket(self) -> None:
         cookie, _ = self.login()
 
-        status, _, payload = self.request(
+        preview_status, _, preview = self.request(
             "POST",
             "/api/chat",
             payload={"message": "Create an IT ticket for AWS sandbox access needed for billing migration."},
             cookie=cookie,
         )
+        created_status, _, payload = self.request(
+            "POST",
+            "/api/chat",
+            payload={"message": "Approve ticket", "conversation_id": preview["conversation_id"]},
+            cookie=cookie,
+        )
 
-        self.assertEqual(200, status)
+        self.assertEqual(200, preview_status)
+        self.assertEqual("needs_approval", preview["status"])
+        self.assertTrue(preview["approval_required"])
+        self.assertEqual(200, created_status)
         self.assertEqual("ticket_created", payload["status"])
         self.assertEqual("ticket_create", payload["route"])
         self.assertTrue(payload["ticket"]["ticket_id"].startswith("IT-"))
         self.assertNotIn("requester_id", json.dumps(payload))
         self.assertNotIn("assigned_to", json.dumps(payload))
+
+    def test_ticket_list_detail_comment_and_close_api_are_authenticated_and_persistent(self) -> None:
+        original_service = NexusOneRequestHandler.service
+        repository = InMemoryTicketRepository()
+        NexusOneRequestHandler.service = ChatService(
+            ticket_service=TicketService(repository),
+            answer_composer=DeterministicAnswerComposer(fallback_reason="OFFLINE_HTTP_TEST"),
+            intent_classifier=fixture_classifier(),
+            feedback_service=FeedbackService(self.feedback_repository),
+            audit_service=AuditService(self.audit_repository),
+        )
+        try:
+            employee_cookie, _ = self.login("u001")
+            preview_status, _, preview = self.request(
+                "POST", "/api/chat",
+                payload={"message": "Create an IT ticket for AWS sandbox access needed for billing migration."},
+                cookie=employee_cookie,
+            )
+            approve_status, _, created = self.request(
+                "POST", "/api/chat",
+                payload={"message": "Approve ticket", "conversation_id": preview["conversation_id"]},
+                cookie=employee_cookie,
+            )
+            ticket_id = created["ticket"]["ticket_id"]
+            list_status, _, listed = self.request("GET", "/api/tickets", cookie=employee_cookie)
+            detail_status, _, detail = self.request("GET", f"/api/tickets/{ticket_id}", cookie=employee_cookie)
+            comment_status, _, comment = self.request(
+                "POST", f"/api/tickets/{ticket_id}/comments", payload={"comment": "Payroll details are attached for review."}, cookie=employee_cookie
+            )
+            empty_comment_status, _, empty_comment = self.request(
+                "POST", f"/api/tickets/{ticket_id}/comments", payload={"comment": "   "}, cookie=employee_cookie
+            )
+            close_status, _, close = self.request(
+                "POST", f"/api/tickets/{ticket_id}/close", payload={"comment": "Employee cannot close a support queue ticket."}, cookie=employee_cookie
+            )
+            it_cookie, _ = self.login("u005")
+            repository.tickets[0]["assigned_to"] = "u005"
+            hr_close_status, _, hr_close = self.request(
+                "POST", f"/api/tickets/{ticket_id}/close", payload={"comment": "IT verified the access request and closed the ticket."}, cookie=it_cookie
+            )
+            status_after_close, _, listed_after_close = self.request("GET", "/api/tickets", cookie=it_cookie)
+        finally:
+            NexusOneRequestHandler.service = original_service
+
+        self.assertEqual(200, preview_status)
+        self.assertEqual("needs_approval", preview["status"])
+        self.assertEqual(200, approve_status)
+        self.assertEqual(200, list_status)
+        self.assertIn(ticket_id, {row["ticket_id"] for row in listed["tickets"]})
+        self.assertEqual(200, detail_status)
+        self.assertEqual(ticket_id, detail["ticket"]["ticket_id"])
+        self.assertEqual(200, comment_status)
+        self.assertEqual("comment_added", comment["status"])
+        self.assertEqual(400, empty_comment_status)
+        self.assertEqual("TICKET_COMMENT_REQUIRED", empty_comment["reason_code"])
+        self.assertEqual(403, close_status)
+        self.assertEqual("TICKET_CLOSE_NOT_AUTHORIZED", close["reason_code"])
+        self.assertEqual(200, hr_close_status)
+        self.assertEqual("ticket_closed", hr_close["status"])
+        self.assertEqual(200, status_after_close)
+        self.assertEqual("closed", next(row for row in listed_after_close["tickets"] if row["ticket_id"] == ticket_id)["status"])
 
     def test_provider_failure_falls_back_to_safe_deterministic_http_answer(self) -> None:
         original_service = NexusOneRequestHandler.service

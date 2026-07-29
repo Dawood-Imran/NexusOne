@@ -206,13 +206,28 @@ def _dataset_classifier(cases: Sequence[Mapping[str, Any]]) -> FakeIntentClassif
 def _evaluate_case(orchestrator: NexusOneOrchestrator, case: Mapping[str, Any]) -> CaseResult:
     expected = case["expected"]
     try:
+        conversation_id = f"evaluation-{case['id']}"
         response = orchestrator.invoke(
             {
                 "user_id": case["user"],
+                "conversation_id": conversation_id,
                 "message": case["input"],
                 "include_trace": True,
             }
         )
+        # Ticket writes require a second, explicit approval turn. Keep the
+        # dataset's successful-create assertions meaningful by completing that
+        # server-held workflow inside the deterministic evaluator.
+        if expected.get("status") == "ticket_created" and response.get("status") == "needs_approval":
+            response = orchestrator.invoke(
+                {
+                    "user_id": case["user"],
+                    "conversation_id": conversation_id,
+                    "message": "Approve ticket",
+                    "ticket_workflow": "approve",
+                    "include_trace": True,
+                }
+            )
         dimensions = tuple(_check_dimension(name, case, expected, response) for name in DIMENSIONS)
     except Exception as exc:  # bounded failure: do not put exception text in the report
         dimensions = tuple(

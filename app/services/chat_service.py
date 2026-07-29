@@ -339,6 +339,14 @@ class ChatService:
         else:
             reservation = TurnReservation(conversation_id or "web-chat", turn_id or "web-turn", ())
         resolved_profile = profile if profile is not None else get_profile(user_id)
+        # Ticket approval/edit intent is resolved from server-held workflow
+        # state keyed by the authenticated user and conversation. Client draft
+        # JSON and model output never select a requester or authorize a write.
+        ticket_workflow = self.ticket_service.workflow_signal(
+            resolved_profile,
+            reservation.conversation_id,
+            message,
+        )
         candidate = extract_explicit_memory_update(message, preference_opt_in=memory_opt_in)
         supports_memory_tools = bool(getattr(self.answer_composer, "supports_memory_tools", False))
         if resolved_profile is None:
@@ -406,7 +414,8 @@ class ChatService:
             conversation_id=reservation.conversation_id,
             turn_id=reservation.turn_id,
             conversation_context=context,
-            active_ticket_draft=active_ticket_draft,
+            active_ticket_draft=None,
+            ticket_workflow=ticket_workflow,
             short_term_history=list(reservation.history),
             user_memory=user_memory,
             memory_update=memory_update,
@@ -425,6 +434,7 @@ class ChatService:
         turn_id: str | None = None,
         conversation_context: Any = None,
         active_ticket_draft: Any = None,
+        ticket_workflow: str | None = None,
         short_term_history: list[dict[str, str]] | None = None,
         user_memory: dict[str, Any] | None = None,
         memory_update: dict[str, Any] | None = None,
@@ -438,7 +448,9 @@ class ChatService:
             "include_trace": include_trace,
             "execute_sql": self.sql_executor is not None,
             "conversation_context": conversation_context,
-            "active_ticket_draft": active_ticket_draft,
+            # The browser cannot provide authoritative ticket draft state.
+            "active_ticket_draft": None,
+            "ticket_workflow": ticket_workflow or "",
             "short_term_history": short_term_history or [],
             "user_memory": user_memory or {
                 "schema_version": 2,
@@ -548,6 +560,30 @@ class ChatService:
 
     def delete_authenticated_conversation(self, session: AuthenticatedSession, conversation_id: str) -> None:
         self.conversation_store.delete_conversation(session.user_id, conversation_id)
+
+    def list_authenticated_tickets(self, session: AuthenticatedSession) -> list[Mapping[str, Any]]:
+        return list(self.ticket_service.list_tickets(session.profile))
+
+    def get_authenticated_ticket(self, session: AuthenticatedSession, ticket_id: str) -> Mapping[str, Any] | None:
+        return self.ticket_service.get_ticket(session.profile, ticket_id)
+
+    def add_authenticated_ticket_comment(
+        self,
+        session: AuthenticatedSession,
+        ticket_id: str,
+        comment: str | None,
+    ) -> dict[str, Any]:
+        result = self.ticket_service.add_comment(session.profile, ticket_id, comment)
+        return _ticket_result_payload(result)
+
+    def close_authenticated_ticket(
+        self,
+        session: AuthenticatedSession,
+        ticket_id: str,
+        comment: str | None,
+    ) -> dict[str, Any]:
+        result = self.ticket_service.close_ticket(session.profile, ticket_id, comment)
+        return _ticket_result_payload(result)
 
     def submit_authenticated_feedback(
         self,
@@ -816,3 +852,18 @@ def _safe_nonnegative_int(value: Any) -> int:
         return max(0, int(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _ticket_result_payload(result: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": result.status,
+        "reason_code": result.reason_code,
+        "message": result.message,
+    }
+    if result.ticket is not None:
+        payload["ticket"] = dict(result.ticket)
+    if result.ticket_preview is not None:
+        payload["ticket_preview"] = dict(result.ticket_preview)
+    if result.missing_fields:
+        payload["missing_fields"] = list(result.missing_fields)
+    return payload

@@ -35,6 +35,11 @@ class OrchestratorState(TypedDict, total=False):
     execute_sql: bool
     conversation_context: Any
     active_ticket_draft: Any
+    # Server-owned ticket workflow signal. The client cannot choose creator or
+    # approval authority; ChatService derives this from authenticated state.
+    ticket_workflow: str
+    ticket_approval: str
+    ticket_approval_id: str
     short_term_history: list[dict[str, str]]
     user_memory: dict[str, Any]
     memory_runtime: Any
@@ -83,6 +88,8 @@ class OrchestratorState(TypedDict, total=False):
     ticket_result: Any
     ticket_message: str
     ticket: dict[str, Any]
+    ticket_preview: dict[str, Any]
+    ticket_approval_required: bool
     missing_fields: list[str]
 
     validation: dict[str, Any]

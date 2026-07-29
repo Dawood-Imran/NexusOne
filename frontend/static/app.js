@@ -390,6 +390,8 @@ function normalizeServerConversation(data) {
         category: payload.category || null,
         subgraph_trace: payload.subgraph_trace || [],
         ticket: sanitizeTicket(payload.ticket),
+        ticket_preview: sanitizeTicketPreview(payload.ticket_preview),
+        approval_required: payload.approval_required === true,
         trace_expanded: false,
         missing_fields: payload.missing_fields || [],
         allowed_alternatives: payload.allowed_alternatives || [],
@@ -616,6 +618,7 @@ function renderMessage(message) {
   article.appendChild(meta);
   article.appendChild(body);
   if (message.ticket) article.appendChild(renderTicketSummary(message.ticket));
+  else if (message.ticket_preview && message.approval_required) article.appendChild(renderTicketPreview(message.ticket_preview));
   else if (message.category === "own_ticket" && ["error", "refused"].includes(message.status)) article.appendChild(renderTicketStatusState());
   if (message.status === "denied") article.appendChild(renderDeniedNextStep(message));
   if (message.status === "no_answer") article.appendChild(renderNoAnswerNextStep());
@@ -690,6 +693,8 @@ function beginStreamingAssistantMessage() {
     category: null,
     subgraph_trace: [],
     ticket: null,
+    ticket_preview: null,
+    approval_required: false,
     trace_expanded: false,
     missing_fields: [],
     allowed_alternatives: [],
@@ -754,6 +759,8 @@ function finalizeStreamingAssistantMessage(payload) {
   message.category = payload.category || null;
   message.subgraph_trace = payload.subgraph_trace || [];
   message.ticket = sanitizeTicket(payload.ticket);
+  message.ticket_preview = sanitizeTicketPreview(payload.ticket_preview);
+  message.approval_required = payload.approval_required === true;
   message.trace_expanded = Boolean(payload.trace?.length || payload.subgraph_trace?.length);
   message.missing_fields = payload.missing_fields || [];
   message.allowed_alternatives = payload.allowed_alternatives || [];
@@ -793,6 +800,8 @@ function addAssistantMessage(payload) {
     category: payload.category || null,
     subgraph_trace: payload.subgraph_trace || [],
     ticket: sanitizeTicket(payload.ticket),
+    ticket_preview: sanitizeTicketPreview(payload.ticket_preview),
+    approval_required: payload.approval_required === true,
     trace_expanded: Boolean(payload.trace?.length || payload.subgraph_trace?.length),
     missing_fields: payload.missing_fields || [],
     allowed_alternatives: payload.allowed_alternatives || [],
@@ -821,10 +830,19 @@ function collectSourceItems(payload) {
 function sanitizeTicket(ticket) {
   if (!ticket || typeof ticket !== "object") return null;
   const safe = {};
-  ["ticket_id", "department", "category", "priority", "created_at", "updated_at"].forEach((field) => {
+  ["ticket_id", "requester", "department", "category", "priority", "description", "created_at", "updated_at"].forEach((field) => {
     if (ticket[field] != null && String(ticket[field]).trim()) safe[field] = String(ticket[field]).trim();
   });
   if (ticket.status != null) safe.status = safeTicketStatus(ticket.status) || "unavailable";
+  return Object.keys(safe).length ? safe : null;
+}
+
+function sanitizeTicketPreview(preview) {
+  if (!preview || typeof preview !== "object") return null;
+  const safe = {};
+  ["requester", "department", "category", "priority", "description"].forEach((field) => {
+    if (preview[field] != null && String(preview[field]).trim()) safe[field] = String(preview[field]).trim();
+  });
   return Object.keys(safe).length ? safe : null;
 }
 
@@ -844,7 +862,7 @@ function renderTicketSummary(ticket) {
   const title = document.createElement("h3");
   title.textContent = safeTicket.status === "error" || safeTicket.status === "unavailable" ? "Ticket status" : "Ticket details";
   const list = document.createElement("dl");
-  [["ID", safeTicket.ticket_id], ["Status", safeTicket.status], ["Team", safeTicket.department], ["Category", safeTicket.category], ["Priority", safeTicket.priority], ["Updated", safeTicket.updated_at ? formatTimestamp(safeTicket.updated_at) : null]].forEach(([label, value]) => {
+  [["ID", safeTicket.ticket_id], ["Requester", safeTicket.requester], ["Status", safeTicket.status], ["Team", safeTicket.department], ["Category", safeTicket.category], ["Priority", safeTicket.priority], ["Details", safeTicket.description], ["Updated", safeTicket.updated_at ? formatTimestamp(safeTicket.updated_at) : null]].forEach(([label, value]) => {
     if (!value) return;
     const row = document.createElement("div");
     const term = document.createElement("dt");
@@ -857,6 +875,86 @@ function renderTicketSummary(ticket) {
   });
   section.appendChild(title);
   section.appendChild(list);
+  if (state.account && ["hr", "it_admin", "admin_ops"].includes(state.account.role)
+      && ["open", "in progress", "waiting on user", "resolved"].includes(String(safeTicket.status || "").replaceAll("_", " "))) {
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "button button-secondary ticket-close-action";
+    action.textContent = "Close ticket";
+    action.addEventListener("click", () => closeTicketFromView(safeTicket));
+    section.appendChild(action);
+  }
+  return section;
+}
+
+async function closeTicketFromView(ticket) {
+  const comment = window.prompt("Add a non-empty closing comment or resolution detail:");
+  if (!comment || !comment.trim()) {
+    setConversationStatus("A closing comment or details is required.", "error");
+    return;
+  }
+  try {
+    const response = await fetch(`/api/tickets/${encodeURIComponent(ticket.ticket_id)}/close`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json", ...sessionHeaders() },
+      body: JSON.stringify({ comment }),
+    });
+    const result = await response.json();
+    if (response.status === 401 || response.status === 403) {
+      await handleSessionExpired();
+      return;
+    }
+    if (!response.ok || result.status !== "ticket_closed") {
+      setConversationStatus(result.message || "That ticket could not be closed.", "error");
+      return;
+    }
+    ticket.status = "closed";
+    ticket.updated_at = result.ticket?.updated_at || ticket.updated_at;
+    saveConversations();
+    renderActiveConversation();
+    setConversationStatus("Ticket status updated to closed.");
+  } catch (error) {
+    setConversationStatus("We could not update that ticket. Try again.", "error");
+  }
+}
+
+function renderTicketPreview(preview) {
+  const safePreview = sanitizeTicketPreview(preview);
+  if (!safePreview) return document.createDocumentFragment();
+  const section = document.createElement("section");
+  section.className = "ticket-summary ticket-preview";
+  const title = document.createElement("h3");
+  title.textContent = "Review before creating";
+  const list = document.createElement("dl");
+  [["Requester", safePreview.requester], ["Team", safePreview.department], ["Category", safePreview.category], ["Priority", safePreview.priority], ["Details", safePreview.description]].forEach(([label, value]) => {
+    if (!value) return;
+    const row = document.createElement("div");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    detail.textContent = value;
+    row.appendChild(term);
+    row.appendChild(detail);
+    list.appendChild(row);
+  });
+  const note = document.createElement("p");
+  note.className = "ticket-preview-note";
+  note.textContent = "This is a preview. Nothing is created until you explicitly approve it.";
+  const actions = document.createElement("div");
+  actions.className = "ticket-preview-actions";
+  [["Approve ticket", "Approve ticket"], ["Cancel ticket", "Cancel ticket"]].forEach(([label, text]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = label.startsWith("Approve") ? "button button-primary" : "button button-secondary";
+    button.textContent = label;
+    button.addEventListener("click", () => sendMessage(text));
+    actions.appendChild(button);
+  });
+  section.appendChild(title);
+  section.appendChild(list);
+  section.appendChild(note);
+  section.appendChild(actions);
   return section;
 }
 
@@ -1034,6 +1132,7 @@ function renderInspector() {
     return;
   }
   if (message.ticket) inspectorContent.appendChild(renderTicketSummary(message.ticket));
+  else if (message.ticket_preview && message.approval_required) inspectorContent.appendChild(renderTicketPreview(message.ticket_preview));
   else if (message.category === "own_ticket" && ["error", "refused"].includes(message.status)) inspectorContent.appendChild(renderTicketStatusState());
   if (message.rows.length) inspectorContent.appendChild(renderStructuredRows(message));
   const sourceItems = collectSourceItems(message);
@@ -1581,7 +1680,7 @@ function payloadMessage(payload) {
 }
 
 function statusLabel(status) {
-  const labels = { denied: "Access limited", error: "Needs attention", refused: "Needs attention", streaming: "Writing…" };
+  const labels = { denied: "Access limited", error: "Needs attention", refused: "Needs attention", needs_approval: "Approval needed", needs_clarification: "More details needed", not_created: "Not created", streaming: "Writing…" };
   return labels[status] || "";
 }
 
