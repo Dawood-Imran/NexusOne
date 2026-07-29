@@ -11,7 +11,14 @@ from app.actions.ticket_service import TicketService
 from app.agents.orchestrator.action_routing import extract_ticket_request
 from app.agents.orchestrator.answer_composer import AnswerComposer, AnswerComposition, compose_with_streaming
 from app.agents.orchestrator.intent_classifier import IntentClassifier, classify_request
-from app.agents.orchestrator.knowledge import build_local_general_answer, casual_response
+from app.agents.orchestrator.knowledge import (
+    NO_APPROVED_TICKET_GUIDANCE_MESSAGE,
+    build_local_general_answer,
+    build_ticket_guidance_answer,
+    casual_response,
+    retained_ticket_guidance_results,
+    sanitize_ticket_guidance_source_text,
+)
 from app.agents.orchestrator.routing import route_from_intent
 from app.agents.orchestrator.state import OrchestratorState
 from app.agents.sql_subgraph import SQLSubgraph, clean_question_text
@@ -362,18 +369,55 @@ def make_retrieve_rag_node(
 
     def retrieve_rag(state: OrchestratorState) -> OrchestratorState:
         profile = state["profile"]
+        guidance_route = state.get("route") == "ticket_guidance"
         if chunks.available():
             backend = chunks.backend_name()
-            results = chunks.search(state["clean_message"], profile, max_results=4)
+            retrieval_query = (
+                "ticket creation guide supported teams categories required information confirmation next steps"
+                if guidance_route
+                else state["clean_message"]
+            )
+            results = chunks.search(retrieval_query, profile, max_results=4)
             threshold = chunks.config.source_similarity_threshold
-            message = build_answer_from_chunks(state["clean_message"], results, threshold=threshold)
-            citations = _chunk_source_refs(results, threshold=threshold)
+            guidance_results = (
+                retained_ticket_guidance_results(results, threshold=threshold)
+                if guidance_route
+                else results
+            )
+            message = (
+                build_ticket_guidance_answer(guidance_results, threshold=threshold)
+                if guidance_route
+                else build_answer_from_chunks(state["clean_message"], results, threshold=threshold)
+            )
+            citations = _chunk_source_refs(
+                guidance_results,
+                threshold=threshold,
+                sanitize_source_text=guidance_route,
+            )
         else:
             backend = "local_kb"
-            results = local.search(state["clean_message"], profile, max_results=3)
+            retrieval_query = (
+                "ticket creation guide supported teams categories required information confirmation next steps"
+                if guidance_route
+                else state["clean_message"]
+            )
+            results = local.search(retrieval_query, profile, max_results=3)
             threshold = local.similarity_threshold
-            message = build_answer_from_results(state["clean_message"], results, threshold=threshold)
-            citations = _local_source_refs(results, threshold=threshold)
+            guidance_results = (
+                retained_ticket_guidance_results(results, threshold=threshold)
+                if guidance_route
+                else results
+            )
+            message = (
+                build_ticket_guidance_answer(guidance_results, threshold=threshold)
+                if guidance_route
+                else build_answer_from_results(state["clean_message"], results, threshold=threshold)
+            )
+            citations = _local_source_refs(
+                guidance_results,
+                threshold=threshold,
+                sanitize_source_text=guidance_route,
+            )
 
         # Count only the retained citation set. This defensive second filter
         # keeps custom retrievers from smuggling below-threshold context into
@@ -392,8 +436,9 @@ def make_retrieve_rag_node(
             next_state,
             "retrieve_rag_context",
             {
-                "status": "answered" if results else "no_reference",
+                "status": "answered" if citations else "no_reference",
                 "backend": backend,
+                "route": state.get("route"),
                 "result_count": len(citations),
                 "reference_status": reference_status,
                 "source_similarity_threshold": threshold,
@@ -455,6 +500,8 @@ def make_validate_answer_node() -> Any:
         reason = None
         if route == "rag" and not has_rag_answer:
             reason = "NO_SUFFICIENTLY_RELEVANT_REFERENCE"
+        elif route == "ticket_guidance" and not has_rag_answer:
+            reason = "NO_APPROVED_TICKET_GUIDANCE_REFERENCE"
         elif route == "sql" and not has_sql_answer:
             reason = "SQL_NOT_ANSWERED"
         elif route == "combined" and not (has_sql_answer or has_rag_answer):
@@ -527,13 +574,23 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             "sql_status": sql_output.sql_status if sql_output is not None else None,
         }
         writer = _safe_stream_writer()
-        if route == "rag" and rag_result_count == 0:
+        if route in {"rag", "ticket_guidance"} and rag_result_count == 0:
             # Do not invoke an LLM with an empty evidence set: it could answer
             # from general knowledge and accidentally imply document grounding.
+            no_reference_answer = (
+                NO_APPROVED_TICKET_GUIDANCE_MESSAGE
+                if route == "ticket_guidance"
+                else NO_REFERENCE_MESSAGE
+            )
+            no_reference_reason = (
+                "NO_APPROVED_TICKET_GUIDANCE_REFERENCE"
+                if route == "ticket_guidance"
+                else "NO_SUFFICIENTLY_RELEVANT_REFERENCE"
+            )
             composition = AnswerComposition(
-                answer=NO_REFERENCE_MESSAGE,
+                answer=no_reference_answer,
                 backend="deterministic_no_reference",
-                fallback_reason="NO_SUFFICIENTLY_RELEVANT_REFERENCE",
+                fallback_reason=no_reference_reason,
             )
             writer({"type": "response.delta", "delta": composition.answer})
         else:
@@ -567,7 +624,7 @@ def make_compose_final_answer_node(composer: AnswerComposer) -> Any:
             next_state,
             "compose_final_answer",
             {
-                "status": "no_reference" if route == "rag" and rag_result_count == 0 else "composed",
+                "status": "no_reference" if route in {"rag", "ticket_guidance"} and rag_result_count == 0 else "composed",
                 "backend": composition.backend,
                 "error": composition.error,
                 "fallback_reason": composition.fallback_reason,
@@ -746,6 +803,22 @@ def _successful_response(state: OrchestratorState, started_at: float) -> dict[st
             **_turn_context(state),
         }
 
+    if route == "ticket_guidance":
+        answered = int(state.get("rag_result_count", 0)) > 0
+        return {
+            "status": "answered" if answered else "no_answer",
+            "reason_code": "TICKET_GUIDANCE_FROM_KB" if answered else "NO_APPROVED_TICKET_GUIDANCE_REFERENCE",
+            "route": route,
+            "model_backend": state.get("composer_backend"),
+            "category": category,
+            "message": final_answer or state.get("rag_message", NO_APPROVED_TICKET_GUIDANCE_MESSAGE),
+            "citations": state.get("rag_citations", []),
+            "profile": profile.to_public_dict(),
+            "latency_ms": _elapsed_ms(started_at),
+            **_reference_response_fields(state),
+            **_turn_context(state),
+        }
+
     if route in {"feedback", "clarification", "unsupported"}:
         if route == "feedback":
             message = state.get("feedback_message", "")
@@ -889,6 +962,8 @@ def _response_status_for_success(state: OrchestratorState) -> str:
         return "answered"
     if route == "GENERAL_KNOWLEDGE":
         return "answered" if state.get("general_answer_available") else "no_answer"
+    if route == "ticket_guidance":
+        return "answered" if int(state.get("rag_result_count", 0)) > 0 else "no_answer"
     return "answered" if int(state.get("rag_result_count", 0)) > 0 else "no_answer"
 
 
@@ -924,6 +999,7 @@ def _chunk_source_refs(
     results: tuple[ChunkSearchResult, ...],
     *,
     threshold: float = SOURCE_SIMILARITY_THRESHOLD,
+    sanitize_source_text: bool = False,
 ) -> list[dict[str, Any]]:
     refs: list[dict[str, Any]] = []
     retained = tuple(result for result in results if result.score >= threshold)
@@ -936,7 +1012,11 @@ def _chunk_source_refs(
                 "chunk_id": result.chunk.chunk_id,
                 "chunk_index": result.chunk.chunk_index,
                 "excerpt": result.snippet,
-                "text": result.chunk.text,
+                "text": (
+                    sanitize_ticket_guidance_source_text(result.chunk.text)
+                    if sanitize_source_text
+                    else result.chunk.text
+                ),
                 "score": result.score,
                 "lexical_score": result.lexical_score,
                 "semantic_score": result.semantic_score,
@@ -950,6 +1030,7 @@ def _local_source_refs(
     results: tuple[RetrievalResult, ...],
     *,
     threshold: float = SOURCE_SIMILARITY_THRESHOLD,
+    sanitize_source_text: bool = False,
 ) -> list[dict[str, Any]]:
     refs: list[dict[str, Any]] = []
     retained = tuple(result for result in results if result.score >= threshold)
@@ -960,7 +1041,11 @@ def _local_source_refs(
                 "reference_id": index,
                 "label": f"[{index}]",
                 "excerpt": result.snippet,
-                "text": result.document.body,
+                "text": (
+                    sanitize_ticket_guidance_source_text(result.document.body)
+                    if sanitize_source_text
+                    else result.document.body
+                ),
                 "score": result.score,
                 "lexical_score": result.score,
                 "semantic_score": 0.0,

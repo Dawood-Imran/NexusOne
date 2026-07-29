@@ -3,6 +3,14 @@
 from __future__ import annotations
 
 import re
+from typing import Any
+
+
+NO_APPROVED_TICKET_GUIDANCE_MESSAGE = (
+    "No approved reference is available for that ticket guidance, so I will not guess department or category rules. "
+    "If you want to take the supported next step, explicitly ask me to create or submit a ticket; I will ask for "
+    "any required details before writing anything."
+)
 
 
 def casual_intent(message: str) -> str | None:
@@ -82,6 +90,70 @@ def is_general_knowledge_question(message: str) -> bool:
     )
 
 
+def retained_ticket_guidance_results(
+    results: tuple[Any, ...],
+    *,
+    threshold: float,
+) -> tuple[Any, ...]:
+    """Keep only above-threshold results with safe usable source content."""
+
+    retained: list[Any] = []
+    for result in results:
+        try:
+            score = float(getattr(result, "score", 0.0))
+        except (TypeError, ValueError):
+            continue
+        if score < threshold:
+            continue
+        if _safe_guidance_paragraphs(_source_text_for_result(result)):
+            retained.append(result)
+    return tuple(retained)
+
+
+def build_ticket_guidance_answer(
+    results: tuple[Any, ...],
+    *,
+    threshold: float,
+) -> str:
+    """Compose ticket guidance only from retained, authorized source chunks.
+
+    Guidance is a process answer, not an action.  The source text is filtered
+    for instruction-like paragraphs before it is shown, so a malicious passage
+    in an otherwise approved document cannot become an instruction to the
+    assistant.  The caller uses the same threshold when constructing citations.
+    """
+
+    retained = retained_ticket_guidance_results(results, threshold=threshold)
+    if not retained:
+        return NO_APPROVED_TICKET_GUIDANCE_MESSAGE
+
+    blocks: list[str] = []
+    for index, result in enumerate(retained, start=1):
+        chunk = getattr(result, "chunk", None)
+        document = getattr(result, "document", None)
+        title = getattr(chunk, "title", None) or getattr(document, "title", None) or "Approved ticket guidance"
+        paragraphs = _safe_guidance_paragraphs(_source_text_for_result(result))
+        if not paragraphs:
+            continue
+        blocks.append(f"Approved guidance from {title} [{index}]:\n" + "\n\n".join(paragraphs))
+
+    if not blocks:
+        return NO_APPROVED_TICKET_GUIDANCE_MESSAGE
+    return "Here is the approved ticket guidance:\n\n" + "\n\n".join(blocks)[:6_000]
+
+
+def sanitize_ticket_guidance_source_text(text: str) -> str:
+    """Remove instruction-like paragraphs before guidance citations are shown."""
+
+    return "\n\n".join(_safe_guidance_paragraphs(text))[:6_000]
+
+
+def _source_text_for_result(result: Any) -> str:
+    chunk = getattr(result, "chunk", None)
+    document = getattr(result, "document", None)
+    return str(getattr(chunk, "text", None) or getattr(document, "body", None) or getattr(result, "snippet", ""))
+
+
 def build_local_general_answer(question: str) -> str | None:
     """Answer a small, explicit local general-knowledge set.
 
@@ -129,6 +201,28 @@ def build_local_general_answer(question: str) -> str | None:
             "which approval rules apply, and how holidays or carryover are handled. Exact rules vary by employer."
         )
     return None
+
+
+_SOURCE_INSTRUCTION_PATTERN = re.compile(
+    r"(?:ignore|disregard|override|bypass)\s+(?:all\s+|previous\s+|the\s+)?"
+    r"(?:instructions?|rules?|guardrails?)|"
+    r"(?:reveal|dump|expose)\s+(?:the\s+)?(?:hidden|secret|system|private)",
+    re.IGNORECASE,
+)
+
+
+def _safe_guidance_paragraphs(text: str) -> list[str]:
+    paragraphs: list[str] = []
+    for paragraph in re.split(r"\n\s*\n", text):
+        stripped = paragraph.strip()
+        if not stripped:
+            continue
+        if re.match(r"^#+\s*Related Sources\b", stripped, flags=re.IGNORECASE):
+            break
+        if _SOURCE_INSTRUCTION_PATTERN.search(stripped):
+            continue
+        paragraphs.append(re.sub(r"^#+\s*", "", stripped.replace("`", ""), flags=re.MULTILINE).strip())
+    return paragraphs
 
 
 _GENERAL_TOPICS = (

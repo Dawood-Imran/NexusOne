@@ -11,6 +11,7 @@ class OrchestratorRoutingContractTest(unittest.TestCase):
             "casual": "CASUAL",
             "general_question": "GENERAL_KNOWLEDGE",
             "knowledge_lookup": "rag",
+            "ticket_guidance": "ticket_guidance",
             "structured_lookup": "sql",
             "combined_lookup": "combined",
             "ticket_create": "ticket_create",

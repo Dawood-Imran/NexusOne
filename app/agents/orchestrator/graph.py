@@ -86,6 +86,7 @@ def build_orchestrator_graph(
             "error": "finalize_response",
             "sql": "run_sql_subgraph",
             "rag": "retrieve_rag_context",
+            "ticket_guidance": "retrieve_rag_context",
             "combined": "run_sql_subgraph",
             "ticket_create": "run_ticket_action",
             "CASUAL": "respond_casual",

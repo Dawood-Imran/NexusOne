@@ -9,6 +9,7 @@ RUN_NAME = "nexusone_main_orchestrator"
 SAFE_ROUTE_NAMES = frozenset(
     {
         "rag",
+        "ticket_guidance",
         "sql",
         "combined",
         "ticket_create",

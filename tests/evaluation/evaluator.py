@@ -172,6 +172,7 @@ def _dataset_classifier(cases: Sequence[Mapping[str, Any]]) -> FakeIntentClassif
         "CASUAL": "casual",
         "GENERAL_KNOWLEDGE": "general_question",
         "rag": "knowledge_lookup",
+        "ticket_guidance": "ticket_guidance",
         "sql": "structured_lookup",
         "combined": "combined_lookup",
         "ticket_create": "ticket_create",

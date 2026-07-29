@@ -11,6 +11,7 @@ from app.guardrails.policy import AccessDecision
 
 RouteName = Literal[
     "rag",
+    "ticket_guidance",
     "sql",
     "combined",
     "ticket_create",

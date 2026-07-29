@@ -36,35 +36,46 @@ class IntentClassifierContractTest(unittest.TestCase):
                     intent="ticket_status", confidence=0.99, needs_clarification=False,
                     clarification_question=None, missing_context=(),
                 ),
+                "how can I create a ticket": IntentClassificationResult(
+                    intent="ticket_guidance", confidence=0.99, needs_clarification=False,
+                    clarification_question=None, missing_context=(),
+                ),
             }
         )
 
         casual = classify_request(classifier, "WHAT'S UP!!!")
         creation = classify_request(classifier, "Help me generate a ticket")
         status = classify_request(classifier, "show my ticket status")
+        guidance = classify_request(classifier, "How can I create a ticket")
 
         self.assertEqual("casual", casual.intent)
         self.assertEqual("ticket_create", creation.intent)
         self.assertEqual("ticket_create", creation.intent)
         self.assertTrue(creation.needs_clarification)
         self.assertEqual("ticket_status", status.intent)
+        self.assertEqual("ticket_guidance", guidance.intent)
         self.assertEqual("CASUAL", route_from_intent(casual))
         self.assertEqual("ticket_create", route_from_intent(creation))
         self.assertEqual("sql", route_from_intent(status))
+        self.assertEqual("ticket_guidance", route_from_intent(guidance))
 
     def test_ticket_guidance_is_general_and_never_routes_to_ticket_action(self) -> None:
         guidance = "I can create a ticket for your battery issue. Please provide which team should handle it: IT, HR, or Admin, and specify the category that fits your request"
         classifier = FakeIntentClassifier(
             {
-                guidance: {"intent": "general_question", "confidence": 0.99, "needs_clarification": False},
+                guidance: {"intent": "ticket_guidance", "confidence": 0.99, "needs_clarification": False},
+                "How can I create a ticket?": {"intent": "ticket_guidance", "confidence": 0.99, "needs_clarification": False},
+                "What information do I need to create a ticket?": {"intent": "ticket_guidance", "confidence": 0.99, "needs_clarification": False},
                 "Create an IT ticket for a battery issue that blocks work.": {"intent": "ticket_create", "confidence": 0.99, "needs_clarification": False},
                 "List my ticket statuses.": {"intent": "ticket_status", "confidence": 0.99, "needs_clarification": False},
                 "What is a REST API?": {"intent": "general_question", "confidence": 0.99, "needs_clarification": False},
             }
         )
 
-        self.assertEqual("general_question", classify_request(classifier, guidance).intent)
-        self.assertEqual("GENERAL_KNOWLEDGE", route_from_intent(classify_request(classifier, guidance)))
+        self.assertEqual("ticket_guidance", classify_request(classifier, guidance).intent)
+        self.assertEqual("ticket_guidance", route_from_intent(classify_request(classifier, guidance)))
+        self.assertEqual("ticket_guidance", classify_request(classifier, "How can I create a ticket?").intent)
+        self.assertEqual("ticket_guidance", route_from_intent(classify_request(classifier, "What information do I need to create a ticket?")))
         self.assertEqual("ticket_create", classify_request(classifier, "Create an IT ticket for a battery issue that blocks work.").intent)
         self.assertEqual("sql", route_from_intent(classify_request(classifier, "List my ticket statuses.")))
         self.assertEqual("general_question", classify_request(classifier, "What is a REST API?").intent)
@@ -206,17 +217,19 @@ class IntentClassifierContractTest(unittest.TestCase):
         from app.agents.orchestrator.answer_composer import DeterministicAnswerComposer
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "", "DATABASE_URL": ""}, clear=True):
-            response = NexusOneOrchestrator(answer_composer=DeterministicAnswerComposer()).invoke(
-                {"user_id": "u001", "message": "How do I request AWS access?", "include_trace": True}
-            )
+            for message in ("How do I request AWS access?", "How can I create a ticket?"):
+                with self.subTest(message=message):
+                    response = NexusOneOrchestrator(answer_composer=DeterministicAnswerComposer()).invoke(
+                        {"user_id": "u001", "message": message, "include_trace": True}
+                    )
 
-        self.assertEqual("needs_clarification", response["status"])
-        self.assertEqual("INTENT_CLASSIFIER_UNAVAILABLE", response["reason_code"])
-        self.assertEqual("clarification", response["route"])
-        nodes = {step["node"] for step in response["trace"]}
-        self.assertNotIn("retrieve_rag_context", nodes)
-        self.assertNotIn("run_sql_subgraph", nodes)
-        self.assertNotIn("run_ticket_action", nodes)
+                    self.assertEqual("needs_clarification", response["status"])
+                    self.assertEqual("INTENT_CLASSIFIER_UNAVAILABLE", response["reason_code"])
+                    self.assertEqual("clarification", response["route"])
+                    nodes = {step["node"] for step in response["trace"]}
+                    self.assertNotIn("retrieve_rag_context", nodes)
+                    self.assertNotIn("run_sql_subgraph", nodes)
+                    self.assertNotIn("run_ticket_action", nodes)
 
     def test_prompt_injection_is_not_allowed_to_bypass_server_guardrails(self) -> None:
         from app.actions.ticket_service import InMemoryTicketRepository, TicketService

@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Protocol
 
+from app.agents.orchestrator.knowledge import NO_APPROVED_TICKET_GUIDANCE_MESSAGE
 from app.retrieval.config import NO_REFERENCE_MESSAGE
 
 
@@ -37,10 +38,20 @@ class DeterministicAnswerComposer:
     def compose(self, context: Mapping[str, Any]) -> AnswerComposition:
         route = str(context.get("route", "rag"))
         if _is_no_reference_context(context):
+            no_reference_message = (
+                NO_APPROVED_TICKET_GUIDANCE_MESSAGE
+                if str(context.get("route", "")) == "ticket_guidance"
+                else NO_REFERENCE_MESSAGE
+            )
+            no_reference_reason = (
+                "NO_APPROVED_TICKET_GUIDANCE_REFERENCE"
+                if str(context.get("route", "")) == "ticket_guidance"
+                else "NO_SUFFICIENTLY_RELEVANT_REFERENCE"
+            )
             return AnswerComposition(
-                answer=NO_REFERENCE_MESSAGE,
+                answer=no_reference_message,
                 backend=self.backend,
-                fallback_reason="NO_SUFFICIENTLY_RELEVANT_REFERENCE",
+                fallback_reason=no_reference_reason,
             )
         sql_answer = str(context.get("sql_answer") or "").strip()
         rag_answer = str(context.get("rag_answer") or "").strip()
@@ -125,10 +136,20 @@ class LangChainOpenAIAnswerComposer:
 
     def compose(self, context: Mapping[str, Any]) -> AnswerComposition:
         if _is_no_reference_context(context):
+            no_reference_message = (
+                NO_APPROVED_TICKET_GUIDANCE_MESSAGE
+                if str(context.get("route", "")) == "ticket_guidance"
+                else NO_REFERENCE_MESSAGE
+            )
+            no_reference_reason = (
+                "NO_APPROVED_TICKET_GUIDANCE_REFERENCE"
+                if str(context.get("route", "")) == "ticket_guidance"
+                else "NO_SUFFICIENTLY_RELEVANT_REFERENCE"
+            )
             return AnswerComposition(
-                answer=NO_REFERENCE_MESSAGE,
+                answer=no_reference_message,
                 backend=f"openai:{self.model_name}",
-                fallback_reason="NO_SUFFICIENTLY_RELEVANT_REFERENCE",
+                fallback_reason=no_reference_reason,
             )
         response = self.model.invoke(self._messages(context))
         content = getattr(response, "content", "")
@@ -144,11 +165,21 @@ class LangChainOpenAIAnswerComposer:
         """Stream provider text while retaining the final answer contract."""
 
         if _is_no_reference_context(context):
-            emit(NO_REFERENCE_MESSAGE)
+            no_reference_message = (
+                NO_APPROVED_TICKET_GUIDANCE_MESSAGE
+                if str(context.get("route", "")) == "ticket_guidance"
+                else NO_REFERENCE_MESSAGE
+            )
+            no_reference_reason = (
+                "NO_APPROVED_TICKET_GUIDANCE_REFERENCE"
+                if str(context.get("route", "")) == "ticket_guidance"
+                else "NO_SUFFICIENTLY_RELEVANT_REFERENCE"
+            )
+            emit(no_reference_message)
             return AnswerComposition(
-                answer=NO_REFERENCE_MESSAGE,
+                answer=no_reference_message,
                 backend=f"openai:{self.model_name}",
-                fallback_reason="NO_SUFFICIENTLY_RELEVANT_REFERENCE",
+                fallback_reason=no_reference_reason,
             )
 
         chunks: list[str] = []
@@ -180,6 +211,7 @@ class LangChainOpenAIAnswerComposer:
                 "If the sanitized draft contains a numbered list, preserve those list items in the final answer without dropping them.\n"
                 "If the context contains statuses, dates, amounts, or named records, preserve those exact values.\n"
                 "For GENERAL_KNOWLEDGE, answer the educational question directly from general knowledge, without using or implying NexusOne sources.\n"
+                "For ticket_guidance, use only the approved ticket-process context, explain that guidance does not submit a ticket, and never claim creation occurred unless the action_answer says it did.\n"
                 "For every factual sentence that uses knowledge/document context, add an inline citation marker like [1].\n"
                 "Use only citation markers that appear in the sanitized source list. If no source list is present, do not cite or imply document grounding.\n"
                 "If reference_status is none_reached_threshold, say that no sufficiently relevant reference was found and do not answer from memory.\n"
@@ -420,7 +452,7 @@ def _compact_context(context: Mapping[str, Any]) -> str:
 def _is_no_reference_context(context: Mapping[str, Any]) -> bool:
     """Identify an authorized RAG turn with no retained evidence."""
 
-    if str(context.get("route", "")) != "rag" or context.get("citations"):
+    if str(context.get("route", "")) not in {"rag", "ticket_guidance"} or context.get("citations"):
         return False
     if context.get("reference_status") == "none_reached_threshold":
         return True

@@ -41,6 +41,7 @@ IntentLabel = Literal[
     "casual",
     "general_question",
     "knowledge_lookup",
+    "ticket_guidance",
     "structured_lookup",
     "combined_lookup",
     "ticket_create",
@@ -450,11 +451,12 @@ CLASSIFIER_SYSTEM_PROMPT = """You are NexusOne Copilot's bounded intent classifi
 Classify the request into exactly one allowed intent and return only the structured schema.
 Allowed intents:
 - casual: greetings, thanks, small talk, or goodbye with no work request
-- general_question: a basic/general question or ticket-creation guidance answerable directly without company sources; guidance is not an action request
+- general_question: a basic/general educational question answerable directly without company sources
 - knowledge_lookup: a NexusOne/company policy, process, or knowledge-base lookup
+- ticket_guidance: asks how to create, submit, raise, or route a support ticket, asks what information or category is needed, or asks about ticket next steps, without asking Copilot to perform the action; use this for direct and paraphrased guidance questions
 - structured_lookup: an allowlisted structured-data lookup such as holidays, directory, budget, or metrics
 - combined_lookup: one request that clearly needs both knowledge lookup and structured lookup
-- ticket_create: the user explicitly asks Copilot to create, submit, raise, open, or generate a support ticket; distinguish this from status lookup and from guidance phrased as "I can create" or "what information do you need"
+- ticket_create: the user explicitly asks Copilot to create, submit, raise, open, or generate a support ticket; distinguish this from status lookup and ticket_guidance phrased as "how can I", "what information do you need", "which team/category", or "what are the next steps"
 - ticket_status: inspect, check, or show an existing ticket or ticket status
 - history_lookup: ask for prior conversation/history that is not an existing ticket status
 - feedback: report that an answer was helpful, wrong, unclear, or needs feedback
