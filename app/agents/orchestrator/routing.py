@@ -20,8 +20,9 @@ _INTENT_TO_ROUTE: dict[str, RouteName] = {
     "combined_lookup": "combined",
     "ticket_create": "ticket_create",
     "ticket_status": "sql",
-    # Conversation history is not persisted in this branch.  It must not be
-    # guessed as SQL or retrieved from unrelated documents.
+    # History is served from the authenticated conversation store by the
+    # unsupported-response node; it must not be guessed as SQL or retrieved
+    # from unrelated documents.
     "history_lookup": "unsupported",
     "feedback": "feedback",
     "clarification": "clarification",
