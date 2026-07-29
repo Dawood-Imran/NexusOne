@@ -16,6 +16,7 @@
 - The local authentication contract now uses salted password verifiers, opaque server-side sessions, and cookie-authenticated chat/feedback; the static UI uses that contract and omits client identity from chat/feedback requests.
 - Server memory phase: `docs/conversation-memory.md` records the pre-change inventory and official LangChain references. `SQLiteConversationStore` now owns server conversation IDs/turns, and JSON user memory/tools own bounded per-user durable facts/preferences; frontend history now reloads from authenticated conversation endpoints instead of browser persistence.
 - Integration branch: merged `ecc62fc`, `583abad`, and `4a30982` from clean `daud_dev` with memory, retrieval threshold/citation, ticket ownership/security, frontend, routing, and streaming contracts retained; `docs/intent-routing.md` and the offline history fixture were aligned to the server-memory contract.
+- Ticket ownership follow-up: `requester_id` is explicitly immutable and server-owned, ticket creation is fixed to creator scope, and the database predicate now limits ordinary users to creator-owned rows while IT/HR/Finance/Admin queue roles receive only assigned rows within role/department/group scope; all ticket helper functions reuse that predicate and seed CSVs declare `visibility_scope=own`.
 
 ## Memory Coverage
 
@@ -121,6 +122,8 @@
 | Local `ThreadingHTTPServer` JSON and SSE smoke with temporary runtime data | pass | Auth/session, cited RAG, restricted denial without title leakage, SSE event ordering, and delta/completion consistency passed; no OpenAI/Postgres/network. |
 | `.venv/bin/python -m compileall -q app tests scripts` + `node --check frontend/static/app.js` + `git diff --check` | pass | Final Python compilation, JavaScript syntax, and whitespace validation passed; generated runtime data was removed and tracked bytecode restored. |
 | Combined diff/reference audit | pass | No newly introduced secrets, duplicate files, untracked runtime data, or unauthorized broad changes found; `.env.example` values remain placeholders/synthetic. |
+| Ticket ownership focused suite | pass | 57 focused ownership/action/SQL/API/service/presentation tests passed; covered creator/assignee/IT admin/HR/manager cases, empty and mixed results, malformed IDs, idempotent ticket replay, API identity spoofing, SQL-injection-like content, validation-only mode, configured repository parameter binding, immutable requester schema, stable replay timestamps, and HTTP redaction. |
+| Ticket ownership final offline validation | pass | Full 237-test deterministic suite, 20-case evaluator, Python AST syntax checks, JavaScript syntax check, and `git diff --check` passed with provider/database credentials disabled. |
 
 ## Open Issues
 

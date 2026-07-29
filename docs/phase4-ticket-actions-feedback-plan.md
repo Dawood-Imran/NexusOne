@@ -32,7 +32,10 @@ Already available:
 - Every ticket action requires a server-side user profile.
 - Missing required fields should produce `needs_clarification`, not a partial ticket.
 - Created ticket responses should show safe fields only: ticket id, department, category, priority, status, and next step.
+- `requester_id` is an immutable server-owned creator field. It is written from the authenticated profile in every create path, and is never accepted from chat, model, query, or client input.
 - Raw `requester_id`, `assigned_to`, `actor_user_id`, SQL text, and hidden parameters stay out of final answers and frontend payloads.
+- Ticket creation always starts with `visibility_scope = 'own'`; widening visibility and assignment are separate authorized support workflows, not ordinary-user request fields.
+- Read helpers apply the same `can_user_access_ticket` predicate to list, detail, event, and assignment lookups. Ordinary users receive creator-owned rows; queue roles receive only assigned rows in their role/department/group scope.
 - Feedback and audit writes store safe metadata only.
 
 ## Ticket Creation Scope
@@ -55,12 +58,12 @@ The backend ticket tool should require:
 - `category`
 - `priority`
 - `description`
-- `requester_id` from server-side profile, never from user input
+- `requester_id` from the authenticated server-side profile, never from user input; the database trigger rejects later requester changes
 
 Optional fields:
 
 - `title` if we add it to the API response model only; the current DB table does not have a title column.
-- `visibility_scope`, default `own`.
+- `visibility_scope`, fixed to `own` for this create path; queue/manager scopes require a separate authorized workflow.
 - `metadata` is deferred because the current schema does not include a JSON metadata column.
 
 ## New Modules

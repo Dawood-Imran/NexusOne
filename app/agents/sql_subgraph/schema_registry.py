@@ -88,7 +88,10 @@ SQL_SOURCE_REGISTRY: dict[str, SourceDefinition] = {
         name="accessible_tickets",
         kind="function",
         domain="ticket_status",
-        description="Ticket rows filtered by can_user_access_ticket for the current user.",
+        description=(
+            "Ticket rows filtered by can_user_access_ticket for the current user: "
+            "creator-owned rows for ordinary users and policy-authorized assigned rows for queue roles."
+        ),
         access_roles="all_active",
         max_rows=25,
         requires_user_id=True,
@@ -108,7 +111,10 @@ SQL_SOURCE_REGISTRY: dict[str, SourceDefinition] = {
         name="accessible_ticket_events",
         kind="function",
         domain="ticket_status",
-        description="Ticket event rows filtered through accessible tickets for the current user.",
+        description=(
+            "Ticket event rows filtered through the same can_user_access_ticket predicate "
+            "used for creator and authorized assignment visibility."
+        ),
         access_roles="all_active",
         max_rows=50,
         requires_user_id=True,
@@ -124,7 +130,10 @@ SQL_SOURCE_REGISTRY: dict[str, SourceDefinition] = {
         name="accessible_ticket_assignments",
         kind="function",
         domain="ticket_status",
-        description="Safe ticket assignment display rows filtered through can_user_access_ticket.",
+        description=(
+            "Safe ticket assignment display rows filtered through can_user_access_ticket; "
+            "assignment scope is enforced server-side before names are joined."
+        ),
         access_roles="all_active",
         max_rows=25,
         requires_user_id=True,

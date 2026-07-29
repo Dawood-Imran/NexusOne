@@ -147,6 +147,7 @@ class LangChainOpenAISQLPlanner:
                     "Always include user_id in parameters when :user_id appears in the SQL.\n"
                     "Do not select raw user-id fields such as requester_id, assigned_to, actor_user_id, manager_id, owner, or user_id.\n"
                     "For assignment display questions, use accessible_ticket_assignments(:user_id) and safe display fields.\n"
+                    "Ticket functions enforce creator ownership and role/department/group-scoped assignment visibility; never query the tickets table directly.\n"
                     "For ticket status, use accessible_tickets(:user_id) or accessible_ticket_assignments(:user_id).\n"
                     "For document metadata, use user_accessible_documents with WHERE user_id = :user_id.\n"
                     "Use LIMIT unless the query returns a single aggregate row.\n"

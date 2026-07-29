@@ -1,13 +1,16 @@
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
 from app.actions.audit_service import AuditService, InMemoryAuditRepository
 from app.actions.feedback_service import FeedbackService, InMemoryFeedbackRepository
+from app.actions.ticket_service import InMemoryTicketRepository, TicketService
 from app.agents.orchestrator.answer_composer import DeterministicAnswerComposer
 from tests.unit.agents.orchestrator.intent_fixtures import fixture_classifier
 from app.agents.sql_subgraph.db import SQLAlchemyExecutor
 from app.agents.sql_subgraph.state import SQLExecutionResult
+from app.memory.conversation_store import SQLiteConversationStore
 from app.services.chat_service import ChatService
 
 
@@ -182,6 +185,38 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual("openai", capabilities["answer_composer"]["provider"])
         self.assertEqual("openai", capabilities["sql_planner"]["provider"])
         self.assertNotIn("fixture-token-not-for-output", repr(capabilities))
+
+    def test_ticket_action_replay_does_not_create_a_second_ticket(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = InMemoryTicketRepository()
+            service = ChatService(
+                answer_composer=DeterministicAnswerComposer(),
+                intent_classifier=fixture_classifier(),
+                ticket_service=TicketService(repository),
+                conversation_store=SQLiteConversationStore(os.path.join(directory, "conversation.sqlite")),
+                feedback_service=FeedbackService(InMemoryFeedbackRepository()),
+                audit_service=AuditService(InMemoryAuditRepository()),
+            )
+            conversation = service.conversation_store.create_conversation("u001")
+            message = "Create an IT ticket for AWS sandbox access needed for billing migration."
+
+            first = service.handle_message(
+                "u001",
+                message,
+                conversation_id=conversation.conversation_id,
+                turn_id="ticket-replay-1",
+            )
+            replay = service.handle_message(
+                "u001",
+                message,
+                conversation_id=conversation.conversation_id,
+                turn_id="ticket-replay-1",
+            )
+
+        self.assertEqual("ticket_created", first["status"])
+        self.assertEqual(first, replay)
+        self.assertEqual(1, len(repository.tickets))
+        self.assertEqual("u001", repository.tickets[0]["requester_id"])
 
     def test_feedback_submission_is_stored(self) -> None:
         response = self.service.submit_feedback(

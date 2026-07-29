@@ -16,7 +16,11 @@ from app.auth.profiles import UserProfile
 
 ALLOWED_DEPARTMENTS = {"it", "hr", "admin"}
 ALLOWED_PRIORITIES = {"low", "normal", "high", "urgent"}
+# Ticket creation is intentionally requester-owned. Queue visibility and
+# assignment are separate server-side operations; a chat request cannot widen
+# its own visibility scope or choose an assignee.
 DEFAULT_VISIBILITY_SCOPE = "own"
+ALLOWED_CREATION_VISIBILITY_SCOPES = {DEFAULT_VISIBILITY_SCOPE}
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,13 @@ class TicketService:
             )
 
         normalized = normalize_ticket_request(request)
+        if normalized.visibility_scope not in ALLOWED_CREATION_VISIBILITY_SCOPES:
+            return TicketCreationResult(
+                status="denied",
+                reason_code="TICKET_SCOPE_NOT_ALLOWED",
+                message="New tickets are visible to their creator until an authorized support workflow assigns them.",
+            )
+
         missing = required_missing_fields(normalized)
         if missing:
             return TicketCreationResult(
@@ -109,6 +120,7 @@ class InMemoryTicketRepository:
         category = require_value(request.category)
         priority = require_value(request.priority)
         description = require_value(request.description)
+        visibility_scope = require_creation_visibility_scope(request.visibility_scope)
         with self._lock:
             self._counters[department] += 1
             ticket_id = f"{department.upper()}-{self._counters[department]}"
@@ -124,7 +136,7 @@ class InMemoryTicketRepository:
                 "created_at": now,
                 "updated_at": now,
                 "description": description,
-                "visibility_scope": request.visibility_scope or DEFAULT_VISIBILITY_SCOPE,
+                "visibility_scope": visibility_scope,
             }
             self.tickets.append(raw_ticket)
             self.events.append(
@@ -150,7 +162,7 @@ class SQLAlchemyTicketRepository:
         category = require_value(request.category)
         priority = require_value(request.priority)
         description = require_value(request.description)
-        visibility_scope = request.visibility_scope or DEFAULT_VISIBILITY_SCOPE
+        visibility_scope = require_creation_visibility_scope(request.visibility_scope)
         with self.engine.begin() as connection:
             next_number = connection.execute(
                 text(
@@ -198,7 +210,17 @@ class SQLAlchemyTicketRepository:
                         :description,
                         :visibility_scope
                     )
-                    RETURNING ticket_id, department, category, priority, status, created_at, updated_at
+                    RETURNING
+                        ticket_id,
+                        requester_id,
+                        department,
+                        category,
+                        priority,
+                        status,
+                        assigned_to,
+                        created_at,
+                        updated_at,
+                        visibility_scope
                     """
                 ),
                 {
@@ -228,12 +250,18 @@ class SQLAlchemyTicketRepository:
 
 
 def normalize_ticket_request(request: TicketRequest) -> TicketRequest:
+    raw_scope = request.visibility_scope
+    normalized_scope = (
+        raw_scope.strip().lower()
+        if isinstance(raw_scope, str) and raw_scope.strip()
+        else DEFAULT_VISIBILITY_SCOPE
+    )
     return TicketRequest(
         department=_normalize_slug(request.department),
         category=_normalize_slug(request.category),
         priority=_normalize_slug(request.priority) or "normal",
         description=_normalize_description(request.description),
-        visibility_scope=request.visibility_scope or DEFAULT_VISIBILITY_SCOPE,
+        visibility_scope=normalized_scope,
     )
 
 
@@ -270,21 +298,48 @@ def format_ticket_created_message(ticket: Mapping[str, Any]) -> str:
 
 
 def sanitize_ticket(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the public ticket contract without raw identity columns.
+
+    ``requester_id`` remains part of the internal persistence/SQL row so the
+    database can enforce ownership, but raw creator and assignee IDs must not
+    cross the action, trace, citation, or HTTP presentation boundary.
+    """
+
     return {
         "ticket_id": row.get("ticket_id"),
         "department": row.get("department"),
         "category": row.get("category"),
         "priority": row.get("priority"),
         "status": row.get("status"),
-        "created_at": row.get("created_at"),
-        "updated_at": row.get("updated_at"),
+        "created_at": _public_timestamp(row.get("created_at")),
+        "updated_at": _public_timestamp(row.get("updated_at")),
     }
+
+
+def _public_timestamp(value: Any) -> Any:
+    """Keep the public ticket shape stable across direct and HTTP replays."""
+
+    isoformat = getattr(value, "isoformat", None)
+    return isoformat() if callable(isoformat) else value
 
 
 def require_value(value: str | None) -> str:
     if not value:
         raise ValueError("Ticket request was not validated before persistence.")
     return value
+
+
+def require_creation_visibility_scope(value: str | None) -> str:
+    """Reject repository calls that try to create a non-owned ticket."""
+
+    normalized = (
+        value.strip().lower()
+        if isinstance(value, str) and value.strip()
+        else DEFAULT_VISIBILITY_SCOPE
+    )
+    if normalized not in ALLOWED_CREATION_VISIBILITY_SCOPES:
+        raise ValueError("Ticket creation visibility scope is not allowed.")
+    return normalized
 
 
 def _normalize_slug(value: str | None) -> str | None:
