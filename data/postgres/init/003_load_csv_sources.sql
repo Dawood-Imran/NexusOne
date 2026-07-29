@@ -114,7 +114,8 @@ COPY tickets (
     assigned_to,
     created_at,
     updated_at,
-    description
+    description,
+    visibility_scope
 )
 FROM '/seed/csv/it/it_tickets_seed.csv'
 WITH (FORMAT csv, HEADER true);
@@ -129,7 +130,8 @@ COPY tickets (
     assigned_to,
     created_at,
     updated_at,
-    description
+    description,
+    visibility_scope
 )
 FROM '/seed/csv/hr/hr_tickets_seed.csv'
 WITH (FORMAT csv, HEADER true);
@@ -144,7 +146,8 @@ COPY tickets (
     assigned_to,
     created_at,
     updated_at,
-    description
+    description,
+    visibility_scope
 )
 FROM '/seed/csv/admin/admin_tickets_seed.csv'
 WITH (FORMAT csv, HEADER true);
@@ -159,7 +162,8 @@ COPY tickets (
     assigned_to,
     created_at,
     updated_at,
-    description
+    description,
+    visibility_scope
 )
 FROM '/seed/csv/finance/finance_tickets_seed.csv'
 WITH (FORMAT csv, HEADER true);

@@ -186,7 +186,8 @@ class LocalHTTPProductSurfaceTest(unittest.TestCase):
         self.assertEqual("u001", employee["profile"]["user_id"])
         self.assertEqual("u002", manager["profile"]["user_id"])
         self.assertEqual(["IT-9001"], [row["ticket_id"] for row in employee["rows"]])
-        self.assertEqual({"IT-9001", "IT-9002"}, {row["ticket_id"] for row in manager["rows"]})
+        self.assertEqual({"IT-9002"}, {row["ticket_id"] for row in manager["rows"]})
+        self.assertNotIn("IT-9001", json.dumps(manager))
         self.assertNotIn("HR-9003", json.dumps(employee))
         self.assertNotIn("requester_id", json.dumps(employee))
 
@@ -313,12 +314,29 @@ class LocalHTTPProductSurfaceTest(unittest.TestCase):
         self.assertEqual("IDENTITY_MISMATCH", payload["reason_code"])
         self.assertNotIn("u006", json.dumps(payload))
 
+    def test_direct_chat_identity_spoof_is_rejected_before_ticket_action(self) -> None:
+        cookie, _ = self.login("u001")
+
+        status, _, payload = self.request(
+            "POST",
+            "/api/chat",
+            payload={
+                "user_id": "u002",
+                "message": "Create an IT ticket for AWS sandbox access needed for billing migration.",
+            },
+            cookie=cookie,
+        )
+
+        self.assertEqual(403, status)
+        self.assertEqual("IDENTITY_MISMATCH", payload["reason_code"])
+        self.assertNotIn("u002", json.dumps(payload))
+
 
 class _AuthenticatedTicketListExecutor:
     rows = (
-        {"ticket_id": "IT-9001", "requester_id": "u001", "department": "it", "category": "battery", "priority": "normal", "status": "open", "updated_at": "2026-02-07T09:00:00+00:00"},
-        {"ticket_id": "IT-9002", "requester_id": "u002", "department": "it", "category": "vpn", "priority": "high", "status": "in_progress", "updated_at": "2026-02-08T09:00:00+00:00"},
-        {"ticket_id": "HR-9003", "requester_id": "u003", "department": "hr", "category": "payroll", "priority": "normal", "status": "open", "updated_at": "2026-02-09T09:00:00+00:00"},
+        {"ticket_id": "IT-9001", "requester_id": "u001", "department": "it", "category": "battery", "priority": "normal", "status": "open", "assigned_to": "u005", "updated_at": "2026-02-07T09:00:00+00:00"},
+        {"ticket_id": "IT-9002", "requester_id": "u002", "department": "it", "category": "vpn", "priority": "high", "status": "in_progress", "assigned_to": "u005", "updated_at": "2026-02-08T09:00:00+00:00"},
+        {"ticket_id": "HR-9003", "requester_id": "u003", "department": "hr", "category": "payroll", "priority": "normal", "status": "open", "assigned_to": "u003", "updated_at": "2026-02-09T09:00:00+00:00"},
     )
 
     def fetch_one(self, query, parameters):
@@ -326,8 +344,22 @@ class _AuthenticatedTicketListExecutor:
 
     def fetch_all(self, query, parameters, max_rows):
         user_id = parameters["user_id"]
-        requesters = {"u001"} if user_id == "u001" else {"u001", "u002"} if user_id == "u002" else {user_id}
-        visible = [row for row in self.rows if row["requester_id"] in requesters]
+        if user_id == "u005":
+            visible = [
+                row for row in self.rows
+                if row["requester_id"] == user_id
+                or (row.get("assigned_to") == user_id and row["department"] == "it")
+            ]
+        elif user_id == "u003":
+            visible = [
+                row for row in self.rows
+                if row["requester_id"] == user_id
+                or (row.get("assigned_to") == user_id and row["department"] == "hr")
+            ]
+        elif user_id == "u006":
+            visible = list(self.rows)
+        else:
+            visible = [row for row in self.rows if row["requester_id"] == user_id]
         return SQLExecutionResult(
             columns=tuple(visible[0].keys()) if visible else ("ticket_id", "status", "updated_at"),
             rows=tuple(visible[:max_rows]),

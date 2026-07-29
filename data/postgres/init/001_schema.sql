@@ -148,6 +148,8 @@ CREATE TABLE document_chunks (
 
 CREATE TABLE tickets (
     ticket_id text PRIMARY KEY,
+    -- Immutable server-owned creator identity.  This value is never accepted
+    -- from chat, SQL planner, or client payloads.
     requester_id text NOT NULL REFERENCES users(user_id),
     department text NOT NULL CHECK (department IN ('hr', 'it', 'admin', 'finance')),
     category text NOT NULL,
@@ -169,6 +171,23 @@ CREATE TABLE tickets (
         'manager_team'
     ))
 );
+
+CREATE OR REPLACE FUNCTION prevent_ticket_requester_change()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.requester_id IS DISTINCT FROM OLD.requester_id THEN
+        RAISE EXCEPTION 'Ticket requester_id is immutable.' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tickets_requester_immutable
+    BEFORE UPDATE OF requester_id ON tickets
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_ticket_requester_change();
 
 CREATE TABLE ticket_events (
     event_id bigserial PRIMARY KEY,
@@ -438,15 +457,74 @@ AS $$
         WHERE u.user_id = p_user_id
           AND u.status = 'active'
           AND (
+              -- Every active role can read a ticket it opened.  This is the
+              -- default ownership rule and does not depend on department.
               t.requester_id = u.user_id
-              OR t.assigned_to = u.user_id
+              -- CEO access remains an explicit role-level exception.
               OR u.role = 'ceo'
-              OR (u.role = 'hr' AND t.department = 'hr')
-              OR (u.role = 'finance' AND t.department = 'finance')
-              OR (u.role = 'it_admin' AND t.department = 'it')
-              OR (u.role = 'admin_ops' AND t.department = 'admin')
+              -- Queue access is assignment-scoped, role-scoped, department-
+              -- scoped, and group-scoped.  Being in the queue department is
+              -- not enough to read every ticket in that queue.
               OR (
-                  u.role = 'manager'
+                  t.assigned_to = u.user_id
+                  AND (
+                      (
+                          u.role = 'it_admin'
+                          AND u.department = 'it'
+                          AND t.department = 'it'
+                          AND EXISTS (
+                              SELECT 1
+                              FROM user_groups ug
+                              WHERE ug.user_id = u.user_id
+                                AND ug.group_name = 'it_team'
+                          )
+                      )
+                      OR (
+                          u.role = 'hr'
+                          AND u.department = 'hr'
+                          AND t.department = 'hr'
+                          AND EXISTS (
+                              SELECT 1
+                              FROM user_groups ug
+                              WHERE ug.user_id = u.user_id
+                                AND ug.group_name = 'hr_team'
+                          )
+                      )
+                      OR (
+                          u.role = 'finance'
+                          AND u.department = 'finance'
+                          AND t.department = 'finance'
+                          AND EXISTS (
+                              SELECT 1
+                              FROM user_groups ug
+                              WHERE ug.user_id = u.user_id
+                                AND ug.group_name = 'finance_team'
+                          )
+                      )
+                      OR (
+                          u.role = 'admin_ops'
+                          AND u.department = 'admin'
+                          AND t.department = 'admin'
+                          AND EXISTS (
+                              SELECT 1
+                              FROM user_groups ug
+                              WHERE ug.user_id = u.user_id
+                                AND ug.group_name = 'admin_ops_team'
+                          )
+                      )
+                  )
+              )
+              -- Manager-team visibility is opt-in at the ticket record and
+              -- still requires the manager role/group and reporting line.
+              OR (
+                  t.visibility_scope = 'manager_team'
+                  AND u.role = 'manager'
+                  AND EXISTS (
+                      SELECT 1
+                      FROM user_groups ug
+                      WHERE ug.user_id = u.user_id
+                        AND ug.group_name = 'managers'
+                  )
                   AND EXISTS (
                       SELECT 1
                       FROM users report

@@ -1,6 +1,6 @@
-ticket_id,requester_id,department,category,priority,status,assigned_to,created_at,updated_at,description
-IT-1042,u001,it,laptop_battery,normal,open,u005,2026-02-10T09:15:00,2026-02-10T09:15:00,Laptop battery drains from full to twenty percent in thirty minutes
-IT-1043,u002,it,github_access,normal,in_progress,u005,2026-02-11T11:20:00,2026-02-12T10:05:00,Request write access for backend service repository
-IT-1044,u003,it,vpn_reset,high,waiting_on_user,u005,2026-02-12T08:45:00,2026-02-12T09:30:00,VPN profile fails after MFA approval on company laptop
-IT-1045,u004,it,finance_portal_access,normal,resolved,u005,2026-02-13T14:10:00,2026-02-14T12:00:00,Finance Portal SSO access missing after role update
-IT-1046,u001,it,aws_access,normal,open,u005,2026-02-15T10:40:00,2026-02-15T10:40:00,Need staging AWS read access for CRM Automation testing
+ticket_id,requester_id,department,category,priority,status,assigned_to,created_at,updated_at,description,visibility_scope
+IT-1042,u001,it,laptop_battery,normal,open,u005,2026-02-10T09:15:00,2026-02-10T09:15:00,Laptop battery drains from full to twenty percent in thirty minutes,own
+IT-1043,u002,it,github_access,normal,in_progress,u005,2026-02-11T11:20:00,2026-02-12T10:05:00,Request write access for backend service repository,own
+IT-1044,u003,it,vpn_reset,high,waiting_on_user,u005,2026-02-12T08:45:00,2026-02-12T09:30:00,VPN profile fails after MFA approval on company laptop,own
+IT-1045,u004,it,finance_portal_access,normal,resolved,u005,2026-02-13T14:10:00,2026-02-14T12:00:00,Finance Portal SSO access missing after role update,own
+IT-1046,u001,it,aws_access,normal,open,u005,2026-02-15T10:40:00,2026-02-15T10:40:00,Need staging AWS read access for CRM Automation testing,own

@@ -1,6 +1,6 @@
-ticket_id,requester_id,department,category,priority,status,assigned_to,created_at,updated_at,description
-HR-2031,u001,hr,payroll_issue,normal,open,u003,2026-02-08T10:15:00,2026-02-08T10:15:00,Payroll profile shows outdated tax region after location correction
-HR-2032,u002,hr,hiring_request,normal,in_progress,u003,2026-02-09T13:20:00,2026-02-10T09:05:00,Open planned backend engineer role for Q2 engineering headcount
-HR-2033,u004,hr,benefits,low,waiting_on_user,u003,2026-02-10T12:00:00,2026-02-11T08:30:00,Request clarification on UAE wellness reimbursement provider
-HR-2034,u007,hr,employee_relations,urgent,in_progress,u003,2026-02-11T16:30:00,2026-02-12T09:20:00,Sensitive employee relations consultation for executive team
-HR-2035,u008,hr,hris_profile,normal,resolved,u003,2026-02-13T09:30:00,2026-02-14T10:45:00,Correct office location value in HRIS profile
+ticket_id,requester_id,department,category,priority,status,assigned_to,created_at,updated_at,description,visibility_scope
+HR-2031,u001,hr,payroll_issue,normal,open,u003,2026-02-08T10:15:00,2026-02-08T10:15:00,Payroll profile shows outdated tax region after location correction,own
+HR-2032,u002,hr,hiring_request,normal,in_progress,u003,2026-02-09T13:20:00,2026-02-10T09:05:00,Open planned backend engineer role for Q2 engineering headcount,own
+HR-2033,u004,hr,benefits,low,waiting_on_user,u003,2026-02-10T12:00:00,2026-02-11T08:30:00,Request clarification on UAE wellness reimbursement provider,own
+HR-2034,u007,hr,employee_relations,urgent,in_progress,u003,2026-02-11T16:30:00,2026-02-12T09:20:00,Sensitive employee relations consultation for executive team,own
+HR-2035,u008,hr,hris_profile,normal,resolved,u003,2026-02-13T09:30:00,2026-02-14T10:45:00,Correct office location value in HRIS profile,own

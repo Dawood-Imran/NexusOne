@@ -1,5 +1,9 @@
 -- Permission-safe structured data access helpers for the SQL subgraph.
 -- These helpers are for synthetic local development data only.
+-- Every ticket list, detail, event, and assignment path delegates to the same
+-- server-owned can_user_access_ticket predicate from 001_schema.sql. The raw
+-- requester/assignee columns are internal function output only; the planner
+-- registry and presentation layer keep them out of model/API payloads.
 
 BEGIN;
 
