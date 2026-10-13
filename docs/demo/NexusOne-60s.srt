@@ -1,0 +1,40 @@
+1
+00:00:00,000 --> 00:00:06,000
+A company assistant for answers, support, and everyday work.
+
+2
+00:00:06,000 --> 00:00:11,000
+Server-owned sessions keep your identity and permissions in context.
+
+3
+00:00:11,000 --> 00:00:19,000
+Get policy and process guidance with linked source material.
+
+4
+00:00:19,000 --> 00:00:26,000
+Natural-language requests return structured data within your access scope.
+
+5
+00:00:26,000 --> 00:00:34,000
+IT, HR, and Admin requests require your approval before creation.
+
+6
+00:00:34,000 --> 00:00:40,000
+Server-side guardrails block restricted company information.
+
+7
+00:00:40,000 --> 00:00:46,000
+Personal memory and conversation history help you pick up where you left off.
+
+8
+00:00:46,000 --> 00:00:52,000
+Feedback and answer metadata support review and troubleshooting.
+
+9
+00:00:52,000 --> 00:00:57,000
+A responsive chat experience across screen sizes.
+
+10
+00:00:57,000 --> 00:01:00,000
+Company knowledge, live data, and support in one conversation.
+
