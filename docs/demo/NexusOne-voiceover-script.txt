@@ -1,0 +1,26 @@
+00:00 — NexusOne Copilot
+Meet NexusOne Copilot: company knowledge, live data, and support, together.
+
+00:05 — Built for every role
+For employees, managers, H R, finance, I T, admin, and leadership. One assistant, different permissions.
+
+00:12 — Authorization happens on the server
+Our server-side authorization layer checks identity, roles, groups, and ownership. Employees get safe denials; authorized leaders get access.
+
+00:20 — Answers with sources
+Ask a policy question. Open its citation to review the approved source and its date.
+
+00:27 — Live data, within your scope
+Live ticket lookups use approved sources, read-only query checks, scoped rows, and sanitized results.
+
+00:34 — Review. Approve. Submit.
+Describe your issue, review the ticket preview, then explicitly approve. Creation happens only after your confirmation.
+
+00:42 — Memory belongs to the signed-in user
+Short-term history preserves conversations. Personal memory recalls saved details across chats, separately for each user.
+
+00:49 — Guardrails you can inspect
+Injection checks block bypass attempts. Feedback, trace metadata, and evaluation tests help review answers and access decisions. The workspace also adapts to mobile.
+
+00:57 — NexusOne Copilot
+One workspace, for every team, with clear controls.

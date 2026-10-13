@@ -1,0 +1,64 @@
+1
+00:00:00,000 --> 00:00:05,120
+Meet NexusOne Copilot: company knowledge, live data, and support, together.
+
+2
+00:00:05,300 --> 00:00:09,960
+For employees, managers, HR, finance, IT, admin, and leadership.
+
+3
+00:00:10,240 --> 00:00:11,920
+One assistant, different permissions.
+
+4
+00:00:12,220 --> 00:00:16,340
+Our server-side authorization layer checks identity, roles, groups, and ownership.
+
+5
+00:00:17,040 --> 00:00:19,960
+Employees get safe denials; authorized leaders get access.
+
+6
+00:00:20,260 --> 00:00:21,840
+Ask a policy question.
+
+7
+00:00:22,740 --> 00:00:26,240
+Open its citation to review the approved source and its date.
+
+8
+00:00:26,860 --> 00:00:34,140
+Live ticket lookups use approved sources, read-only query checks, scoped rows, and sanitized results.
+
+9
+00:00:34,400 --> 00:00:39,000
+Describe your issue, review the ticket preview, then explicitly approve.
+
+10
+00:00:39,880 --> 00:00:41,900
+Creation happens only after your confirmation.
+
+11
+00:00:42,420 --> 00:00:44,400
+Short-term history preserves conversations.
+
+12
+00:00:45,000 --> 00:00:48,980
+Personal memory recalls saved details across chats, separately for each user.
+
+13
+00:00:49,180 --> 00:00:50,880
+Injection checks block bypass attempts.
+
+14
+00:00:51,380 --> 00:00:54,900
+Feedback, trace metadata, and evaluation tests help review answers and access decisions.
+
+15
+00:00:54,900 --> 00:00:56,980
+The workspace also adapts to mobile.
+
+16
+00:00:57,220 --> 00:00:59,900
+One workspace, for every team, with clear controls.
+
